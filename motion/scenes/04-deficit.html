@@ -29,8 +29,6 @@
   .rval .in { display: flex; align-items: baseline; gap: 14px; white-space: nowrap; }
   .rval .num { font-size: 106px; line-height: 1.12; }
   .rval .unit { font-size: 30px; }
-  #row1 .num { color: var(--white); }
-  #row2 .num { color: var(--white); }
 
   .trk { fill: rgba(115,189,242,0.07); stroke: rgba(115,189,242,0.10); }
   html.verde .trk { fill: #0B2A52; stroke: #123868; }
@@ -100,6 +98,10 @@
         <linearGradient id="gShine" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.38"/><stop offset="45%" stop-color="#FFFFFF" stop-opacity="0.05"/><stop offset="100%" stop-color="#000000" stop-opacity="0.18"/>
         </linearGradient>
+        <linearGradient id="gGlint" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="180" y2="0">
+          <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0"/><stop offset="50%" stop-color="#FFFFFF" stop-opacity="0.45"/><stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+        </linearGradient>
+        <clipPath id="barsClip"><rect x="540" y="182" width="832" height="64" rx="12"/><rect x="540" y="344" width="576" height="64" rx="12"/></clipPath>
         <pattern id="hatch" patternUnits="userSpaceOnUse" width="16" height="16" patternTransform="rotate(40)">
           <line class="hatchln" x1="4" y1="0" x2="4" y2="16" stroke-width="5"/>
         </pattern>
@@ -122,6 +124,7 @@
       </g>
       <rect id="sh1" class="fondo-only" x="540" y="182" height="64" rx="12" fill="url(#gShine)"/>
       <rect id="sh2" class="fondo-only" x="540" y="344" height="64" rx="12" fill="url(#gShine)"/>
+      <g class="fondo-only" clip-path="url(#barsClip)"><rect id="glint" x="0" y="160" width="180" height="280" fill="url(#gGlint)"/></g>
       <line id="tip1" y1="188" y2="240" stroke="#F5F8FF" stroke-width="4" stroke-linecap="round"/>
       <line id="tip2" y1="350" y2="402" stroke="#F5F8FF" stroke-width="4" stroke-linecap="round"/>
       <!-- cursores sobre la regla -->
@@ -237,6 +240,16 @@ M.scene({
   // puntos SVG: se escalan con el radio (sin depender del origen de transformación)
   const dotIn = (el, at, dur = 0.45) => tl.from(el, { attr: { r: 0 }, duration: dur, ease: 'back.out(2)' }, at);
   const dotOut = (el, at, dur = 0.35) => tl.to(el, { attr: { r: 0 }, duration: dur, ease: 'back.in(1.6)' }, at);
+  // salida de tarjeta (reemplaza a M.popOut): el navegador abrevia "inset(-150% round 28px)" y la interpolación
+  // de GSAP se desfasa; acá cada inset tiene 4 valores distintos. Fase 1: se barre el reflejo/sombra de abajo
+  // (en verde no se ve); fase 2: la tarjeta se cierra hacia su línea central.
+  const clipOut = (el, at, { dur = 0.6, y = -30, scale = 0.94 } = {}) => {
+    const S0 = 'inset(-15% -12% -110% -13% round 28px)', S1 = 'inset(-15% -12% -4% -13% round 28px)', S2 = 'inset(50% 0.2% 50.1% 0% round 28px)';
+    const d1 = dur * 0.3;
+    tl.to(el, { y: '+=' + y, scale, duration: dur, ease: 'exit' }, at);
+    tl.fromTo(el, { clipPath: S0 }, { clipPath: S1, duration: d1, ease: 'power1.in', immediateRender: false }, at);
+    tl.fromTo(el, { clipPath: S1 }, { clipPath: S2, duration: dur - d1, ease: 'power2.inOut', immediateRender: false }, at + d1);
+  };
   const tin = (el, at, o) => { gsap.set(el, { visibility: 'hidden' }); tl.set(el, { visibility: 'visible' }, at); return M.textIn(el, at, o); };
 
   /* =====================================================================
@@ -313,11 +326,15 @@ M.scene({
   $('#formula').style.left = ((DX + 1236) / 2) + 'px';
   const fo = tin($('#formula'), 5.25, { type: 'words', dur: 0.7, stagger: 0.08 });
 
+  // destello que recorre las barras durante la pausa (solo modo fondo)
+  const GL = { x: 300 };
+  if (!M.chroma) tl.to(GL, { x: 1560, duration: 1.1, ease: 'power1.inOut' }, 6.35);
+
   // salida beat 1
   const OUT1 = 7.75;
   M.textOut(k1, OUT1, { type: 'words' });
   M.zoomOut($('#kicker1 .dot'), OUT1);
-  M.popOut($('#panel'), OUT1 + 0.05, { dur: 0.6, y: -40 });
+  clipOut($('#panel'), OUT1 + 0.05, { dur: 0.65, y: -40 });
 
   // geometría por frame (barras, cursores, guía, hueco)
   const bar1 = $('#bar1'), bar2 = $('#bar2'), sh1 = $('#sh1'), sh2 = $('#sh2');
@@ -333,6 +350,7 @@ M.scene({
       set(tip, { x1: f2(TX0 + w - 7), x2: f2(TX0 + w - 7), opacity: w > 24 ? 1 : 0 });
       set(cur, { transform: `translate(${f2(TX0 + w)},${RY + 6}) scale(${on ? 1 : 0})` });
     }
+    set($('#glint'), { transform: `translate(${f2(GL.x)},0) skewX(-22)` });
     set(guide, { y2: f2(254 + (410 - 254) * G.guide), opacity: G.guide > 0.002 ? 1 : 0 });
     const gw = (GX1 - GX0) * G.gap;
     gapEls.forEach((e) => set(e, { x: f2(GX0), width: f2(Math.max(0, gw)), opacity: gw > 1 ? 1 : 0 }));
@@ -419,8 +437,8 @@ M.scene({
 
   // salida final
   const OUT2 = 13.4;
-  M.popOut($('#cardB'), OUT2);
-  M.popOut($('#cardA'), OUT2 + 0.06);
+  clipOut($('#cardB'), OUT2);
+  clipOut($('#cardA'), OUT2 + 0.06);
   dotOut($('#dA1'), OUT2); dotOut($('#dB1'), OUT2);
   M.undraw($('#conA'), OUT2 + 0.05, { dur: 0.4, to: '0% 0%' });
   M.undraw($('#conB'), OUT2 + 0.05, { dur: 0.4, to: '0% 0%' });
@@ -429,18 +447,18 @@ M.scene({
   M.zoomOut($('#kicker2 .dot'), OUT2);
   M.textOut(frs, OUT2 + 0.05, { type: 'words' });
   M.textOut(fr, OUT2 + 0.1);
-  M.undraw($('#segE'), OUT2 + 0.15, { dur: 0.5, to: '100% 100%' });
-  M.undraw($('#segEi'), OUT2 + 0.15, { dur: 0.5, to: '100% 100%' });
-  M.undraw($('#segC'), OUT2 + 0.2, { dur: 0.6, to: '100% 100%' });
-  M.undraw($('#segCi'), OUT2 + 0.2, { dur: 0.6, to: '100% 100%' });
-  M.undraw($('#dtrack'), OUT2 + 0.25, { dur: 0.55 });
-  M.undraw($('#ringIn'), OUT2 + 0.25, { dur: 0.5 });
-  M.undraw($('#ringOut'), OUT2 + 0.2, { dur: 0.6 });
-  M.undraw($('#floorLine'), OUT2 + 0.25, { dur: 0.5 });
-  tl.to(TK, { a: 0, duration: 0.6, ease: 'exit' }, OUT2 + 0.15);
+  M.undraw($('#segE'), OUT2 + 0.05, { dur: 0.5, to: '100% 100%' });
+  M.undraw($('#segEi'), OUT2 + 0.05, { dur: 0.5, to: '100% 100%' });
+  M.undraw($('#segC'), OUT2 + 0.1, { dur: 0.55, to: '100% 100%' });
+  M.undraw($('#segCi'), OUT2 + 0.1, { dur: 0.55, to: '100% 100%' });
+  M.undraw($('#dtrack'), OUT2 + 0.15, { dur: 0.5 });
+  M.undraw($('#ringIn'), OUT2 + 0.15, { dur: 0.5 });
+  M.undraw($('#ringOut'), OUT2 + 0.1, { dur: 0.55 });
+  M.undraw($('#floorLine'), OUT2 + 0.15, { dur: 0.5 });
+  tl.to(TK, { a: 0, duration: 0.6, ease: 'exit' }, OUT2 + 0.05);
   if (!M.chroma) {
-    tl.to('#floor2', { opacity: 0, duration: 0.6 }, OUT2 + 0.2);
-    tl.to('#core', { opacity: 0, duration: 0.5 }, OUT2 + 0.2);
+    tl.to('#floor2', { opacity: 0, duration: 0.55 }, OUT2 + 0.1);
+    tl.to('#core', { opacity: 0, duration: 0.5 }, OUT2 + 0.1);
   }
 
   // barrido del anillo de marcas + rotación lenta
