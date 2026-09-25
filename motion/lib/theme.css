@@ -1,0 +1,180 @@
+/* ==========================================================================
+   Sistema visual — motion graphics "tecno-científico" 2D / 2.5D
+   Dos modos de render:
+     html.fondo  → fondo azul noche completo (efectos: glow, reflejos, vidrio)
+     html.verde  → chroma key #00FF00 (todo opaco: sin semitransparencias
+                   que se mezclen con el verde y ensucien el recorte)
+   ========================================================================== */
+
+@font-face { font-family: "Inter"; font-weight: 300; src: url(../node_modules/@fontsource/inter/files/inter-latin-300-normal.woff2) format("woff2"); }
+@font-face { font-family: "Inter"; font-weight: 400; src: url(../node_modules/@fontsource/inter/files/inter-latin-400-normal.woff2) format("woff2"); }
+@font-face { font-family: "Inter"; font-weight: 500; src: url(../node_modules/@fontsource/inter/files/inter-latin-500-normal.woff2) format("woff2"); }
+@font-face { font-family: "Inter"; font-weight: 600; src: url(../node_modules/@fontsource/inter/files/inter-latin-600-normal.woff2) format("woff2"); }
+@font-face { font-family: "Inter"; font-weight: 700; src: url(../node_modules/@fontsource/inter/files/inter-latin-700-normal.woff2) format("woff2"); }
+@font-face { font-family: "Inter"; font-weight: 800; src: url(../node_modules/@fontsource/inter/files/inter-latin-800-normal.woff2) format("woff2"); }
+@font-face { font-family: "Inter"; font-weight: 900; src: url(../node_modules/@fontsource/inter/files/inter-latin-900-normal.woff2) format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-weight: 400; src: url(../node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-400-normal.woff2) format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-weight: 500; src: url(../node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-500-normal.woff2) format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-weight: 700; src: url(../node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-700-normal.woff2) format("woff2"); }
+
+:root {
+  /* Paleta base */
+  --night:    #020C1B;   /* azul noche */
+  --deep:     #061B3A;   /* azul profundo del fondo */
+  --electric: #087EFF;   /* azul eléctrico */
+  --cyan:     #20C4EF;   /* cian luminoso */
+  --white:    #F5F8FF;   /* blanco frío */
+  --sky:      #73BDF2;   /* azul claro secundario */
+
+  /* Derivados (modo fondo: se permiten semitransparencias) */
+  --card-bg: linear-gradient(160deg, rgba(115,189,242,0.13) 0%, rgba(8,126,255,0.05) 45%, rgba(6,27,58,0.40) 100%);
+  --card-border: rgba(115,189,242,0.30);
+  --card-shadow: 0 40px 80px -30px rgba(0,0,0,0.75), 0 0 0 1px rgba(2,12,27,0.4), inset 0 1px 0 rgba(245,248,255,0.14);
+  --line-soft: rgba(115,189,242,0.55);
+  --line-faint: rgba(115,189,242,0.22);
+  --text-dim: rgba(245,248,255,0.62);
+  --duo: 0.28;            /* opacidad de la capa "duotono" de los íconos */
+  --duo-fill: currentColor;
+  --glow-cyan: drop-shadow(0 0 14px rgba(32,196,239,0.55)) drop-shadow(0 0 40px rgba(8,126,255,0.35));
+  --glow-soft: drop-shadow(0 0 10px rgba(32,196,239,0.35));
+  --text-glow: 0 0 28px rgba(32,196,239,0.35), 0 0 80px rgba(8,126,255,0.25);
+  --reflect: below 6px linear-gradient(to bottom, transparent 0%, transparent 62%, rgba(255,255,255,0.13) 100%);
+}
+
+/* Modo chroma: todo opaco, sin glow / sombras / reflejos */
+html.verde {
+  --card-bg: linear-gradient(160deg, #0E2F5C 0%, #0A2448 50%, #061B3A 100%);
+  --card-border: #2C6CAE;
+  --card-shadow: none;
+  --line-soft: #4F93CF;
+  --line-faint: #2A5C92;
+  --text-dim: #A9C3E3;
+  --duo: 1;
+  --duo-fill: #0F3D73;
+  --glow-cyan: none;
+  --glow-soft: none;
+  --text-glow: none;
+  --reflect: none;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 1920px; height: 1080px; overflow: hidden; }
+body {
+  background: var(--night);
+  color: var(--white);
+  font-family: "Inter", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+  font-feature-settings: "tnum" 1, "cv11" 1, "ss01" 1;
+}
+html.verde body { background: #00FF00; }
+
+/* ---------- Capas de fondo (solo modo fondo) ---------- */
+#bg { position: absolute; inset: 0; overflow: hidden; background:
+  radial-gradient(120% 90% at 50% 42%, #0A2750 0%, var(--deep) 38%, #041229 70%, var(--night) 100%); }
+#bg .light { position: absolute; border-radius: 50%; will-change: transform; }
+#bg .grid {
+  position: absolute; left: -50%; width: 200%; height: 900px; bottom: -330px;
+  background-image:
+    linear-gradient(rgba(115,189,242,0.10) 1.5px, transparent 1.5px),
+    linear-gradient(90deg, rgba(115,189,242,0.10) 1.5px, transparent 1.5px);
+  background-size: 96px 96px;
+  transform: perspective(700px) rotateX(74deg);
+  transform-origin: 50% 0%;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 45%, #000 70%, transparent 100%);
+  opacity: 0.55;
+}
+#bg .horizon { position: absolute; left: 0; right: 0; height: 2px; top: 752px;
+  background: linear-gradient(90deg, transparent, rgba(32,196,239,0.20) 30%, rgba(115,189,242,0.28) 50%, rgba(32,196,239,0.20) 70%, transparent);
+  filter: blur(1px); }
+#bg canvas { position: absolute; inset: 0; }
+#bg .vignette { position: absolute; inset: 0;
+  background: radial-gradient(120% 100% at 50% 45%, transparent 55%, rgba(2,12,27,0.55) 85%, rgba(2,12,27,0.85) 100%); }
+#bg .noise { position: absolute; inset: 0; opacity: 0.07; mix-blend-mode: overlay; }
+html.verde #bg { display: none; }
+
+/* ---------- Escenario / cámara ---------- */
+#world { position: absolute; inset: 0; transform-origin: 50% 50%; }
+.abs { position: absolute; }
+.center-x { left: 50%; transform: translateX(-50%); }
+
+/* ---------- Tipografía ---------- */
+.kicker {
+  font-family: "JetBrains Mono", monospace; font-weight: 500; font-size: 26px;
+  letter-spacing: 0.3em; text-transform: uppercase; color: var(--sky);
+  display: inline-flex; align-items: center; gap: 18px; white-space: nowrap;
+}
+.kicker .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 12px var(--cyan); }
+html.verde .kicker .dot { box-shadow: none; }
+.display {
+  font-weight: 900; letter-spacing: -0.035em; line-height: 1.25; color: var(--white);
+  text-shadow: var(--text-glow); white-space: nowrap;
+}
+.display .hl, .hl {
+  background: linear-gradient(180deg, #8AE6FF 0%, var(--cyan) 42%, var(--electric) 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent; text-shadow: none;
+}
+.glowtext { filter: var(--glow-cyan); }
+.reflect { -webkit-box-reflect: var(--reflect); }
+.title { font-weight: 800; letter-spacing: -0.025em; line-height: 1.0; }
+.body { font-weight: 400; color: var(--text-dim); letter-spacing: -0.005em; }
+.mono { font-family: "JetBrains Mono", monospace; }
+.num { font-weight: 800; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; }
+.unit { font-family: "JetBrains Mono", monospace; font-weight: 500; color: var(--sky); letter-spacing: 0.02em; }
+.cyan { color: var(--cyan); }
+.sky { color: var(--sky); }
+.electric { color: var(--electric); }
+
+/* ---------- Tarjeta translúcida ---------- */
+.card {
+  position: absolute; border-radius: 28px;
+  background: var(--card-bg);
+  border: 1.5px solid var(--card-border);
+  box-shadow: var(--card-shadow);
+  -webkit-backdrop-filter: blur(22px) saturate(140%); backdrop-filter: blur(22px) saturate(140%);
+  -webkit-box-reflect: var(--reflect);
+}
+.card::before { /* brillo superior */
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: linear-gradient(180deg, rgba(245,248,255,0.10) 0%, transparent 28%);
+}
+html.verde .card { -webkit-backdrop-filter: none; backdrop-filter: none; }
+html.verde .card::before { background: linear-gradient(180deg, #123868 0%, transparent 30%); opacity: 1; }
+.card .accent { position: absolute; left: 28px; right: 28px; top: -1.5px; height: 3px; border-radius: 3px;
+  background: linear-gradient(90deg, transparent, var(--cyan), transparent); }
+html.verde .card .accent { background: var(--cyan); left: 40px; right: 40px; }
+
+.pill {
+  position: absolute; display: inline-flex; align-items: center; gap: 18px; white-space: nowrap;
+  padding: 18px 34px 18px 22px; border-radius: 999px;
+  background: var(--card-bg); border: 1.5px solid var(--card-border); box-shadow: var(--card-shadow);
+  -webkit-backdrop-filter: blur(22px); backdrop-filter: blur(22px);
+}
+html.verde .pill { -webkit-backdrop-filter: none; backdrop-filter: none; }
+
+/* ---------- Íconos ---------- */
+.ico { display: inline-flex; width: 64px; height: 64px; color: var(--cyan); filter: var(--glow-soft); }
+.ico svg { width: 100%; height: 100%; }
+.ico .duo { opacity: var(--duo); fill: var(--duo-fill); }
+.ico-badge {
+  display: inline-flex; align-items: center; justify-content: center; border-radius: 22px;
+  width: 96px; height: 96px;
+  background: radial-gradient(circle at 30% 25%, rgba(32,196,239,0.28), rgba(8,126,255,0.10) 60%, rgba(8,126,255,0.04));
+  border: 1.5px solid rgba(32,196,239,0.45);
+}
+html.verde .ico-badge { background: linear-gradient(160deg, #0F3D73, #0A2A52); border-color: #2E86C9; }
+
+/* ---------- SVG ---------- */
+.glow { filter: var(--glow-cyan); }
+.glow-soft { filter: var(--glow-soft); }
+svg .st-main { stroke: var(--cyan); }
+svg .st-elec { stroke: var(--electric); }
+svg .st-soft { stroke: var(--line-soft); }
+svg .st-faint { stroke: var(--line-faint); }
+svg .f-night { fill: var(--night); }
+html.verde svg .f-night { fill: #061B3A; }
+svg .f-cyan { fill: var(--cyan); }
+svg .f-white { fill: var(--white); }
+svg .fondo-only, .fondo-only { }
+html.verde .fondo-only { display: none !important; }
+html.fondo .verde-only { display: none !important; }
