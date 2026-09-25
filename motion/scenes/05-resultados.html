@@ -88,6 +88,9 @@
 
   #note { top: 906px; display: inline-flex; align-items: center; gap: 14px; font-family: "JetBrains Mono", monospace; font-size: 22px; font-weight: 500; line-height: 1.35; letter-spacing: 0.04em; color: var(--text-dim); white-space: nowrap; }
   #note .ico { width: 30px; height: 30px; color: var(--sky); }
+  /* verde: los rótulos mono chicos que van directo sobre el verde (sin tarjeta) se erosionaban al recortar
+     (yuv420 + chromakey: trazos cortados y tildes perdidas en «recomendación médica»). Más peso y blanco = trazo robusto. */
+  html.verde #note .txt, html.verde #wHead .lbl { font-weight: 700; color: var(--white); }
 
   #fx { position: absolute; inset: 0; overflow: visible; }
   /* el brillo .card::before está posicionado: el contenido en flujo va por encima (en verde lo oscurecía) */
