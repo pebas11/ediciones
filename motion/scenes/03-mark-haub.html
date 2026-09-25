@@ -1,0 +1,399 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>03 · Mark Haub</title>
+<link rel="stylesheet" href="../lib/theme.css">
+<style>
+  /* ---------- Beat 1 · retrato "tech" + nombre ---------- */
+  #pWrap { position: absolute; inset: 0; transform-origin: 540px 520px; transform: perspective(1800px) rotateY(16deg); }
+  #portrait, #floor, #chain { position: absolute; inset: 0; overflow: visible; }
+  html.verde #silBody { fill: url(#gSilV); }
+
+  #nameBlock { position: absolute; left: 980px; top: 240px; width: 860px; height: 600px; }
+  #kicker1 { position: absolute; left: 8px; top: 0; }
+  #nm1, #nm2 { position: absolute; left: 0; }
+  #nm1 { top: 44px; }
+  #nm2 { top: 222px; }
+  #nameBlock .display { font-size: 180px; }
+  #divSvg { position: absolute; left: 0; top: 430px; overflow: visible; }
+  html.verde #divLine { stroke: var(--electric); }
+  #info { position: absolute; left: 6px; top: 470px; display: flex; align-items: center; gap: 26px; }
+  #info .ico-badge { width: 92px; height: 92px; border-radius: 24px; flex: none; }
+  #info .ico-badge .ico { width: 54px; height: 54px; }
+  #info .ln1 { font-size: 42px; font-weight: 700; letter-spacing: -0.015em; line-height: 1.25; white-space: nowrap; }
+  #info .ln2 { font-size: 34px; font-weight: 400; color: var(--sky); letter-spacing: -0.005em; line-height: 1.25; white-space: nowrap; margin-top: 2px; }
+
+  /* ---------- Beat 2 · el experimento ---------- */
+  #kicker2 { top: 196px; }
+  .step { position: absolute; top: 372px; width: 480px; height: 460px; padding: 36px 40px; }
+  #card1 { left: 156px; }
+  #card2 { left: 720px; }
+  #card3 { left: 1284px; }
+  .step .row { display: flex; align-items: center; gap: 20px; }
+  .step .ico-badge { width: 80px; height: 80px; border-radius: 22px; }
+  .step .ico-badge .ico { width: 48px; height: 48px; }
+  .step .lbl { font-family: "JetBrains Mono", monospace; font-weight: 500; font-size: 22px; letter-spacing: 0.18em; color: var(--sky); line-height: 1.35; }
+  .step .no { position: absolute; right: 38px; top: 40px; font-family: "JetBrains Mono", monospace; font-weight: 700; font-size: 22px; letter-spacing: 0.1em; color: var(--text-dim); }
+  .step .hero { margin-top: 26px; display: flex; align-items: baseline; gap: 16px; white-space: nowrap; }
+  .step .hero .num { font-size: 156px; line-height: 1; }
+  .step .hero .unit { font-size: 40px; }
+  .step .hero .pre { font-family: "JetBrains Mono", monospace; font-weight: 500; font-size: 40px; color: var(--sky); }
+  .step .icons { margin-top: 34px; display: flex; gap: 14px; }
+  .step .icons .ico-badge { width: 84px; height: 84px; border-radius: 999px; }
+  .step .icons .ico-badge .ico { width: 50px; height: 50px; }
+  .step .desc { position: absolute; left: 40px; right: 40px; bottom: 36px; font-size: 36px; font-weight: 600; line-height: 1.3; letter-spacing: -0.012em; color: var(--white); }
+</style>
+</head>
+<body>
+<div id="bg"></div>
+<div id="world">
+
+  <!-- ================= Beat 1 · quién es ================= -->
+  <svg id="floor" viewBox="0 0 1920 1080" width="1920" height="1080">
+    <defs>
+      <radialGradient id="gFloor" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="#20C4EF" stop-opacity="0.42"/>
+        <stop offset="45%" stop-color="#087EFF" stop-opacity="0.13"/>
+        <stop offset="100%" stop-color="#087EFF" stop-opacity="0"/>
+      </radialGradient>
+    </defs>
+    <ellipse id="floorGlow" class="fondo-only" cx="540" cy="836" rx="360" ry="74" fill="url(#gFloor)"/>
+    <g class="glow">
+      <ellipse id="fl1" cx="540" cy="836" rx="236" ry="32" fill="none" class="st-elec" stroke-width="4"/>
+      <ellipse id="fl2" cx="540" cy="836" rx="132" ry="17" fill="none" class="st-main" stroke-width="3"/>
+    </g>
+  </svg>
+
+  <div id="pWrap">
+    <svg id="portrait" viewBox="0 0 1920 1080" width="1920" height="1080">
+      <defs>
+        <clipPath id="discClip"><circle cx="0" cy="0" r="190"/></clipPath>
+        <radialGradient id="gDisc" cx="50%" cy="36%" r="70%">
+          <stop offset="0%" stop-color="#0E3A72"/>
+          <stop offset="55%" stop-color="#082550"/>
+          <stop offset="100%" stop-color="#051632"/>
+        </radialGradient>
+        <linearGradient id="gSil" gradientUnits="userSpaceOnUse" x1="0" y1="-140" x2="0" y2="220">
+          <stop offset="0%" stop-color="#20C4EF" stop-opacity="0.62"/>
+          <stop offset="55%" stop-color="#087EFF" stop-opacity="0.34"/>
+          <stop offset="100%" stop-color="#087EFF" stop-opacity="0.10"/>
+        </linearGradient>
+        <linearGradient id="gSilV" gradientUnits="userSpaceOnUse" x1="0" y1="-140" x2="0" y2="220">
+          <stop offset="0%" stop-color="#1C9BE6"/>
+          <stop offset="60%" stop-color="#0F5FB8"/>
+          <stop offset="100%" stop-color="#0A3D80"/>
+        </linearGradient>
+        <linearGradient id="gScan" gradientUnits="userSpaceOnUse" x1="0" y1="-46" x2="0" y2="46">
+          <stop offset="0%" stop-color="#20C4EF" stop-opacity="0"/>
+          <stop offset="80%" stop-color="#20C4EF" stop-opacity="0.22"/>
+          <stop offset="96%" stop-color="#8AE6FF" stop-opacity="0.75"/>
+          <stop offset="100%" stop-color="#8AE6FF" stop-opacity="0"/>
+        </linearGradient>
+        <pattern id="pScan" width="8" height="6" patternUnits="userSpaceOnUse">
+          <rect width="8" height="1.6" fill="#8AE6FF" fill-opacity="0.16"/>
+        </pattern>
+      </defs>
+      <g id="pf" transform="translate(540 520)">
+        <circle id="outerRing" cx="0" cy="0" r="278" fill="none" class="st-faint" stroke-width="2" transform="rotate(-90)"/>
+        <g id="cardinals"></g>
+        <g id="ticks"></g>
+        <g id="arcs" class="glow-soft"></g>
+        <g id="discG">
+          <circle id="disc" cx="0" cy="0" r="190" fill="url(#gDisc)"/>
+          <g clip-path="url(#discClip)">
+            <g id="discGrid" class="fondo-only"></g>
+            <g id="sil">
+              <g transform="translate(0 16) scale(0.95)">
+                <path id="silBody" fill="url(#gSil)"/>
+                <path id="silScan" class="fondo-only" fill="url(#pScan)"/>
+                <path id="silLine" fill="none" class="st-main" stroke-width="3.2" stroke-linejoin="round"/>
+              </g>
+            </g>
+            <rect id="scan" class="fondo-only" x="-200" y="-46" width="400" height="92" fill="url(#gScan)"/>
+          </g>
+          <circle id="discRing" cx="0" cy="0" r="193" fill="none" class="st-elec" stroke-width="4.5" transform="rotate(-90)"/>
+        </g>
+      </g>
+    </svg>
+  </div>
+
+  <div id="nameBlock">
+    <div id="kicker1" class="kicker"><span class="dot"></span><span class="txt">Caso real · 2010</span></div>
+    <div id="nm1" class="display">MARK</div>
+    <div id="nm2" class="display glowtext">HAUB</div>
+    <svg id="divSvg" width="820" height="20" viewBox="0 0 820 20">
+      <defs>
+        <linearGradient id="gDiv" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="790" y2="0">
+          <stop offset="0%" stop-color="#20C4EF"/>
+          <stop offset="55%" stop-color="#087EFF" stop-opacity="0.8"/>
+          <stop offset="100%" stop-color="#087EFF" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <line id="divLine" x1="10" y1="10" x2="790" y2="10" stroke="url(#gDiv)" stroke-width="2.5" stroke-linecap="round"/>
+      <circle id="divDot" cx="10" cy="10" r="6" class="f-cyan"/>
+    </svg>
+    <div id="info">
+      <span class="ico-badge" id="capBadge"><i data-icon="graduation-cap"></i></span>
+      <div>
+        <div id="ln1" class="ln1">Profesor de Nutrición Humana</div>
+        <div id="ln2" class="ln2">Universidad Estatal de Kansas · EE. UU.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= Beat 2 · el experimento ================= -->
+  <div id="kicker2" class="abs center-x kicker"><span class="dot"></span><span class="txt">El experimento · «la dieta Twinkie»</span></div>
+
+  <svg id="chain" viewBox="0 0 1920 1080" width="1920" height="1080">
+    <defs>
+      <linearGradient id="gChain" gradientUnits="userSpaceOnUse" x1="396" y1="0" x2="1524" y2="0">
+        <stop offset="0%" stop-color="#087EFF"/><stop offset="50%" stop-color="#20C4EF"/><stop offset="100%" stop-color="#087EFF"/>
+      </linearGradient>
+    </defs>
+    <g class="glow">
+      <line id="seg1" x1="396" y1="300" x2="960" y2="300" stroke="url(#gChain)" stroke-width="3.5" stroke-linecap="round"/>
+      <line id="seg2" x1="960" y1="300" x2="1524" y2="300" stroke="url(#gChain)" stroke-width="3.5" stroke-linecap="round"/>
+      <line id="stem1" x1="396" y1="318" x2="396" y2="372" class="st-soft" stroke-width="2.5"/>
+      <line id="stem2" x1="960" y1="318" x2="960" y2="372" class="st-soft" stroke-width="2.5"/>
+      <line id="stem3" x1="1524" y1="318" x2="1524" y2="372" class="st-soft" stroke-width="2.5"/>
+      <circle id="rip1" class="fondo-only st-main" cx="396" cy="300" r="12" fill="none" stroke-width="2"/>
+      <circle id="rip2" class="fondo-only st-main" cx="960" cy="300" r="12" fill="none" stroke-width="2"/>
+      <circle id="rip3" class="fondo-only st-main" cx="1524" cy="300" r="12" fill="none" stroke-width="2"/>
+      <g id="n1"><circle cx="396" cy="300" r="23" fill="none" class="st-faint" stroke-width="2"/><circle cx="396" cy="300" r="12" class="f-night st-main" stroke-width="3.5"/><circle cx="396" cy="300" r="4.5" class="f-cyan"/></g>
+      <g id="n2"><circle cx="960" cy="300" r="23" fill="none" class="st-faint" stroke-width="2"/><circle cx="960" cy="300" r="12" class="f-night st-main" stroke-width="3.5"/><circle cx="960" cy="300" r="4.5" class="f-cyan"/></g>
+      <g id="n3"><circle cx="1524" cy="300" r="23" fill="none" class="st-faint" stroke-width="2"/><circle cx="1524" cy="300" r="12" class="f-night st-main" stroke-width="3.5"/><circle cx="1524" cy="300" r="4.5" class="f-cyan"/></g>
+      <circle id="pulse" cx="396" cy="300" r="6" class="f-white"/>
+    </g>
+  </svg>
+
+  <div class="card step" id="card1"><div class="accent"></div>
+    <div class="row"><span class="ico-badge"><i data-icon="calendar-dots"></i></span><div class="lbl">DURACIÓN</div></div>
+    <div class="no">01</div>
+    <div class="hero"><span class="num" id="c10">10</span><span class="unit">semanas</span></div>
+    <div class="desc" id="d1">Un experimento personal</div>
+  </div>
+  <div class="card step" id="card2"><div class="accent"></div>
+    <div class="row"><span class="ico-badge"><i data-icon="clock"></i></span><div class="lbl">FRECUENCIA</div></div>
+    <div class="no">02</div>
+    <div class="hero"><span class="pre">cada</span><span class="num" id="c3">3</span><span class="unit">horas</span></div>
+    <div class="desc" id="d2">Un snack dulce en lugar de comidas</div>
+  </div>
+  <div class="card step" id="card3"><div class="accent"></div>
+    <div class="row"><span class="ico-badge"><i data-icon="fork-knife"></i></span><div class="lbl">MENÚ</div></div>
+    <div class="no">03</div>
+    <div class="icons" id="menuIcons">
+      <span class="ico-badge"><i data-icon="cake"></i></span>
+      <span class="ico-badge"><i data-icon="popcorn"></i></span>
+      <span class="ico-badge"><i data-icon="cookie"></i></span>
+      <span class="ico-badge"><i data-icon="grains"></i></span>
+    </div>
+    <div class="desc" id="d3">Pastelitos, papas fritas, galletitas y cereales azucarados</div>
+  </div>
+
+</div>
+
+<script src="../node_modules/gsap/dist/gsap.min.js"></script>
+<script src="../node_modules/gsap/dist/SplitText.min.js"></script>
+<script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
+<script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
+<script src="../lib/stage.js"></script>
+<script>
+M.scene({ duration: 14, icons: ['graduation-cap', 'calendar-dots', 'clock', 'fork-knife', 'cake', 'popcorn', 'cookie', 'grains'] }, (tl, M) => {
+  const $ = (s) => document.querySelector(s);
+  const $$ = (s) => Array.from(document.querySelectorAll(s));
+  const NS = 'http://www.w3.org/2000/svg';
+  const mk = (tag, attrs, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); parent.appendChild(e); return e; };
+  const rad = (d) => d * Math.PI / 180;
+
+  // Escala de elementos SVG con origen fijo, escrita a mano en cada frame.
+  // (GSAP pierde el svgOrigin cuando re-analiza una matriz con escala 0.)
+  const scalers = [];
+  const S = (el, ox, oy, s = 1, o = 1) => { const p = { s, o }; scalers.push([el, p, ox, oy]); return p; };
+  const sIn = (p, at, { dur = 0.7, ease = 'back.out(1.8)', from = 0 } = {}) => tl.fromTo(p, { s: from }, { s: 1, duration: dur, ease, immediateRender: false }, at);
+  const sOut = (p, at, { dur = 0.45, ease = 'back.in(1.6)', to = 0 } = {}) => tl.to(p, { s: to, duration: dur, ease }, at);
+
+  /* ---------- geometría del retrato (coordenadas locales: #pf está en 540,520) ---------- */
+  // silueta genérica de busto (sin rasgos): cabeza + cuello + hombros en un solo trazo
+  const SIL = 'M -196 250 C -196 164 -164 116 -100 96 C -66 86 -46 76 -40 58 C -38 50 -38 42 -40 32 ' +
+              'C -64 14 -76 -20 -76 -58 C -76 -110 -44 -142 0 -142 C 44 -142 76 -110 76 -58 ' +
+              'C 76 -20 64 14 40 32 C 38 42 38 50 40 58 C 46 76 66 86 100 96 C 164 116 196 164 196 250 Z';
+  ['#silBody', '#silScan', '#silLine'].forEach((s) => $(s).setAttribute('d', SIL));
+
+  // grilla fina dentro del disco (solo fondo)
+  const grid = $('#discGrid');
+  for (let y = -182; y <= 182; y += 26) mk('line', { x1: -200, y1: y, x2: 200, y2: y, stroke: '#73BDF2', 'stroke-opacity': 0.07, 'stroke-width': 1.5 }, grid);
+  for (let x = -182; x <= 182; x += 26) mk('line', { x1: x, y1: -200, x2: x, y2: 200, stroke: '#73BDF2', 'stroke-opacity': 0.05, 'stroke-width': 1.5 }, grid);
+
+  // anillo de marcas (se revela con un barrido angular)
+  const NT = 90, ticks = [];
+  for (let i = 0; i < NT; i++) {
+    const a = rad(-90 + i * 360 / NT), major = i % 6 === 0;
+    const r0 = 214, r1 = major ? 238 : 226;
+    ticks.push(mk('line', {
+      x1: (r0 * Math.cos(a)).toFixed(2), y1: (r0 * Math.sin(a)).toFixed(2),
+      x2: (r1 * Math.cos(a)).toFixed(2), y2: (r1 * Math.sin(a)).toFixed(2),
+      class: major ? 'st-main' : 'st-soft', 'stroke-width': major ? 3 : 2, 'stroke-linecap': 'round',
+    }, $('#ticks')));
+  }
+
+  // arcos que giran lento
+  const arcDefs = [[-78, -8], [14, 58], [96, 204], [228, 256]];
+  const arcs = arcDefs.map(([a0, a1], i) => {
+    const R = 256, p0 = [R * Math.cos(rad(a0)), R * Math.sin(rad(a0))], p1 = [R * Math.cos(rad(a1)), R * Math.sin(rad(a1))];
+    const large = (a1 - a0) > 180 ? 1 : 0;
+    return mk('path', { d: `M ${p0[0].toFixed(2)} ${p0[1].toFixed(2)} A ${R} ${R} 0 ${large} 1 ${p1[0].toFixed(2)} ${p1[1].toFixed(2)}`,
+      fill: 'none', class: i % 2 ? 'st-elec' : 'st-main', 'stroke-width': i % 2 ? 3 : 4.5, 'stroke-linecap': 'round' }, $('#arcs'));
+  });
+
+  // marcas cardinales fijas
+  const cards4 = [0, 90, 180, 270].map((d) => {
+    const a = rad(d - 90), g = mk('g', {}, $('#cardinals'));
+    mk('line', { x1: (288 * Math.cos(a)).toFixed(2), y1: (288 * Math.sin(a)).toFixed(2), x2: (304 * Math.cos(a)).toFixed(2), y2: (304 * Math.sin(a)).toFixed(2), class: 'st-main', 'stroke-width': 3.5, 'stroke-linecap': 'round' }, g);
+    return g;
+  });
+
+  /* ---------------- Beat 1 · quién es (0,15 – 6,4 s) ---------------- */
+  const P = { tickA: 0, tickB: 0, scan: -1 };
+
+  // retrato
+  M.draw($('#fl1'), 0.18, { dur: 1.0 });
+  M.draw($('#fl2'), 0.32, { dur: 0.9 });
+  if (!M.chroma) tl.from('#floorGlow', { opacity: 0, scale: 0.4, transformOrigin: '50% 50%', duration: 1.3 }, 0.2);
+  const discS = S($("#discG"), 0, 0, 0);   // coordenadas locales (#pf ya está trasladado)
+  const cardS = cards4.map((g) => S(g, 0, 0, 0.7));
+  sIn(discS, 0.25, { dur: 1.0, ease: 'back.out(1.35)' });
+  M.draw($('#discRing'), 0.4, { dur: 1.1 });
+  M.draw($('#outerRing'), 0.5, { dur: 1.4 });
+  tl.to(P, { tickB: 1, duration: 1.3, ease: 'power2.inOut' }, 0.55);
+  arcs.forEach((a, i) => M.draw(a, 0.75 + i * 0.1, { dur: 0.9 }));
+  tl.fromTo('#sil', { y: 330 }, { y: 0, duration: 1.15, ease: 'swift' }, 0.75);
+  M.draw($('#silLine'), 0.95, { dur: 1.4 });
+  cardS.forEach((p, i) => sIn(p, 1.15 + i * 0.06, { dur: 0.6, ease: 'back.out(2)', from: 0.7 }));
+  cards4.forEach((g, i) => M.draw(g.firstChild, 1.15 + i * 0.06, { dur: 0.5 }));
+  // barrido de escaneo (solo fondo)
+  if (!M.chroma) {
+    tl.fromTo(P, { scan: -1 }, { scan: 1, duration: 1.5, ease: 'power1.inOut' }, 1.9);
+    tl.fromTo(P, { scan: -1 }, { scan: 1, duration: 1.5, ease: 'power1.inOut', immediateRender: false }, 3.9);
+  }
+
+  // nombre
+  const k1 = M.textIn($('#kicker1 .txt'), 0.15, { type: 'words', dur: 0.8 });
+  M.zoomIn($('#kicker1 .dot'), 0.15);
+  const nm1 = M.textIn($('#nm1'), 0.45, { dur: 1.1, stagger: 0.05 });
+  const nm2 = M.textIn($('#nm2'), 0.65, { dur: 1.1, stagger: 0.05, cls: 'hl' });
+  M.draw($('#divLine'), 1.45, { dur: 0.9 });
+  const dotS = S($('#divDot'), 10, 10, 0);
+  sIn(dotS, 1.4, { dur: 0.5 });
+  M.zoomIn($('#capBadge'), 1.65, { dur: 0.7 });
+  const l1 = M.textIn($('#ln1'), 1.75, { type: 'words', dur: 0.85, stagger: 0.06 });
+  const l2 = M.textIn($('#ln2'), 1.95, { type: 'words', dur: 0.85, stagger: 0.05 });
+
+  // salida del beat 1
+  const X1 = 5.55;
+  M.textOut(k1, X1, { type: 'words' });
+  M.zoomOut($('#kicker1 .dot'), X1);
+  M.textOut(l2, X1, { type: 'words', stagger: 0.02 });
+  M.textOut(l1, X1 + 0.04, { type: 'words', stagger: 0.02 });
+  M.zoomOut($('#capBadge'), X1 + 0.05);
+  M.undraw($('#divLine'), X1 + 0.05, { dur: 0.5 });
+  sOut(dotS, X1 + 0.3);
+  M.textOut(nm1, X1 + 0.08);
+  M.textOut(nm2, X1 + 0.14);
+
+  tl.to('#sil', { y: 330, duration: 0.6, ease: 'exit' }, X1 + 0.05);
+  M.undraw($('#silLine'), X1, { dur: 0.45 });
+  arcs.forEach((a, i) => M.undraw(a, X1 + 0.05 + i * 0.04, { dur: 0.45 }));
+  tl.to(P, { tickA: 1, duration: 0.6, ease: 'exit' }, X1 + 0.1);
+  cards4.forEach((g, i) => M.undraw(g.firstChild, X1 + 0.1 + i * 0.03, { dur: 0.35 }));
+  M.undraw($('#outerRing'), X1 + 0.15, { dur: 0.6 });
+  sOut(discS, X1 + 0.3, { dur: 0.55, ease: 'back.in(1.3)' });
+  M.undraw($('#fl2'), X1 + 0.35, { dur: 0.45 });
+  M.undraw($('#fl1'), X1 + 0.45, { dur: 0.5 });
+  if (!M.chroma) tl.to('#floorGlow', { opacity: 0, duration: 0.7 }, X1 + 0.3);
+
+  /* ---------------- Beat 2 · el experimento (6,15 – 13,6 s) ---------------- */
+  const B = 6.15;
+  const k2 = M.textIn($('#kicker2 .txt'), B, { type: 'words', dur: 0.8, stagger: 0.05 });
+  M.zoomIn($('#kicker2 .dot'), B);
+
+  const nodes = ['#n1', '#n2', '#n3'], xs = [396, 960, 1524];
+  const nodeS = nodes.map((n, i) => S($(n), xs[i], 300, 0));
+  const ripS = [1, 2, 3].map((i) => S($(`#rip${i}`), xs[i - 1], 300, 1, 0));
+  const T = [B + 0.3, B + 1.1, B + 1.9];          // llegada a cada nodo
+  M.draw($('#seg1'), T[0] + 0.15, { dur: 0.65, ease: 'power1.inOut' });
+  M.draw($('#seg2'), T[1] + 0.15, { dur: 0.65, ease: 'power1.inOut' });
+  const cardsEl = ['#card1', '#card2', '#card3'].map($);
+  gsap.set('#card1', { rotationY: 12, transformPerspective: 1400 });
+  gsap.set('#card3', { rotationY: -12, transformPerspective: 1400 });
+  T.forEach((t, i) => {
+    sIn(nodeS[i], t, { dur: 0.6 });
+    if (!M.chroma) tl.fromTo(ripS[i], { s: 1, o: 0.9 }, { s: 3.4, o: 0, duration: 0.9, ease: 'power2.out', immediateRender: false }, t + 0.05);
+    M.draw($(`#stem${i + 1}`), t + 0.1, { dur: 0.35 });
+    M.popIn(cardsEl[i], t + 0.2, { dur: 0.9 });
+  });
+  M.counter($('#c10'), { to: 10, at: T[0] + 0.45, dur: 1.2 });
+  // el 3 no se cuenta (0-1-2 horas no tiene sentido): entra con un "pop" desde la base
+  tl.from('#c3', { scale: 0, transformOrigin: '50% 80%', duration: 0.75, ease: 'back.out(1.7)' }, T[1] + 0.45);
+  const d1 = M.textIn($('#d1'), T[0] + 0.6, { type: 'words', dur: 0.8, stagger: 0.06 });
+  const d2 = M.textIn($('#d2'), T[1] + 0.6, { type: 'words', dur: 0.8, stagger: 0.05 });
+  const d3 = M.textIn($('#d3'), T[2] + 0.75, { type: 'words', dur: 0.8, stagger: 0.05 });
+  const mIcons = $$('#menuIcons .ico-badge');
+  mIcons.forEach((b, i) => M.zoomIn(b, T[2] + 0.5 + i * 0.09, { dur: 0.6 }));
+
+  // pulso de luz que recorre la cadena mientras la escena queda quieta
+  const PU = { p: -1 };
+  tl.fromTo(PU, { p: 0 }, { p: 1, duration: 1.6, ease: 'power1.inOut' }, 9.4);
+  tl.fromTo(PU, { p: 0 }, { p: 1, duration: 1.6, ease: 'power1.inOut', immediateRender: false }, 11.05);
+  tl.set(PU, { p: -1 }, 12.66);
+  // cada nodo "se enciende" cuando el pulso lo alcanza (solo fondo)
+  if (!M.chroma) [[1, 10.2], [2, 11.0], [1, 11.85]].forEach(([i, t]) =>
+    tl.fromTo(ripS[i], { s: 1, o: 0.7 }, { s: 2.8, o: 0, duration: 0.8, ease: 'power2.out', immediateRender: false }, t));
+
+  // salida final
+  const X2 = 12.7;
+  // salida de tarjeta: el clip arranca justo fuera del borde (incluye el reflejo) para que el cierre se vea entero
+  const cardOut = (el, at, dur = 0.6) => {
+    tl.to(el, { y: '-=30', scale: 0.94, duration: dur, ease: 'exit' }, at);
+    tl.fromTo(el, { clipPath: 'inset(-8% -8% -42% -8% round 28px)' }, { clipPath: 'inset(50% 0% 50% 0% round 28px)', duration: dur, ease: 'exit', immediateRender: false }, at);
+  };
+  cardsEl.forEach((c, i) => cardOut(c, X2 + i * 0.07));
+  M.textOut(d1, X2, { type: 'words', stagger: 0.015 });
+  M.textOut(d2, X2 + 0.07, { type: 'words', stagger: 0.015 });
+  M.textOut(d3, X2 + 0.14, { type: 'words', stagger: 0.015 });
+  [1, 2, 3].forEach((i) => M.undraw($(`#stem${i}`), X2 + 0.05, { dur: 0.3, to: '0% 0%' }));
+  M.undraw($('#seg2'), X2 + 0.2, { dur: 0.45 });
+  M.undraw($('#seg1'), X2 + 0.28, { dur: 0.45 });
+  nodeS.forEach((p, i) => sOut(p, X2 + 0.3 + i * 0.06));
+  M.textOut(k2, X2 + 0.2, { type: 'words' });
+  M.zoomOut($('#kicker2 .dot'), X2 + 0.2);
+
+  /* ---------------- geometría por frame ---------------- */
+  const scanEl = $('#scan'), pulse = $('#pulse');
+  M.onFrame((t) => {
+    for (const [el, p, ox, oy] of scalers) {
+      const s = Math.max(p.s, 0.0001);
+      el.setAttribute('transform', `translate(${ox} ${oy}) scale(${s.toFixed(5)}) translate(${-ox} ${-oy})`);
+      el.setAttribute('visibility', p.s > 0.001 && p.o > 0.001 ? 'visible' : 'hidden');
+      if (!M.chroma && p.o < 1) el.setAttribute('opacity', p.o.toFixed(4)); else el.removeAttribute('opacity');
+    }
+    // anillos que giran lento (sentidos opuestos → profundidad)
+    $('#arcs').setAttribute('transform', `rotate(${(t * 16).toFixed(3)})`);
+    $('#ticks').setAttribute('transform', `rotate(${(-t * 3.5).toFixed(3)})`);
+    for (let i = 0; i < NT; i++) {
+      const f = i / NT;
+      ticks[i].setAttribute('visibility', (f < P.tickB && f >= P.tickA) ? 'visible' : 'hidden');
+    }
+    // barrido de escaneo
+    const sy = P.scan * 240;
+    scanEl.setAttribute('transform', `translate(0 ${sy.toFixed(2)})`);
+    scanEl.setAttribute('visibility', P.scan > -1 && P.scan < 1 ? 'visible' : 'hidden');
+    // pulso sobre la cadena
+    const on = PU.p > 0.001 && PU.p < 0.999;
+    pulse.setAttribute('cx', (396 + PU.p * (1524 - 396)).toFixed(2));
+    pulse.setAttribute('r', on ? 6.5 : 0);
+  });
+});
+</script>
+</body>
+</html>

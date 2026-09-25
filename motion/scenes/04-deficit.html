@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>04 · Déficit</title>
+<link rel="stylesheet" href="../lib/theme.css">
+<style>
+  /* ---------- comunes ---------- */
+  .lbl { font-family: "JetBrains Mono", monospace; font-weight: 500; font-size: 22px; line-height: 1.35; letter-spacing: 0.18em; color: var(--sky); white-space: nowrap; }
+  .kicker b { color: var(--white); font-weight: 700; }
+  svg.layer { position: absolute; left: 0; top: 0; overflow: visible; }
+
+  /* ---------- Beat 1 · barras ---------- */
+  #kicker1 { top: 112px; }
+  #panel { left: 160px; top: 206px; width: 1600px; height: 660px; }
+  #phead { position: absolute; left: 56px; top: 30px; display: flex; align-items: center; gap: 18px; }
+  #phead .ico-badge { width: 58px; height: 58px; border-radius: 16px; }
+  #phead .ico-badge .ico { width: 34px; height: 34px; }
+  .tickl { position: absolute; top: 30px; width: 140px; margin-left: -70px; text-align: center;
+    font-family: "JetBrains Mono", monospace; font-weight: 500; font-size: 22px; line-height: 1.35; color: var(--text-dim); }
+  .tickl.end { color: var(--sky); }
+
+  .rlab { position: absolute; left: 56px; display: flex; align-items: center; gap: 14px; }
+  .rlab .sw { width: 16px; height: 16px; border-radius: 5px; flex: none; }
+  .sw.e { background: var(--electric); } .sw.c { background: var(--cyan); }
+  .rlab .tag { font-family: "JetBrains Mono", monospace; font-weight: 700; font-size: 22px; line-height: 1.3; letter-spacing: 0.1em;
+    color: var(--night); background: var(--cyan); padding: 2px 10px 1px; border-radius: 8px; margin-left: 4px; }
+  .rval { position: absolute; left: 50px; height: 124px; padding: 0 6px; overflow: hidden; }
+  .rval .in { display: flex; align-items: baseline; gap: 14px; white-space: nowrap; }
+  .rval .num { font-size: 106px; line-height: 1.12; }
+  .rval .unit { font-size: 30px; }
+  #row1 .num { color: var(--white); }
+  #row2 .num { color: var(--white); }
+
+  .trk { fill: rgba(115,189,242,0.07); stroke: rgba(115,189,242,0.10); }
+  html.verde .trk { fill: #0B2A52; stroke: #123868; }
+  .hatchln { stroke: rgba(32,196,239,0.42); }
+  html.verde .hatchln { stroke: #1F7FB8; }
+  .gapfill { fill: rgba(32,196,239,0.06); }
+  html.verde .gapfill { fill: #0C2D55; }
+
+  #formula { position: absolute; top: 516px; width: 400px; margin-left: -200px; text-align: center; font-size: 24px; letter-spacing: 0.12em; color: var(--text-dim); }
+  #lab3 .ico { width: 34px; height: 34px; color: var(--cyan); }
+  #lab3t { color: var(--white); font-weight: 700; letter-spacing: 0.26em; }
+  #row3 .in { gap: 12px; }
+  #row3 .approx { width: 62px; height: 54px; align-self: center; color: var(--cyan); margin-right: 6px; flex: none; }
+  #dv { background: linear-gradient(180deg, #8AE6FF 0%, var(--cyan) 45%, var(--electric) 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+  /* ---------- Beat 2 · dona ---------- */
+  #kicker2 { top: 112px; }
+  #donutSvg { position: absolute; inset: 0; overflow: visible; }
+  .dtrack { stroke: rgba(115,189,242,0.09); }
+  html.verde .dtrack { stroke: #0B2A52; }
+  #center { position: absolute; left: 280px; width: 600px; top: 0; text-align: center; }
+  #frac { position: absolute; left: 0; right: 0; top: 0; }
+  #frac .display { font-size: 176px; display: inline-block; }
+  #fracSub { position: absolute; left: 0; right: 0; text-align: center; }
+
+  .lg { left: 1050px; width: 640px; padding: 30px 40px 30px 40px; }
+  .lg .head { display: flex; align-items: center; gap: 16px; }
+  .lg .chip { font-family: "JetBrains Mono", monospace; font-weight: 700; font-size: 28px; line-height: 1.25; letter-spacing: 0.04em;
+    padding: 4px 14px 3px; border-radius: 10px; color: var(--night); }
+  #cardA .chip { background: var(--cyan); }
+  #cardB .chip { background: var(--electric); color: var(--white); }
+  .lg .title { font-size: 58px; font-weight: 800; letter-spacing: -0.025em; line-height: 1.25; white-space: nowrap; }
+  #cardA { top: 246px; height: 290px; }
+  #cardA .title { margin-top: 10px; }
+  #cardA .icons { display: flex; gap: 16px; margin-top: 16px; }
+  #cardA .icons .ico-badge { width: 78px; height: 78px; border-radius: 20px; }
+  #cardA .icons .ico { width: 46px; height: 46px; }
+  #cardB { top: 574px; height: 312px; }
+  #cardB .accent { background: linear-gradient(90deg, transparent, var(--electric), transparent); }
+  html.verde #cardB .accent { background: var(--electric); }
+  #cardB .list { margin-top: 12px; display: flex; flex-direction: column; gap: 4px; }
+  #cardB .it { display: flex; align-items: center; gap: 18px; }
+  #cardB .it .ico-badge { width: 60px; height: 60px; border-radius: 16px; flex: none; }
+  #cardB .it .ico { width: 36px; height: 36px; color: var(--sky); }
+  #cardB .it .t { font-size: 40px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.3; white-space: nowrap; }
+  .ico-badge.e { background: radial-gradient(circle at 30% 25%, rgba(8,126,255,0.30), rgba(8,126,255,0.10) 60%, rgba(8,126,255,0.04)); border-color: rgba(8,126,255,0.55); }
+  html.verde .ico-badge.e { background: linear-gradient(160deg, #0F3D73, #0A2A52); border-color: #1F6FD6; }
+</style>
+</head>
+<body>
+<div id="bg"></div>
+<div id="world">
+
+  <!-- ================= Beat 1 · lo que necesitaba vs. lo que comió ================= -->
+  <div id="kicker1" class="abs center-x kicker"><span class="dot"></span><span class="txt">La clave: <b>la cantidad</b></span></div>
+
+  <div id="panel" class="card"><div class="accent"></div>
+    <svg id="chart" class="layer" viewBox="0 0 1600 660" width="1600" height="660">
+      <defs>
+        <linearGradient id="gBarE" gradientUnits="userSpaceOnUse" x1="540" y1="0" x2="1500" y2="0">
+          <stop offset="0%" stop-color="#0552B8"/><stop offset="70%" stop-color="#087EFF"/><stop offset="100%" stop-color="#3F9DFF"/>
+        </linearGradient>
+        <linearGradient id="gBarC" gradientUnits="userSpaceOnUse" x1="540" y1="0" x2="1500" y2="0">
+          <stop offset="0%" stop-color="#0B84B8"/><stop offset="55%" stop-color="#20C4EF"/><stop offset="100%" stop-color="#7EE3FF"/>
+        </linearGradient>
+        <linearGradient id="gShine" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.38"/><stop offset="45%" stop-color="#FFFFFF" stop-opacity="0.05"/><stop offset="100%" stop-color="#000000" stop-opacity="0.18"/>
+        </linearGradient>
+        <pattern id="hatch" patternUnits="userSpaceOnUse" width="16" height="16" patternTransform="rotate(40)">
+          <line class="hatchln" x1="4" y1="0" x2="4" y2="16" stroke-width="5"/>
+        </pattern>
+      </defs>
+      <g id="grid"></g>
+      <g id="ruler"></g>
+      <!-- pistas -->
+      <rect class="trk" id="trk1" x="540" y="182" width="960" height="64" rx="12" stroke-width="1.5"/>
+      <rect class="trk" id="trk2" x="540" y="344" width="960" height="64" rx="12" stroke-width="1.5"/>
+      <!-- hueco del déficit -->
+      <g id="gap">
+        <rect id="gapFill" class="gapfill" x="0" y="344" height="64" rx="12"/>
+        <rect id="gapHatch" x="0" y="344" height="64" rx="12" fill="url(#hatch)"/>
+        <rect id="gapLine" x="0" y="344" height="64" rx="12" fill="none" class="st-main" stroke-width="2.5" stroke-dasharray="10 8"/>
+      </g>
+      <!-- barras -->
+      <g class="glow-soft">
+        <rect id="bar1" x="540" y="182" height="64" rx="12" fill="url(#gBarE)"/>
+        <rect id="bar2" x="540" y="344" height="64" rx="12" fill="url(#gBarC)"/>
+      </g>
+      <rect id="sh1" class="fondo-only" x="540" y="182" height="64" rx="12" fill="url(#gShine)"/>
+      <rect id="sh2" class="fondo-only" x="540" y="344" height="64" rx="12" fill="url(#gShine)"/>
+      <line id="tip1" y1="188" y2="240" stroke="#F5F8FF" stroke-width="4" stroke-linecap="round"/>
+      <line id="tip2" y1="350" y2="402" stroke="#F5F8FF" stroke-width="4" stroke-linecap="round"/>
+      <!-- cursores sobre la regla -->
+      <path id="cur1" d="M-11,0 L11,0 L0,14 Z" fill="#087EFF"/>
+      <path id="cur2" d="M-11,0 L11,0 L0,14 Z" fill="#20C4EF"/>
+      <!-- guía y corchete -->
+      <line id="guide" x1="1372" y1="254" x2="1372" y2="254" class="st-main" stroke-width="2.5" stroke-dasharray="7 7" stroke-linecap="round"/>
+      <line id="sumLn" x1="56" y1="450" x2="520" y2="450" class="st-soft" stroke-width="2"/>
+      <g class="glow-soft">
+        <path id="brL" d="M1246,440 L1128,440 Q1120,440 1120,432 L1120,418" fill="none" class="st-main" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        <path id="brR" d="M1246,440 L1364,440 Q1372,440 1372,432 L1372,418" fill="none" class="st-main" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        <path id="conD" fill="none" class="st-main" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle id="dD1" r="7" class="f-cyan"/>
+      </g>
+    </svg>
+
+    <div id="phead"><span class="ico-badge"><i data-icon="chart-bar-horizontal"></i></span><span class="lbl" id="pheadTxt">CALORÍAS POR DÍA</span></div>
+    <div id="ticks"></div>
+
+    <div class="rlab" id="lab1" style="top:120px"><span class="sw e"></span><span class="lbl" id="lab1t">LO QUE NECESITABA</span></div>
+    <div class="rval" id="row1" style="top:152px"><div class="in"><span class="num" id="n1">0</span><span class="unit">kcal/día</span></div></div>
+
+    <div class="rlab" id="lab2" style="top:282px"><span class="sw c"></span><span class="lbl" id="lab2t">LO QUE COMIÓ</span><span class="tag" id="tag2">MENOS DE</span></div>
+    <div class="rval" id="row2" style="top:314px"><div class="in"><span class="num" id="n2">0</span><span class="unit">kcal/día</span></div></div>
+
+    <div id="formula" class="lbl">2.600 − 1.800</div>
+    <div class="rlab" id="lab3" style="top:464px"><i data-icon="trend-down"></i><span class="lbl" id="lab3t">DÉFICIT</span></div>
+    <div class="rval" id="row3" style="top:496px"><div class="in"><svg class="approx" viewBox="0 0 40 34"><g fill="none" stroke="currentColor" stroke-width="4.6" stroke-linecap="round"><path d="M4,12 C10,5 15,5 20,10 S30,15 36,8"/><path d="M4,25 C10,18 15,18 20,23 S30,28 36,21"/></g></svg><span class="num" id="dv">−0</span><span class="unit">kcal/día</span></div></div>
+  </div>
+
+  <!-- ================= Beat 2 · de dónde salían las calorías ================= -->
+  <div id="kicker2" class="abs center-x kicker"><span class="dot"></span><span class="txt">¿De dónde salían <b>las calorías</b>?</span></div>
+
+  <svg id="donutSvg" viewBox="0 0 1920 1080" width="1920" height="1080">
+    <defs>
+      <radialGradient id="gFloor2" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="#20C4EF" stop-opacity="0.34"/>
+        <stop offset="50%" stop-color="#087EFF" stop-opacity="0.10"/>
+        <stop offset="100%" stop-color="#087EFF" stop-opacity="0"/>
+      </radialGradient>
+      <radialGradient id="gCore" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="#0A2750" stop-opacity="0.85"/>
+        <stop offset="70%" stop-color="#061B3A" stop-opacity="0.35"/>
+        <stop offset="100%" stop-color="#061B3A" stop-opacity="0"/>
+      </radialGradient>
+      <clipPath id="sweepClip"><path id="sweepPath" d="M0,0"/></clipPath>
+    </defs>
+    <ellipse id="floor2" class="fondo-only" cx="580" cy="930" rx="360" ry="54" fill="url(#gFloor2)"/>
+    <ellipse id="floorLine" cx="580" cy="930" rx="250" ry="26" fill="none" class="st-faint" stroke-width="2"/>
+    <circle id="core" class="fondo-only" cx="580" cy="570" r="230" fill="url(#gCore)"/>
+    <g id="dticks" clip-path="url(#sweepClip)"><g id="dticksRot"></g></g>
+    <circle id="ringOut" cx="580" cy="570" r="336" fill="none" class="st-faint" stroke-width="2"/>
+    <circle id="dtrack" class="dtrack" cx="580" cy="570" r="236" fill="none" stroke-width="58"/>
+    <circle id="ringIn" cx="580" cy="570" r="192" fill="none" class="st-faint" stroke-width="2"/>
+    <g class="glow">
+      <path id="segC" fill="none" stroke="#20C4EF" stroke-width="58"/>
+      <path id="segE" fill="none" stroke="#087EFF" stroke-width="58"/>
+    </g>
+    <path id="segCi" fill="none" stroke="#8AE6FF" stroke-width="3"/>
+    <path id="segEi" fill="none" stroke="#5AA8FF" stroke-width="3"/>
+    <g class="glow-soft">
+      <path id="conA" fill="none" class="st-main" stroke-width="2.5" stroke-linejoin="round"/>
+      <path id="conB" fill="none" stroke="#087EFF" stroke-width="2.5" stroke-linejoin="round"/>
+      <circle id="dA0" r="7" class="f-cyan"/><circle id="dA1" r="6" class="f-cyan"/>
+      <circle id="dB0" r="7" fill="#087EFF"/><circle id="dB1" r="6" fill="#087EFF"/>
+    </g>
+  </svg>
+
+  <div id="center">
+    <div id="frac"><div class="display glowtext" id="fracTxt">2/3</div></div>
+    <div id="fracSub" class="lbl">DE LO QUE COMÍA</div>
+  </div>
+
+  <div id="cardA" class="card lg"><div class="accent"></div>
+    <div class="head"><span class="chip" id="chipA">2/3</span><span class="lbl">LA MAYOR PARTE</span></div>
+    <div class="title" id="titleA">Comida chatarra</div>
+    <div class="icons">
+      <span class="ico-badge"><i data-icon="cake"></i></span>
+      <span class="ico-badge"><i data-icon="cookie"></i></span>
+      <span class="ico-badge"><i data-icon="popcorn"></i></span>
+      <span class="ico-badge"><i data-icon="bowl-food"></i></span>
+    </div>
+  </div>
+
+  <div id="cardB" class="card lg"><div class="accent"></div>
+    <div class="head"><span class="chip" id="chipB">1/3</span><span class="lbl">EL RESTO</span></div>
+    <div class="list">
+      <div class="it"><span class="ico-badge e"><i data-icon="pint-glass"></i></span><span class="t">Batido de proteínas</span></div>
+      <div class="it"><span class="ico-badge e"><i data-icon="pill"></i></span><span class="t">Multivitamínico</span></div>
+      <div class="it"><span class="ico-badge e"><i data-icon="carrot"></i></span><span class="t">Verduras</span></div>
+    </div>
+  </div>
+
+</div>
+
+<script src="../node_modules/gsap/dist/gsap.min.js"></script>
+<script src="../node_modules/gsap/dist/SplitText.min.js"></script>
+<script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
+<script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
+<script src="../lib/stage.js"></script>
+<script>
+M.scene({
+  duration: 14.6,
+  icons: ['chart-bar-horizontal', 'trend-down', 'cake', 'cookie', 'popcorn', 'bowl-food', 'pint-glass', 'pill', 'carrot'],
+}, (tl, M) => {
+  const $ = (s) => document.querySelector(s);
+  const $$ = (s) => Array.from(document.querySelectorAll(s));
+  const NS = 'http://www.w3.org/2000/svg';
+  const set = (el, a) => { for (const k in a) el.setAttribute(k, a[k]); };
+  const mk = (tag, a, parent) => { const e = document.createElementNS(NS, tag); set(e, a); parent.appendChild(e); return e; };
+  const f2 = (v) => v.toFixed(2);
+  // textIn + oculto hasta su entrada (evita que el desenfoque de las letras en espera se filtre por la máscara)
+  // puntos SVG: se escalan con el radio (sin depender del origen de transformación)
+  const dotIn = (el, at, dur = 0.45) => tl.from(el, { attr: { r: 0 }, duration: dur, ease: 'back.out(2)' }, at);
+  const dotOut = (el, at, dur = 0.35) => tl.to(el, { attr: { r: 0 }, duration: dur, ease: 'back.in(1.6)' }, at);
+  const tin = (el, at, o) => { gsap.set(el, { visibility: 'hidden' }); tl.set(el, { visibility: 'visible' }, at); return M.textIn(el, at, o); };
+
+  /* =====================================================================
+     Beat 1 · barras (0.15 – 8.3 s)
+     ===================================================================== */
+  const TX0 = 540, TX1 = 1500, K = (TX1 - TX0) / 3000, X = (v) => TX0 + v * K;
+  const RY = 96;                                   // línea base de la regla
+  const ruler = $('#ruler'), grid = $('#grid'), ticksBox = $('#ticks');
+  const baseLine = mk('line', { x1: TX0, y1: RY, x2: TX1, y2: RY, class: 'st-soft', 'stroke-width': 2 }, ruler);
+  const majors = [], minors = [], grids = [], labels = [];
+  for (let v = 0; v <= 3000; v += 250) {
+    const maj = v % 500 === 0;
+    const l = mk('line', { x1: X(v), x2: X(v), y1: RY, y2: maj ? RY - 20 : RY - 11, class: maj ? 'st-main' : 'st-soft',
+      'stroke-width': maj ? 2.5 : 2, 'stroke-linecap': 'round' }, ruler);
+    (maj ? majors : minors).push(l);
+    if (maj) {
+      grids.push(mk('line', { x1: X(v), x2: X(v), y1: RY + 12, y2: 420, class: 'st-faint', 'stroke-width': 1.5 }, grid));
+      const d = document.createElement('div');
+      d.className = 'tickl' + (v === 3000 ? ' end' : '');
+      d.style.left = X(v) + 'px';
+      d.textContent = M.fmt(v);
+      ticksBox.appendChild(d);
+      labels.push(d);
+    }
+  }
+
+  // kicker + panel
+  const k1 = tin($('#kicker1 .txt'), 0.15, { type: 'words', dur: 0.8 });
+  M.zoomIn($('#kicker1 .dot'), 0.15);
+  gsap.set('#panel', { rotationX: 6, transformPerspective: 2400, transformOrigin: '50% 100%' });
+  M.popIn($('#panel'), 0.3, { dur: 1.05, rotX: 20, y: 60, scale: 0.92 });
+
+  M.zoomIn($('#phead .ico-badge'), 0.75, { dur: 0.6 });
+  const ph = tin($('#pheadTxt'), 0.8, { type: 'words', dur: 0.7 });
+  M.draw(baseLine, 0.8, { dur: 0.9 });
+  majors.forEach((l, i) => M.draw(l, 0.95 + i * 0.07, { dur: 0.35, from: '0% 0%' }));
+  minors.forEach((l, i) => M.draw(l, 1.0 + i * 0.07, { dur: 0.3 }));
+  const labSplits = labels.map((d, i) => tin(d, 0.95 + i * 0.07, { type: 'words', dur: 0.6 }));
+  grids.forEach((l, i) => M.draw(l, 1.05 + i * 0.07, { dur: 0.7 }));
+
+  // fila 1 · lo que necesitaba
+  M.zoomIn($('#lab1 .sw'), 1.25, { dur: 0.5 });
+  const l1 = tin($('#lab1t'), 1.3, { type: 'words', dur: 0.7 });
+  M.tl.from('#row1 .in', { yPercent: 105, duration: 0.8, ease: 'swift' }, 1.4);
+  const p1 = M.counter($('#n1'), { to: 2600, at: 1.55, dur: 1.6, ease: 'power3.out' });
+
+  // fila 2 · lo que comió
+  M.zoomIn($('#lab2 .sw'), 2.1, { dur: 0.5 });
+  const l2 = tin($('#lab2t'), 2.15, { type: 'words', dur: 0.7 });
+  M.popIn($('#tag2'), 2.4, { dur: 0.6, rotX: 0, y: 10, scale: 0.8 });
+  M.tl.from('#row2 .in', { yPercent: 105, duration: 0.8, ease: 'swift' }, 2.25);
+  const p2 = M.counter($('#n2'), { to: 1800, at: 2.4, dur: 1.4, ease: 'power3.out' });
+
+  // la diferencia: guía, hueco rayado, corchete → fila del déficit
+  const G = { guide: 0, gap: 0 };
+  tl.to(G, { guide: 1, duration: 0.45, ease: 'power2.inOut' }, 3.75);
+  tl.to(G, { gap: 1, duration: 0.7, ease: 'swift' }, 3.95);
+  M.draw($('#brL'), 4.35, { dur: 0.5 });
+  M.draw($('#brR'), 4.35, { dur: 0.5 });
+  M.draw($('#sumLn'), 4.55, { dur: 0.6 });
+  M.draw($('#conD'), 4.7, { dur: 0.7, ease: 'power2.inOut' });
+  M.zoomIn($('#lab3 .ico'), 4.85, { dur: 0.5 });
+  const l3 = tin($('#lab3t'), 4.9, { type: 'words', dur: 0.7 });
+  M.tl.from('#row3 .in', { yPercent: 105, duration: 0.8, ease: 'swift' }, 5.0);
+  M.counter($('#dv'), { from: 0, to: 800, prefix: '−', at: 5.15, dur: 1.0, ease: 'power2.out' });
+
+  // el conector termina junto al número del déficit
+  $('#dv').textContent = '−800';               // medir con el valor final
+  const inW = $('#row3 .in').offsetWidth;
+  const DX = 56 + inW + 40, DY = 560;
+  set($('#conD'), { d: `M1246,440 L1246,${DY - 10} Q1246,${DY} 1236,${DY} L${DX},${DY}` });
+  set($('#dD1'), { cx: DX, cy: DY });
+  dotIn($('#dD1'), 5.3);
+  $('#formula').style.left = ((DX + 1236) / 2) + 'px';
+  const fo = tin($('#formula'), 5.25, { type: 'words', dur: 0.7, stagger: 0.08 });
+
+  // salida beat 1
+  const OUT1 = 7.75;
+  M.textOut(k1, OUT1, { type: 'words' });
+  M.zoomOut($('#kicker1 .dot'), OUT1);
+  M.popOut($('#panel'), OUT1 + 0.05, { dur: 0.6, y: -40 });
+
+  // geometría por frame (barras, cursores, guía, hueco)
+  const bar1 = $('#bar1'), bar2 = $('#bar2'), sh1 = $('#sh1'), sh2 = $('#sh2');
+  const tip1 = $('#tip1'), tip2 = $('#tip2'), cur1 = $('#cur1'), cur2 = $('#cur2');
+  const guide = $('#guide'), gapEls = ['#gapFill', '#gapHatch', '#gapLine'].map($);
+  const GX0 = X(1800) + 5, GX1 = X(2600);
+  M.onFrame(() => {
+    const w1 = p1.v * K, w2 = p2.v * K;
+    for (const [bar, sh, tip, cur, w] of [[bar1, sh1, tip1, cur1, w1], [bar2, sh2, tip2, cur2, w2]]) {
+      const on = w > 0.5;
+      set(bar, { width: f2(Math.max(0, w)) });
+      set(sh, { width: f2(Math.max(0, w)) });
+      set(tip, { x1: f2(TX0 + w - 7), x2: f2(TX0 + w - 7), opacity: w > 24 ? 1 : 0 });
+      set(cur, { transform: `translate(${f2(TX0 + w)},${RY + 6}) scale(${on ? 1 : 0})` });
+    }
+    set(guide, { y2: f2(254 + (410 - 254) * G.guide), opacity: G.guide > 0.002 ? 1 : 0 });
+    const gw = (GX1 - GX0) * G.gap;
+    gapEls.forEach((e) => set(e, { x: f2(GX0), width: f2(Math.max(0, gw)), opacity: gw > 1 ? 1 : 0 }));
+  });
+
+  /* =====================================================================
+     Beat 2 · dona (8.1 – 14.2 s)
+     ===================================================================== */
+  const C = { x: 580, y: 570 }, R = 236;
+  const P = (r, deg) => { const a = deg * Math.PI / 180; return [C.x + r * Math.cos(a), C.y + r * Math.sin(a)]; };
+  const arc = (r, a0, a1, cw) => {
+    const [x0, y0] = P(r, a0), [x1, y1] = P(r, a1);
+    const large = Math.abs(a1 - a0) > 180 ? 1 : 0;
+    return `M${f2(x0)},${f2(y0)} A${r},${r} 0 ${large} ${cw ? 1 : 0} ${f2(x1)},${f2(y1)}`;
+  };
+  // 2/3 cian: desde las 3 en punto, antihorario; 1/3 eléctrico: desde las 3, horario
+  set($('#segC'), { d: arc(R, -2, -238, false) });
+  set($('#segE'), { d: arc(R, 2, 118, true) });
+  set($('#segCi'), { d: arc(R - 26, -2.4, -237.6, false) });
+  set($('#segEi'), { d: arc(R - 26, 2.4, 117.6, true) });
+
+  // anillo de marcas (se revela con barrido)
+  const rot = $('#dticksRot');
+  for (let a = 0; a < 360; a += 4) {
+    const maj = a % 30 === 0;
+    const [x0, y0] = P(maj ? 292 : 298, a), [x1, y1] = P(maj ? 318 : 310, a);
+    mk('line', { x1: f2(x0), y1: f2(y0), x2: f2(x1), y2: f2(y1), class: maj ? 'st-main' : 'st-soft', 'stroke-width': maj ? 3 : 2, 'stroke-linecap': 'round' }, rot);
+  }
+  const TK = { a: 0 };
+
+  // conectores (codo: radial → horizontal) hacia las tarjetas
+  const conn = (el, d0, d1, yCard, r0) => {
+    const s = Math.asin((yCard - C.y) / 340) * 180 / Math.PI;
+    const [sx, sy] = P(r0, s), [ex, ey] = P(340, s);
+    set(el, { d: `M${f2(sx)},${f2(sy)} L${f2(ex)},${f2(ey)} L1036,${f2(ey)}` });
+    set(d0, { cx: f2(sx), cy: f2(sy) }); set(d1, { cx: 1036, cy: f2(ey) });
+  };
+  const yA = 246 + 145, yB = 574 + 156;
+  conn($('#conA'), $('#dA0'), $('#dA1'), yA, R + 32);
+  conn($('#conB'), $('#dB0'), $('#dB1'), yB, R + 32);
+
+  // posición del número central
+  $('#center').style.top = '0px';
+  $('#frac').style.top = (C.y - 110 - 18) + 'px';
+  $('#fracSub').style.top = (C.y + 80) + 'px';
+
+  const IN2 = 8.1;
+  const k2 = tin($('#kicker2 .txt'), IN2, { type: 'words', dur: 0.8 });
+  M.zoomIn($('#kicker2 .dot'), IN2);
+  tl.to(TK, { a: 360, duration: 1.3, ease: 'power2.inOut' }, IN2 + 0.05);
+  M.draw($('#ringOut'), IN2 + 0.1, { dur: 1.2 });
+  M.draw($('#dtrack'), IN2 + 0.15, { dur: 1.0 });
+  M.draw($('#ringIn'), IN2 + 0.25, { dur: 1.1 });
+  M.draw($('#floorLine'), IN2 + 0.2, { dur: 1.0 });
+  if (!M.chroma) {
+    tl.from('#floor2', { opacity: 0, attr: { rx: 140, ry: 22 }, duration: 1.2 }, IN2 + 0.2);
+    tl.from('#core', { opacity: 0, duration: 1.0 }, IN2 + 0.3);
+  }
+  M.draw($('#segC'), IN2 + 0.4, { dur: 1.1, ease: 'power2.inOut' });
+  M.draw($('#segCi'), IN2 + 0.45, { dur: 1.1, ease: 'power2.inOut' });
+  const fr = tin($('#fracTxt'), IN2 + 0.75, { dur: 1.0, stagger: 0.07, cls: 'hl' });
+  const frs = tin($('#fracSub'), IN2 + 1.1, { type: 'words', dur: 0.7 });
+
+  dotIn($('#dA0'), IN2 + 1.25);
+  M.draw($('#conA'), IN2 + 1.3, { dur: 0.5 });
+  dotIn($('#dA1'), IN2 + 1.7);
+  gsap.set('#cardA', { rotationY: -10, transformPerspective: 1600, transformOrigin: '0% 50%' });
+  gsap.set('#cardB', { rotationY: -10, transformPerspective: 1600, transformOrigin: '0% 50%' });
+  M.popIn($('#cardA'), IN2 + 1.55, { dur: 0.9 });
+  const tA = tin($('#titleA'), IN2 + 1.8, { type: 'words', dur: 0.8 });
+  $$('#cardA .icons .ico-badge').forEach((b, i) => M.zoomIn(b, IN2 + 1.95 + i * 0.09, { dur: 0.55 }));
+
+  M.draw($('#segE'), IN2 + 1.6, { dur: 0.8, ease: 'power2.inOut' });
+  M.draw($('#segEi'), IN2 + 1.65, { dur: 0.8, ease: 'power2.inOut' });
+  dotIn($('#dB0'), IN2 + 2.15);
+  M.draw($('#conB'), IN2 + 2.2, { dur: 0.5 });
+  dotIn($('#dB1'), IN2 + 2.6);
+  M.popIn($('#cardB'), IN2 + 2.45, { dur: 0.9 });
+  const items = $$('#cardB .it');
+  const itSplits = items.map((it, i) => {
+    M.zoomIn(it.querySelector('.ico-badge'), IN2 + 2.7 + i * 0.12, { dur: 0.55 });
+    return tin(it.querySelector('.t'), IN2 + 2.75 + i * 0.12, { type: 'words', dur: 0.7 });
+  });
+
+  // salida final
+  const OUT2 = 13.4;
+  M.popOut($('#cardB'), OUT2);
+  M.popOut($('#cardA'), OUT2 + 0.06);
+  dotOut($('#dA1'), OUT2); dotOut($('#dB1'), OUT2);
+  M.undraw($('#conA'), OUT2 + 0.05, { dur: 0.4, to: '0% 0%' });
+  M.undraw($('#conB'), OUT2 + 0.05, { dur: 0.4, to: '0% 0%' });
+  dotOut($('#dA0'), OUT2 + 0.3); dotOut($('#dB0'), OUT2 + 0.3);
+  M.textOut(k2, OUT2, { type: 'words' });
+  M.zoomOut($('#kicker2 .dot'), OUT2);
+  M.textOut(frs, OUT2 + 0.05, { type: 'words' });
+  M.textOut(fr, OUT2 + 0.1);
+  M.undraw($('#segE'), OUT2 + 0.15, { dur: 0.5, to: '100% 100%' });
+  M.undraw($('#segEi'), OUT2 + 0.15, { dur: 0.5, to: '100% 100%' });
+  M.undraw($('#segC'), OUT2 + 0.2, { dur: 0.6, to: '100% 100%' });
+  M.undraw($('#segCi'), OUT2 + 0.2, { dur: 0.6, to: '100% 100%' });
+  M.undraw($('#dtrack'), OUT2 + 0.25, { dur: 0.55 });
+  M.undraw($('#ringIn'), OUT2 + 0.25, { dur: 0.5 });
+  M.undraw($('#ringOut'), OUT2 + 0.2, { dur: 0.6 });
+  M.undraw($('#floorLine'), OUT2 + 0.25, { dur: 0.5 });
+  tl.to(TK, { a: 0, duration: 0.6, ease: 'exit' }, OUT2 + 0.15);
+  if (!M.chroma) {
+    tl.to('#floor2', { opacity: 0, duration: 0.6 }, OUT2 + 0.2);
+    tl.to('#core', { opacity: 0, duration: 0.5 }, OUT2 + 0.2);
+  }
+
+  // barrido del anillo de marcas + rotación lenta
+  const sweep = $('#sweepPath');
+  M.onFrame((t) => {
+    const a = Math.max(0, Math.min(360, TK.a));
+    if (a <= 0.01) sweep.setAttribute('d', 'M0,0');
+    else if (a >= 359.9) sweep.setAttribute('d', `M${C.x - 400},${C.y - 400} h800 v800 h-800 Z`);
+    else {
+      const [x0, y0] = P(400, -90), [x1, y1] = P(400, -90 + a);
+      sweep.setAttribute('d', `M${C.x},${C.y} L${f2(x0)},${f2(y0)} A400,400 0 ${a > 180 ? 1 : 0} 1 ${f2(x1)},${f2(y1)} Z`);
+    }
+    rot.setAttribute('transform', `rotate(${f2(t * 4)} ${C.x} ${C.y})`);
+  });
+});
+</script>
+</body>
+</html>
