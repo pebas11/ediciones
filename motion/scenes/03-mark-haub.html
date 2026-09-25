@@ -16,6 +16,12 @@
   #nm1 { top: 44px; }
   #nm2 { top: 222px; }
   #nameBlock .display { font-size: 180px; }
+  /* glow de MARK como filtro del contenedor (como HAUB): el text-shadow se recortaba en las máscaras de SplitText */
+  #nm1 { text-shadow: none; }
+  html.fondo #nm1 { filter: drop-shadow(0 0 28px rgba(32,196,239,0.35)) drop-shadow(0 0 80px rgba(8,126,255,0.25)); }
+  /* kicker en verde: trazo más grueso para que el croma 4:2:0 no lo coma (mono = mismo ancho en todos los pesos) */
+  html.verde #kicker1 .txt, html.verde #kicker2 .txt { font-weight: 700; }
+  html.verde #info .ln2 { font-weight: 500; }   /* mismo motivo: celeste fino directo sobre el verde */
   #divSvg { position: absolute; left: 0; top: 430px; overflow: visible; }
   html.verde #divLine { stroke: var(--electric); }
   #info { position: absolute; left: 6px; top: 470px; display: flex; align-items: center; gap: 26px; }
@@ -37,11 +43,15 @@
   .step .no { position: absolute; right: 38px; top: 40px; font-family: "JetBrains Mono", monospace; font-weight: 700; font-size: 22px; letter-spacing: 0.1em; color: var(--text-dim); }
   .step .hero { margin-top: 26px; display: flex; align-items: baseline; gap: 16px; white-space: nowrap; }
   .step .hero .num { font-size: 156px; line-height: 1; }
+  /* contador de ancho fijo (= "10"): la unidad no salta al pasar de 9 a 10 */
+  #c10 { display: inline-block; min-width: 1.215em; text-align: right; }
   .step .hero .unit { font-size: 40px; }
   .step .hero .pre { font-family: "JetBrains Mono", monospace; font-weight: 500; font-size: 40px; color: var(--sky); }
-  .step .icons { margin-top: 34px; display: flex; gap: 14px; }
-  .step .icons .ico-badge { width: 84px; height: 84px; border-radius: 999px; }
-  .step .icons .ico-badge .ico { width: 50px; height: 50px; }
+  .step .icons { margin-top: 30px; display: flex; gap: 18px; }
+  .step .icons .ico-badge { width: 104px; height: 104px; border-radius: 999px; }
+  .step .icons .ico-badge .ico { width: 62px; height: 62px; }
+  /* reflejo discreto: solo el borde inferior (el del tema reflejaba la descripción, legible y espejada) */
+  html.fondo .step { -webkit-box-reflect: below 6px linear-gradient(to bottom, transparent 0%, transparent 90%, rgba(255,255,255,0.10) 100%); }
   .step .desc { position: absolute; left: 40px; right: 40px; bottom: 36px; font-size: 36px; font-weight: 600; line-height: 1.3; letter-spacing: -0.012em; color: var(--white); }
 </style>
 </head>
@@ -58,10 +68,10 @@
         <stop offset="100%" stop-color="#087EFF" stop-opacity="0"/>
       </radialGradient>
     </defs>
-    <ellipse id="floorGlow" class="fondo-only" cx="540" cy="836" rx="360" ry="74" fill="url(#gFloor)"/>
+    <ellipse id="floorGlow" class="fondo-only" cx="540" cy="866" rx="360" ry="74" fill="url(#gFloor)"/>
     <g class="glow">
-      <ellipse id="fl1" cx="540" cy="836" rx="236" ry="32" fill="none" class="st-elec" stroke-width="4"/>
-      <ellipse id="fl2" cx="540" cy="836" rx="132" ry="17" fill="none" class="st-main" stroke-width="3"/>
+      <ellipse id="fl1" cx="540" cy="866" rx="236" ry="32" fill="none" class="st-elec" stroke-width="4"/>
+      <ellipse id="fl2" cx="540" cy="866" rx="132" ry="17" fill="none" class="st-main" stroke-width="3"/>
     </g>
   </svg>
 
@@ -112,8 +122,9 @@
             </g>
             <rect id="scan" class="fondo-only" x="-200" y="-46" width="400" height="92" fill="url(#gScan)"/>
           </g>
-          <circle id="discRing" cx="0" cy="0" r="193" fill="none" class="st-elec" stroke-width="4.5" transform="rotate(-90)"/>
         </g>
+        <!-- el anillo se dibuja a tamaño final y enmarca el iris del disco -->
+        <circle id="discRing" cx="0" cy="0" r="193" fill="none" class="st-elec" stroke-width="4.5" transform="rotate(-90)"/>
       </g>
     </svg>
   </div>
@@ -184,9 +195,8 @@
     <div class="no">03</div>
     <div class="icons" id="menuIcons">
       <span class="ico-badge"><i data-icon="cake"></i></span>
-      <span class="ico-badge"><i data-icon="popcorn"></i></span>
       <span class="ico-badge"><i data-icon="cookie"></i></span>
-      <span class="ico-badge"><i data-icon="grains"></i></span>
+      <span class="ico-badge"><i data-icon="bowl-food"></i></span>
     </div>
     <div class="desc" id="d3">Pastelitos, papas fritas, galletitas y cereales azucarados</div>
   </div>
@@ -199,7 +209,7 @@
 <script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
 <script src="../lib/stage.js"></script>
 <script>
-M.scene({ duration: 14, icons: ['graduation-cap', 'calendar-dots', 'clock', 'fork-knife', 'cake', 'popcorn', 'cookie', 'grains'] }, (tl, M) => {
+M.scene({ duration: 14, icons: ['graduation-cap', 'calendar-dots', 'clock', 'fork-knife', 'cake', 'cookie', 'bowl-food'] }, (tl, M) => {
   const $ = (s) => document.querySelector(s);
   const $$ = (s) => Array.from(document.querySelectorAll(s));
   const NS = 'http://www.w3.org/2000/svg';
@@ -253,17 +263,17 @@ M.scene({ duration: 14, icons: ['graduation-cap', 'calendar-dots', 'clock', 'for
     return g;
   });
 
-  /* ---------------- Beat 1 · quién es (0,15 – 6,4 s) ---------------- */
-  const P = { tickA: 0, tickB: 0, scan: -1 };
+  /* ---------------- Beat 1 · quién es (0,15 – 6,3 s) ---------------- */
+  const P = { tickA: 0, tickB: 0, scan: -1, disc: 0 };
 
   // retrato
   M.draw($('#fl1'), 0.18, { dur: 1.0 });
   M.draw($('#fl2'), 0.32, { dur: 0.9 });
   if (!M.chroma) tl.from('#floorGlow', { opacity: 0, scale: 0.4, transformOrigin: '50% 50%', duration: 1.3 }, 0.2);
-  const discS = S($("#discG"), 0, 0, 0);   // coordenadas locales (#pf ya está trasladado)
-  const cardS = cards4.map((g) => S(g, 0, 0, 0.7));
-  sIn(discS, 0.25, { dur: 1.0, ease: 'back.out(1.35)' });
-  M.draw($('#discRing'), 0.4, { dur: 1.1 });
+  const cardS = cards4.map((g) => S(g, 0, 0, 0.7));   // coordenadas locales (#pf ya está trasladado)
+  // primero el marco (anillo a tamaño final), después el disco se abre como un iris desde el centro
+  M.draw($('#discRing'), 0.2, { dur: 0.9 });
+  tl.fromTo(P, { disc: 0 }, { disc: 1, duration: 0.8, ease: 'swift', immediateRender: false }, 0.45);
   M.draw($('#outerRing'), 0.5, { dur: 1.4 });
   tl.to(P, { tickB: 1, duration: 1.3, ease: 'power2.inOut' }, 0.55);
   arcs.forEach((a, i) => M.draw(a, 0.75 + i * 0.1, { dur: 0.9 }));
@@ -273,8 +283,8 @@ M.scene({ duration: 14, icons: ['graduation-cap', 'calendar-dots', 'clock', 'for
   cards4.forEach((g, i) => M.draw(g.firstChild, 1.15 + i * 0.06, { dur: 0.5 }));
   // barrido de escaneo (solo fondo)
   if (!M.chroma) {
-    tl.fromTo(P, { scan: -1 }, { scan: 1, duration: 1.5, ease: 'power1.inOut' }, 1.9);
-    tl.fromTo(P, { scan: -1 }, { scan: 1, duration: 1.5, ease: 'power1.inOut', immediateRender: false }, 3.9);
+    tl.fromTo(P, { scan: -1 }, { scan: 1, duration: 1.4, ease: 'power1.inOut' }, 1.9);
+    tl.fromTo(P, { scan: -1 }, { scan: 1, duration: 1.4, ease: 'power1.inOut', immediateRender: false }, 3.65);   // termina antes de la salida (X1)
   }
 
   // nombre
@@ -290,14 +300,15 @@ M.scene({ duration: 14, icons: ['graduation-cap', 'calendar-dots', 'clock', 'for
   const l2 = M.textIn($('#ln2'), 1.95, { type: 'words', dur: 0.85, stagger: 0.05 });
 
   // salida del beat 1
-  const X1 = 5.55;
+  const X1 = 5.3;
   M.textOut(k1, X1, { type: 'words' });
   M.zoomOut($('#kicker1 .dot'), X1);
   M.textOut(l2, X1, { type: 'words', stagger: 0.02 });
   M.textOut(l1, X1 + 0.04, { type: 'words', stagger: 0.02 });
   M.zoomOut($('#capBadge'), X1 + 0.05);
-  M.undraw($('#divLine'), X1 + 0.05, { dur: 0.5 });
-  sOut(dotS, X1 + 0.3);
+  // la línea se repliega hacia su punto y el punto se va al final
+  M.undraw($('#divLine'), X1 + 0.05, { dur: 0.45, to: '0% 0%' });
+  sOut(dotS, X1 + 0.4, { dur: 0.35 });
   M.textOut(nm1, X1 + 0.08);
   M.textOut(nm2, X1 + 0.14);
 
@@ -307,22 +318,26 @@ M.scene({ duration: 14, icons: ['graduation-cap', 'calendar-dots', 'clock', 'for
   tl.to(P, { tickA: 1, duration: 0.6, ease: 'exit' }, X1 + 0.1);
   cards4.forEach((g, i) => M.undraw(g.firstChild, X1 + 0.1 + i * 0.03, { dur: 0.35 }));
   M.undraw($('#outerRing'), X1 + 0.15, { dur: 0.6 });
-  sOut(discS, X1 + 0.3, { dur: 0.55, ease: 'back.in(1.3)' });
+  // el iris se cierra antes que el anillo: nunca queda un disco vacío sin marco
+  tl.to(P, { disc: 0, duration: 0.45, ease: 'exit' }, X1 + 0.15);
+  M.undraw($('#discRing'), X1 + 0.3, { dur: 0.45 });
   M.undraw($('#fl2'), X1 + 0.35, { dur: 0.45 });
   M.undraw($('#fl1'), X1 + 0.45, { dur: 0.5 });
   if (!M.chroma) tl.to('#floorGlow', { opacity: 0, duration: 0.7 }, X1 + 0.3);
 
-  /* ---------------- Beat 2 · el experimento (6,15 – 13,6 s) ---------------- */
-  const B = 6.15;
+  /* ---------------- Beat 2 · el experimento (5,9 – 13,6 s) ---------------- */
+  const B = 5.9;
   const k2 = M.textIn($('#kicker2 .txt'), B, { type: 'words', dur: 0.8, stagger: 0.05 });
   M.zoomIn($('#kicker2 .dot'), B);
 
   const nodes = ['#n1', '#n2', '#n3'], xs = [396, 960, 1524];
   const nodeS = nodes.map((n, i) => S($(n), xs[i], 300, 0));
   const ripS = [1, 2, 3].map((i) => S($(`#rip${i}`), xs[i - 1], 300, 1, 0));
-  const T = [B + 0.3, B + 1.1, B + 1.9];          // llegada a cada nodo
-  M.draw($('#seg1'), T[0] + 0.15, { dur: 0.65, ease: 'power1.inOut' });
-  M.draw($('#seg2'), T[1] + 0.15, { dur: 0.65, ease: 'power1.inOut' });
+  // llegada a cada nodo: 1,25 s entre tarjetas → un dato por vez, al ritmo de la locución
+  const T = [B + 0.3, B + 1.55, B + 2.8];
+  // la línea sale del nodo anterior y llega al siguiente justo cuando este aparece
+  M.draw($('#seg1'), T[0] + 0.2, { dur: T[1] - T[0] - 0.2, ease: 'power1.inOut' });
+  M.draw($('#seg2'), T[1] + 0.2, { dur: T[2] - T[1] - 0.2, ease: 'power1.inOut' });
   const cardsEl = ['#card1', '#card2', '#card3'].map($);
   gsap.set('#card1', { rotationY: 12, transformPerspective: 1400 });
   gsap.set('#card3', { rotationY: -12, transformPerspective: 1400 });
@@ -333,21 +348,20 @@ M.scene({ duration: 14, icons: ['graduation-cap', 'calendar-dots', 'clock', 'for
     M.popIn(cardsEl[i], t + 0.2, { dur: 0.9 });
   });
   M.counter($('#c10'), { to: 10, at: T[0] + 0.45, dur: 1.2 });
-  // el 3 no se cuenta (0-1-2 horas no tiene sentido): entra con un "pop" desde la base
-  tl.from('#c3', { scale: 0, transformOrigin: '50% 80%', duration: 0.75, ease: 'back.out(1.7)' }, T[1] + 0.45);
+  // el 3 no se cuenta (0-1-2 horas no tiene sentido): crece desde la base junto con la apertura de la tarjeta
+  tl.from('#c3', { scale: 0, transformOrigin: '50% 80%', duration: 0.75, ease: 'back.out(1.7)' }, T[1] + 0.2);
   const d1 = M.textIn($('#d1'), T[0] + 0.6, { type: 'words', dur: 0.8, stagger: 0.06 });
   const d2 = M.textIn($('#d2'), T[1] + 0.6, { type: 'words', dur: 0.8, stagger: 0.05 });
   const d3 = M.textIn($('#d3'), T[2] + 0.75, { type: 'words', dur: 0.8, stagger: 0.05 });
   const mIcons = $$('#menuIcons .ico-badge');
   mIcons.forEach((b, i) => M.zoomIn(b, T[2] + 0.5 + i * 0.09, { dur: 0.6 }));
 
-  // pulso de luz que recorre la cadena mientras la escena queda quieta
-  const PU = { p: -1 };
-  tl.fromTo(PU, { p: 0 }, { p: 1, duration: 1.6, ease: 'power1.inOut' }, 9.4);
-  tl.fromTo(PU, { p: 0 }, { p: 1, duration: 1.6, ease: 'power1.inOut', immediateRender: false }, 11.05);
-  tl.set(PU, { p: -1 }, 12.66);
-  // cada nodo "se enciende" cuando el pulso lo alcanza (solo fondo)
-  if (!M.chroma) [[1, 10.2], [2, 11.0], [1, 11.85]].forEach(([i, t]) =>
+  // pulso de luz: una sola pasada, recién cuando la cadena terminó de construirse
+  const PU = { p: -1 }, PT = 10.8, PD = 1.5;
+  tl.fromTo(PU, { p: 0 }, { p: 1, duration: PD, ease: 'power1.inOut', immediateRender: false }, PT);
+  tl.set(PU, { p: -1 }, PT + PD + 0.02);
+  // cada nodo "se enciende" cuando el pulso pasa por él (ease simétrico: nodo 2 a mitad de camino) · solo fondo
+  if (!M.chroma) [[0, PT], [1, PT + PD / 2], [2, PT + PD]].forEach(([i, t]) =>
     tl.fromTo(ripS[i], { s: 1, o: 0.7 }, { s: 2.8, o: 0, duration: 0.8, ease: 'power2.out', immediateRender: false }, t));
 
   // salida final
@@ -370,7 +384,15 @@ M.scene({ duration: 14, icons: ['graduation-cap', 'calendar-dots', 'clock', 'for
 
   /* ---------------- geometría por frame ---------------- */
   const scanEl = $('#scan'), pulse = $('#pulse');
+  const discEl = $('#disc'), discClipC = $('#discClip circle'), discG = $('#discG'), c10 = $('#c10');
   M.onFrame((t) => {
+    // iris del disco (relleno + recorte de silueta/grilla/escaneo)
+    const r = (190 * Math.max(P.disc, 0)).toFixed(2);
+    discEl.setAttribute('r', r);
+    discClipC.setAttribute('r', r);
+    discG.setAttribute('visibility', P.disc > 0.001 ? 'visible' : 'hidden');
+    // el contador corre antes que este hook: se salta el "1" (evita "1 semanas" en los primeros cuadros)
+    if (c10.textContent === '1') c10.textContent = '0';
     for (const [el, p, ox, oy] of scalers) {
       const s = Math.max(p.s, 0.0001);
       el.setAttribute('transform', `translate(${ox} ${oy}) scale(${s.toFixed(5)}) translate(${-ox} ${-oy})`);
