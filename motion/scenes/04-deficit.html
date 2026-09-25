@@ -12,7 +12,9 @@
 
   /* ---------- Beat 1 · barras ---------- */
   #kicker1 { top: 112px; }
-  #panel { left: 160px; top: 206px; width: 1600px; height: 660px; }
+  #panel { left: 160px; top: 196px; width: 1600px; height: 690px; }
+  /* reflejo discreto: solo el borde/padding inferior (sin duplicar el −800) */
+  html.fondo #panel { -webkit-box-reflect: below 6px linear-gradient(to bottom, transparent 0%, transparent 93%, rgba(255,255,255,.10) 100%); }
   #phead { position: absolute; left: 56px; top: 30px; display: flex; align-items: center; gap: 18px; }
   #phead .ico-badge { width: 58px; height: 58px; border-radius: 16px; }
   #phead .ico-badge .ico { width: 34px; height: 34px; }
@@ -37,44 +39,55 @@
   .gapfill { fill: rgba(32,196,239,0.06); }
   html.verde .gapfill { fill: #0C2D55; }
 
-  #formula { position: absolute; top: 516px; width: 400px; margin-left: -200px; text-align: center; font-size: 24px; letter-spacing: 0.12em; color: var(--text-dim); }
+  #formula { position: absolute; top: 522px; width: 400px; margin-left: -200px; text-align: center; font-size: 24px; letter-spacing: 0.12em; color: var(--text-dim); }
+  /* el "−" de JetBrains Mono es tan corto como un guion: operador en Inter */
+  #formula .op { font-family: Inter, sans-serif; font-weight: 600; font-size: 28px; letter-spacing: 0; }
   #lab3 .ico { width: 34px; height: 34px; color: var(--cyan); }
   #lab3t { color: var(--white); font-weight: 700; letter-spacing: 0.26em; }
+  #row3 { height: 156px; }
   #row3 .in { gap: 12px; }
-  #row3 .approx { width: 62px; height: 54px; align-self: center; color: var(--cyan); margin-right: 6px; flex: none; }
-  #dv { background: linear-gradient(180deg, #8AE6FF 0%, var(--cyan) 45%, var(--electric) 100%);
+  #row3 .num { font-size: 136px; }
+  #row3 .approx { width: 74px; height: 64px; align-self: center; color: var(--cyan); margin-right: 8px; flex: none; }
+  /* padding: con letter-spacing negativo la tinta del último "0" sale de la caja y background-clip:text la cortaba */
+  #dv { display: inline-block; padding-right: 0.08em; margin-right: -0.08em;
+    background: linear-gradient(180deg, #B8F1FF 0%, #20C4EF 55%, #1AA6F2 100%);
     -webkit-background-clip: text; background-clip: text; color: transparent; }
+  html.fondo #dv { filter: drop-shadow(0 0 20px rgba(32,196,239,.45)); }
 
   /* ---------- Beat 2 · dona ---------- */
   #kicker2 { top: 112px; }
   #donutSvg { position: absolute; inset: 0; overflow: visible; }
   .dtrack { stroke: rgba(115,189,242,0.09); }
-  html.verde .dtrack { stroke: #0B2A52; }
+  /* en verde, pista fina (un anillo opaco de 58 px pesaba demasiado sobre el chroma) */
+  html.verde .dtrack { stroke: #1A4A80; stroke-width: 8px; }
   #center { position: absolute; left: 280px; width: 600px; top: 0; text-align: center; }
   #frac { position: absolute; left: 0; right: 0; top: 0; }
   #frac .display { font-size: 176px; display: inline-block; }
   #fracSub { position: absolute; left: 0; right: 0; text-align: center; }
 
   .lg { left: 1050px; width: 640px; padding: 30px 40px 30px 40px; }
+  /* el contenido estático se pinta por encima del brillo .card::before (en verde es opaco) */
+  .lg > :not(.accent) { position: relative; }
   .lg .head { display: flex; align-items: center; gap: 16px; }
   .lg .chip { font-family: "JetBrains Mono", monospace; font-weight: 700; font-size: 28px; line-height: 1.25; letter-spacing: 0.04em;
     padding: 4px 14px 3px; border-radius: 10px; color: var(--night); }
   #cardA .chip { background: var(--cyan); }
   #cardB .chip { background: var(--electric); color: var(--white); }
   .lg .title { font-size: 58px; font-weight: 800; letter-spacing: -0.025em; line-height: 1.25; white-space: nowrap; }
-  #cardA { top: 246px; height: 290px; }
-  #cardA .title { margin-top: 10px; }
+  #cardA { top: 240px; height: 316px; }
+  #cardA .title { margin-top: 10px; font-size: 68px; }
   #cardA .icons { display: flex; gap: 16px; margin-top: 16px; }
-  #cardA .icons .ico-badge { width: 78px; height: 78px; border-radius: 20px; }
-  #cardA .icons .ico { width: 46px; height: 46px; }
-  #cardB { top: 574px; height: 312px; }
+  #cardA .icons .ico-badge { width: 84px; height: 84px; border-radius: 22px; }
+  #cardA .icons .ico { width: 50px; height: 50px; }
+  #cardB { top: 594px; height: 272px; }
+  html.fondo #cardB { -webkit-box-reflect: below 6px linear-gradient(to bottom, transparent 0%, transparent 90%, rgba(255,255,255,.10) 100%); }
   #cardB .accent { background: linear-gradient(90deg, transparent, var(--electric), transparent); }
   html.verde #cardB .accent { background: var(--electric); }
-  #cardB .list { margin-top: 12px; display: flex; flex-direction: column; gap: 4px; }
+  #cardB .list { margin-top: 10px; display: flex; flex-direction: column; gap: 2px; }
   #cardB .it { display: flex; align-items: center; gap: 18px; }
-  #cardB .it .ico-badge { width: 60px; height: 60px; border-radius: 16px; flex: none; }
-  #cardB .it .ico { width: 36px; height: 36px; color: var(--sky); }
-  #cardB .it .t { font-size: 40px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.3; white-space: nowrap; }
+  #cardB .it .ico-badge { width: 52px; height: 52px; border-radius: 14px; flex: none; }
+  #cardB .it .ico { width: 32px; height: 32px; color: var(--sky); }
+  #cardB .it .t { font-size: 36px; font-weight: 500; color: var(--text-dim); letter-spacing: -0.01em; line-height: 1.3; white-space: nowrap; }
   .ico-badge.e { background: radial-gradient(circle at 30% 25%, rgba(8,126,255,0.30), rgba(8,126,255,0.10) 60%, rgba(8,126,255,0.04)); border-color: rgba(8,126,255,0.55); }
   html.verde .ico-badge.e { background: linear-gradient(160deg, #0F3D73, #0A2A52); border-color: #1F6FD6; }
 </style>
@@ -87,7 +100,7 @@
   <div id="kicker1" class="abs center-x kicker"><span class="dot"></span><span class="txt">La clave: <b>la cantidad</b></span></div>
 
   <div id="panel" class="card"><div class="accent"></div>
-    <svg id="chart" class="layer" viewBox="0 0 1600 660" width="1600" height="660">
+    <svg id="chart" class="layer" viewBox="0 0 1600 690" width="1600" height="690">
       <defs>
         <linearGradient id="gBarE" gradientUnits="userSpaceOnUse" x1="540" y1="0" x2="1500" y2="0">
           <stop offset="0%" stop-color="#0552B8"/><stop offset="70%" stop-color="#087EFF"/><stop offset="100%" stop-color="#3F9DFF"/>
@@ -101,7 +114,7 @@
         <linearGradient id="gGlint" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="180" y2="0">
           <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0"/><stop offset="50%" stop-color="#FFFFFF" stop-opacity="0.45"/><stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
         </linearGradient>
-        <clipPath id="barsClip"><rect x="540" y="182" width="832" height="64" rx="12"/><rect x="540" y="344" width="576" height="64" rx="12"/></clipPath>
+        <clipPath id="gapClip"><rect x="1121" y="344" width="251" height="64" rx="12"/></clipPath>
         <pattern id="hatch" patternUnits="userSpaceOnUse" width="16" height="16" patternTransform="rotate(40)">
           <line class="hatchln" x1="4" y1="0" x2="4" y2="16" stroke-width="5"/>
         </pattern>
@@ -124,7 +137,7 @@
       </g>
       <rect id="sh1" class="fondo-only" x="540" y="182" height="64" rx="12" fill="url(#gShine)"/>
       <rect id="sh2" class="fondo-only" x="540" y="344" height="64" rx="12" fill="url(#gShine)"/>
-      <g class="fondo-only" clip-path="url(#barsClip)"><rect id="glint" x="0" y="160" width="180" height="280" fill="url(#gGlint)"/></g>
+      <g class="fondo-only" clip-path="url(#gapClip)"><rect id="glint" x="0" y="160" width="180" height="280" fill="url(#gGlint)"/></g>
       <line id="tip1" y1="188" y2="240" stroke="#F5F8FF" stroke-width="4" stroke-linecap="round"/>
       <line id="tip2" y1="350" y2="402" stroke="#F5F8FF" stroke-width="4" stroke-linecap="round"/>
       <!-- cursores sobre la regla -->
@@ -132,7 +145,7 @@
       <path id="cur2" d="M-11,0 L11,0 L0,14 Z" fill="#20C4EF"/>
       <!-- guía y corchete -->
       <line id="guide" x1="1372" y1="254" x2="1372" y2="254" class="st-main" stroke-width="2.5" stroke-dasharray="7 7" stroke-linecap="round"/>
-      <line id="sumLn" x1="56" y1="450" x2="520" y2="450" class="st-soft" stroke-width="2"/>
+      <line id="sumLn" x1="56" y1="444" x2="520" y2="444" class="st-soft" stroke-width="2"/>
       <g class="glow-soft">
         <path id="brL" d="M1246,440 L1128,440 Q1120,440 1120,432 L1120,418" fill="none" class="st-main" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
         <path id="brR" d="M1246,440 L1364,440 Q1372,440 1372,432 L1372,418" fill="none" class="st-main" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
@@ -150,9 +163,9 @@
     <div class="rlab" id="lab2" style="top:282px"><span class="sw c"></span><span class="lbl" id="lab2t">LO QUE COMIÓ</span><span class="tag" id="tag2">MENOS DE</span></div>
     <div class="rval" id="row2" style="top:314px"><div class="in"><span class="num" id="n2">0</span><span class="unit">kcal/día</span></div></div>
 
-    <div id="formula" class="lbl">2.600 − 1.800</div>
-    <div class="rlab" id="lab3" style="top:464px"><i data-icon="trend-down"></i><span class="lbl" id="lab3t">DÉFICIT</span></div>
-    <div class="rval" id="row3" style="top:496px"><div class="in"><svg class="approx" viewBox="0 0 40 34"><g fill="none" stroke="currentColor" stroke-width="4.6" stroke-linecap="round"><path d="M4,12 C10,5 15,5 20,10 S30,15 36,8"/><path d="M4,25 C10,18 15,18 20,23 S30,28 36,21"/></g></svg><span class="num" id="dv">−0</span><span class="unit">kcal/día</span></div></div>
+    <div id="formula" class="lbl">2.600 <span class="op">−</span> 1.800</div>
+    <div class="rlab" id="lab3" style="top:456px"><i data-icon="trend-down"></i><span class="lbl" id="lab3t">DÉFICIT</span></div>
+    <div class="rval" id="row3" style="top:486px"><div class="in"><svg class="approx" viewBox="0 0 40 34"><g fill="none" stroke="currentColor" stroke-width="4.6" stroke-linecap="round"><path d="M4,12 C10,5 15,5 20,10 S30,15 36,8"/><path d="M4,25 C10,18 15,18 20,23 S30,28 36,21"/></g></svg><span class="num" id="dv">−0</span><span class="unit">kcal/día</span></div></div>
   </div>
 
   <!-- ================= Beat 2 · de dónde salían las calorías ================= -->
@@ -205,7 +218,6 @@
       <span class="ico-badge"><i data-icon="cake"></i></span>
       <span class="ico-badge"><i data-icon="cookie"></i></span>
       <span class="ico-badge"><i data-icon="popcorn"></i></span>
-      <span class="ico-badge"><i data-icon="bowl-food"></i></span>
     </div>
   </div>
 
@@ -227,8 +239,8 @@
 <script src="../lib/stage.js"></script>
 <script>
 M.scene({
-  duration: 14.6,
-  icons: ['chart-bar-horizontal', 'trend-down', 'cake', 'cookie', 'popcorn', 'bowl-food', 'pint-glass', 'pill', 'carrot'],
+  duration: 15.0,
+  icons: ['chart-bar-horizontal', 'trend-down', 'cake', 'cookie', 'popcorn', 'pint-glass', 'pill', 'carrot'],
 }, (tl, M) => {
   const $ = (s) => document.querySelector(s);
   const $$ = (s) => Array.from(document.querySelectorAll(s));
@@ -253,7 +265,7 @@ M.scene({
   const tin = (el, at, o) => { gsap.set(el, { visibility: 'hidden' }); tl.set(el, { visibility: 'visible' }, at); return M.textIn(el, at, o); };
 
   /* =====================================================================
-     Beat 1 · barras (0.15 – 8.3 s)
+     Beat 1 · barras (0.15 – 8.2 s)
      ===================================================================== */
   const TX0 = 540, TX1 = 1500, K = (TX1 - TX0) / 3000, X = (v) => TX0 + v * K;
   const RY = 96;                                   // línea base de la regla
@@ -305,33 +317,36 @@ M.scene({
 
   // la diferencia: guía, hueco rayado, corchete → fila del déficit
   const G = { guide: 0, gap: 0 };
-  tl.to(G, { guide: 1, duration: 0.45, ease: 'power2.inOut' }, 3.75);
-  tl.to(G, { gap: 1, duration: 0.7, ease: 'swift' }, 3.95);
-  M.draw($('#brL'), 4.35, { dur: 0.5 });
-  M.draw($('#brR'), 4.35, { dur: 0.5 });
-  M.draw($('#sumLn'), 4.55, { dur: 0.6 });
-  M.draw($('#conD'), 4.7, { dur: 0.7, ease: 'power2.inOut' });
-  M.zoomIn($('#lab3 .ico'), 4.85, { dur: 0.5 });
-  const l3 = tin($('#lab3t'), 4.9, { type: 'words', dur: 0.7 });
-  M.tl.from('#row3 .in', { yPercent: 105, duration: 0.8, ease: 'swift' }, 5.0);
-  M.counter($('#dv'), { from: 0, to: 800, prefix: '−', at: 5.15, dur: 1.0, ease: 'power2.out' });
+  tl.to(G, { guide: 1, duration: 0.45, ease: 'power2.inOut' }, 3.55);
+  tl.to(G, { gap: 1, duration: 0.7, ease: 'swift' }, 3.75);
+  M.draw($('#brL'), 4.15, { dur: 0.5 });
+  M.draw($('#brR'), 4.15, { dur: 0.5 });
+  M.draw($('#sumLn'), 4.35, { dur: 0.6 });
+  M.draw($('#conD'), 4.5, { dur: 0.7, ease: 'power2.inOut' });
+  M.zoomIn($('#lab3 .ico'), 4.65, { dur: 0.5 });
+  const l3 = tin($('#lab3t'), 4.7, { type: 'words', dur: 0.7 });
+  M.tl.from('#row3 .in', { yPercent: 105, duration: 0.8, ease: 'swift' }, 4.8);
+  M.counter($('#dv'), { from: 0, to: 800, prefix: '−', at: 4.95, dur: 1.0, ease: 'power2.out' });
+  // jerarquía: al entrar el déficit, las cifras de entrada bajan a un tono secundario (opaco, sirve en verde)
+  tl.to(['#n1', '#n2'], { color: '#A9C3E3', duration: 0.6, ease: 'power2.out' }, 5.0);
 
   // el conector termina junto al número del déficit
   $('#dv').textContent = '−800';               // medir con el valor final
   const inW = $('#row3 .in').offsetWidth;
-  const DX = 56 + inW + 40, DY = 560;
+  const DX = 56 + inW + 40, DY = 566;
   set($('#conD'), { d: `M1246,440 L1246,${DY - 10} Q1246,${DY} 1236,${DY} L${DX},${DY}` });
   set($('#dD1'), { cx: DX, cy: DY });
-  dotIn($('#dD1'), 5.3);
+  dotIn($('#dD1'), 5.1);
   $('#formula').style.left = ((DX + 1236) / 2) + 'px';
-  const fo = tin($('#formula'), 5.25, { type: 'words', dur: 0.7, stagger: 0.08 });
+  const fo = tin($('#formula'), 5.05, { type: 'words', dur: 0.7, stagger: 0.08 });
 
-  // destello que recorre las barras durante la pausa (solo modo fondo)
-  const GL = { x: 300 };
-  if (!M.chroma) tl.to(GL, { x: 1560, duration: 1.1, ease: 'power1.inOut' }, 6.35);
+  // pausa: el destello recorre solo el tramo rayado (el déficit) y el número late una vez
+  const GL = { x: 1040 };
+  if (!M.chroma) tl.to(GL, { x: 1580, duration: 0.8, ease: 'power1.inOut' }, 6.15);
+  tl.fromTo('#dv', { scale: 1 }, { scale: 1.035, yoyo: true, repeat: 1, duration: 0.35, ease: 'sine.inOut', transformOrigin: '50% 60%', immediateRender: false }, 6.3);
 
   // salida beat 1
-  const OUT1 = 7.75;
+  const OUT1 = 7.55;
   M.textOut(k1, OUT1, { type: 'words' });
   M.zoomOut($('#kicker1 .dot'), OUT1);
   clipOut($('#panel'), OUT1 + 0.05, { dur: 0.65, y: -40 });
@@ -357,7 +372,7 @@ M.scene({
   });
 
   /* =====================================================================
-     Beat 2 · dona (8.1 – 14.2 s)
+     Beat 2 · dona (7.9 – 14.65 s)
      ===================================================================== */
   const C = { x: 580, y: 570 }, R = 236;
   const P = (r, deg) => { const a = deg * Math.PI / 180; return [C.x + r * Math.cos(a), C.y + r * Math.sin(a)]; };
@@ -388,7 +403,7 @@ M.scene({
     set(el, { d: `M${f2(sx)},${f2(sy)} L${f2(ex)},${f2(ey)} L1036,${f2(ey)}` });
     set(d0, { cx: f2(sx), cy: f2(sy) }); set(d1, { cx: 1036, cy: f2(ey) });
   };
-  const yA = 246 + 145, yB = 574 + 156;
+  const yA = 240 + 158, yB = 594 + 136;
   conn($('#conA'), $('#dA0'), $('#dA1'), yA, R + 32);
   conn($('#conB'), $('#dB0'), $('#dB1'), yB, R + 32);
 
@@ -397,9 +412,10 @@ M.scene({
   $('#frac').style.top = (C.y - 110 - 18) + 'px';
   $('#fracSub').style.top = (C.y + 80) + 'px';
 
-  const IN2 = 8.1;
-  const k2 = tin($('#kicker2 .txt'), IN2, { type: 'words', dur: 0.8 });
-  M.zoomIn($('#kicker2 .dot'), IN2);
+  const IN2 = 7.9;
+  // el kicker 2 entra cuando el 1 ya salió (no comparten línea)
+  const k2 = tin($('#kicker2 .txt'), IN2 + 0.25, { type: 'words', dur: 0.8 });
+  M.zoomIn($('#kicker2 .dot'), IN2 + 0.25);
   tl.to(TK, { a: 360, duration: 1.3, ease: 'power2.inOut' }, IN2 + 0.05);
   M.draw($('#ringOut'), IN2 + 0.1, { dur: 1.2 });
   M.draw($('#dtrack'), IN2 + 0.15, { dur: 1.0 });
@@ -414,29 +430,31 @@ M.scene({
   const fr = tin($('#fracTxt'), IN2 + 0.75, { dur: 1.0, stagger: 0.07, cls: 'hl' });
   const frs = tin($('#fracSub'), IN2 + 1.1, { type: 'words', dur: 0.7 });
 
-  dotIn($('#dA0'), IN2 + 1.25);
-  M.draw($('#conA'), IN2 + 1.3, { dur: 0.5 });
-  dotIn($('#dA1'), IN2 + 1.7);
+  // 2/3: segmento, conector y tarjeta A completos antes de que llegue el 1/3
+  dotIn($('#dA0'), IN2 + 1.0);
+  M.draw($('#conA'), IN2 + 1.05, { dur: 0.5 });
+  dotIn($('#dA1'), IN2 + 1.45);
   gsap.set('#cardA', { rotationY: -10, transformPerspective: 1600, transformOrigin: '0% 50%' });
   gsap.set('#cardB', { rotationY: -10, transformPerspective: 1600, transformOrigin: '0% 50%' });
-  M.popIn($('#cardA'), IN2 + 1.55, { dur: 0.9 });
-  const tA = tin($('#titleA'), IN2 + 1.8, { type: 'words', dur: 0.8 });
-  $$('#cardA .icons .ico-badge').forEach((b, i) => M.zoomIn(b, IN2 + 1.95 + i * 0.09, { dur: 0.55 }));
+  M.popIn($('#cardA'), IN2 + 1.3, { dur: 0.9 });
+  const tA = tin($('#titleA'), IN2 + 1.55, { type: 'words', dur: 0.8 });
+  $$('#cardA .icons .ico-badge').forEach((b, i) => M.zoomIn(b, IN2 + 1.7 + i * 0.09, { dur: 0.55 }));
 
-  M.draw($('#segE'), IN2 + 1.6, { dur: 0.8, ease: 'power2.inOut' });
-  M.draw($('#segEi'), IN2 + 1.65, { dur: 0.8, ease: 'power2.inOut' });
-  dotIn($('#dB0'), IN2 + 2.15);
-  M.draw($('#conB'), IN2 + 2.2, { dur: 0.5 });
-  dotIn($('#dB1'), IN2 + 2.6);
-  M.popIn($('#cardB'), IN2 + 2.45, { dur: 0.9 });
+  // 1/3: entra recién con la tarjeta A ya armada
+  M.draw($('#segE'), IN2 + 2.7, { dur: 0.8, ease: 'power2.inOut' });
+  M.draw($('#segEi'), IN2 + 2.75, { dur: 0.8, ease: 'power2.inOut' });
+  dotIn($('#dB0'), IN2 + 3.1);
+  M.draw($('#conB'), IN2 + 3.15, { dur: 0.5 });
+  dotIn($('#dB1'), IN2 + 3.55);
+  M.popIn($('#cardB'), IN2 + 3.35, { dur: 0.9 });
   const items = $$('#cardB .it');
   const itSplits = items.map((it, i) => {
-    M.zoomIn(it.querySelector('.ico-badge'), IN2 + 2.7 + i * 0.12, { dur: 0.55 });
-    return tin(it.querySelector('.t'), IN2 + 2.75 + i * 0.12, { type: 'words', dur: 0.7 });
+    M.zoomIn(it.querySelector('.ico-badge'), IN2 + 3.6 + i * 0.1, { dur: 0.55 });
+    return tin(it.querySelector('.t'), IN2 + 3.65 + i * 0.1, { type: 'words', dur: 0.7 });
   });
 
   // salida final
-  const OUT2 = 13.4;
+  const OUT2 = 13.95;
   clipOut($('#cardB'), OUT2);
   clipOut($('#cardA'), OUT2 + 0.06);
   dotOut($('#dA1'), OUT2); dotOut($('#dB1'), OUT2);
@@ -451,7 +469,7 @@ M.scene({
   M.undraw($('#segEi'), OUT2 + 0.05, { dur: 0.5, to: '100% 100%' });
   M.undraw($('#segC'), OUT2 + 0.1, { dur: 0.55, to: '100% 100%' });
   M.undraw($('#segCi'), OUT2 + 0.1, { dur: 0.55, to: '100% 100%' });
-  M.undraw($('#dtrack'), OUT2 + 0.15, { dur: 0.5 });
+  M.undraw($('#dtrack'), OUT2, { dur: 0.35 });   // nunca queda sola al retraerse los segmentos
   M.undraw($('#ringIn'), OUT2 + 0.15, { dur: 0.5 });
   M.undraw($('#ringOut'), OUT2 + 0.1, { dur: 0.55 });
   M.undraw($('#floorLine'), OUT2 + 0.15, { dur: 0.5 });
