@@ -60,6 +60,10 @@
   .dtrack { stroke: rgba(115,189,242,0.09); }
   /* en verde, pista fina (un anillo opaco de 58 px pesaba demasiado sobre el chroma) */
   html.verde .dtrack { stroke: #1A4A80; stroke-width: 8px; }
+  /* chroma: con 2 px sobre el verde, el submuestreo 4:2:0 deja todo el trazo mezclado (sin núcleo opaco)
+     y el keyer lo come o lo deja verdoso → en verde, anillos, piso y marcas menores a 3 px */
+  html.verde #ringOut, html.verde #ringIn, html.verde #floorLine, html.verde #dticksRot line.st-soft,
+  html.verde #conA, html.verde #conB { stroke-width: 3px; }
   #center { position: absolute; left: 280px; width: 600px; top: 0; text-align: center; }
   #frac { position: absolute; left: 0; right: 0; top: 0; }
   #frac .display { font-size: 176px; display: inline-block; }
@@ -255,12 +259,16 @@ M.scene({
   // salida de tarjeta (reemplaza a M.popOut): el navegador abrevia "inset(-150% round 28px)" y la interpolación
   // de GSAP se desfasa; acá cada inset tiene 4 valores distintos. Fase 1: se barre el reflejo/sombra de abajo
   // (en verde no se ve); fase 2: la tarjeta se cierra hacia su línea central.
-  const clipOut = (el, at, { dur = 0.6, y = -30, scale = 0.94 } = {}) => {
+  // cut: solo verde. Los últimos 2–4 px de la franja que se cierra quedan todos mezclados con el verde (sin núcleo
+  // opaco) → el keyer deja una raya verdosa de 1 cuadro. Se corta en seco (opacity 0/1, sin fundido) cuando la
+  // franja baja de ~6 px; valor medido por cuadro (panel 0.035 s, tarjetas 0.05 s antes del final).
+  const clipOut = (el, at, { dur = 0.6, y = -30, scale = 0.94, cut = 0.05 } = {}) => {
     const S0 = 'inset(-15% -12% -110% -13% round 28px)', S1 = 'inset(-15% -12% -4% -13% round 28px)', S2 = 'inset(50% 0.2% 50.1% 0% round 28px)';
     const d1 = dur * 0.3;
     tl.to(el, { y: '+=' + y, scale, duration: dur, ease: 'exit' }, at);
     tl.fromTo(el, { clipPath: S0 }, { clipPath: S1, duration: d1, ease: 'power1.in', immediateRender: false }, at);
     tl.fromTo(el, { clipPath: S1 }, { clipPath: S2, duration: dur - d1, ease: 'power2.inOut', immediateRender: false }, at + d1);
+    if (M.chroma) tl.set(el, { opacity: 0 }, at + dur - cut);
   };
   const tin = (el, at, o) => { gsap.set(el, { visibility: 'hidden' }); tl.set(el, { visibility: 'visible' }, at); return M.textIn(el, at, o); };
 
@@ -349,7 +357,7 @@ M.scene({
   const OUT1 = 7.55;
   M.textOut(k1, OUT1, { type: 'words' });
   M.zoomOut($('#kicker1 .dot'), OUT1);
-  clipOut($('#panel'), OUT1 + 0.05, { dur: 0.65, y: -40 });
+  clipOut($('#panel'), OUT1 + 0.05, { dur: 0.65, y: -40, cut: 0.035 });
 
   // geometría por frame (barras, cursores, guía, hueco)
   const bar1 = $('#bar1'), bar2 = $('#bar2'), sh1 = $('#sh1'), sh2 = $('#sh2');
