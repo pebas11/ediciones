@@ -1,0 +1,26 @@
+/* Tipografía prioritaria del proyecto (pedido del usuario):
+   League Spartan (titulares) + DM Sans (cuerpo) + DM Mono (rótulos y datos técnicos). */
+@font-face { font-family: "League Spartan"; font-weight: 300; src: url(../node_modules/@fontsource/league-spartan/files/league-spartan-latin-300-normal.woff2) format("woff2"); }
+@font-face { font-family: "League Spartan"; font-weight: 400; src: url(../node_modules/@fontsource/league-spartan/files/league-spartan-latin-400-normal.woff2) format("woff2"); }
+@font-face { font-family: "League Spartan"; font-weight: 500; src: url(../node_modules/@fontsource/league-spartan/files/league-spartan-latin-500-normal.woff2) format("woff2"); }
+@font-face { font-family: "League Spartan"; font-weight: 600; src: url(../node_modules/@fontsource/league-spartan/files/league-spartan-latin-600-normal.woff2) format("woff2"); }
+@font-face { font-family: "League Spartan"; font-weight: 700; src: url(../node_modules/@fontsource/league-spartan/files/league-spartan-latin-700-normal.woff2) format("woff2"); }
+@font-face { font-family: "League Spartan"; font-weight: 800; src: url(../node_modules/@fontsource/league-spartan/files/league-spartan-latin-800-normal.woff2) format("woff2"); }
+@font-face { font-family: "League Spartan"; font-weight: 900; src: url(../node_modules/@fontsource/league-spartan/files/league-spartan-latin-900-normal.woff2) format("woff2"); }
+@font-face { font-family: "DM Sans"; font-weight: 400; src: url(../node_modules/@fontsource/dm-sans/files/dm-sans-latin-400-normal.woff2) format("woff2"); }
+@font-face { font-family: "DM Sans"; font-weight: 500; src: url(../node_modules/@fontsource/dm-sans/files/dm-sans-latin-500-normal.woff2) format("woff2"); }
+@font-face { font-family: "DM Sans"; font-weight: 700; src: url(../node_modules/@fontsource/dm-sans/files/dm-sans-latin-700-normal.woff2) format("woff2"); }
+@font-face { font-family: "DM Mono"; font-weight: 400; src: url(../node_modules/@fontsource/dm-mono/files/dm-mono-latin-400-normal.woff2) format("woff2"); }
+@font-face { font-family: "DM Mono"; font-weight: 500; src: url(../node_modules/@fontsource/dm-mono/files/dm-mono-latin-500-normal.woff2) format("woff2"); }
+
+:root {
+  --f-display: "League Spartan", "DM Sans", sans-serif;
+  --f-body: "DM Sans", "League Spartan", sans-serif;
+  --f-mono: "DM Mono", "JetBrains Mono", monospace;
+}
+body { font-family: var(--f-body); }
+.display, .title, .num { font-family: var(--f-display); }
+.kicker, .mono, .unit, .tag { font-family: var(--f-mono); }
+/* League Spartan tiene ascendentes altos: interlineado de titulares 0,95–1,0 visual
+   (con máscara SplitText usar ≥ 1,15 para no cortar tildes). Tracking negativo leve en tamaños grandes. */
+.display { font-weight: 800; letter-spacing: -0.03em; }

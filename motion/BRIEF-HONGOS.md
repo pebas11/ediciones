@@ -6,34 +6,69 @@ El usuario pidió animaciones **más coloridas y con un estilo más tecnológico
 - **Encuadre:** educativo y científico. Nada de instrucciones de consumo, dosis recreativas ni cultivo.
 - **Texto en pantalla:** español neutro, sin voseo. Números en formato español.
 
-## Estilo MYCO (ya implementado)
-- **CSS:** `lib/theme.css` + `lib/theme-myco.css`, cargados en ese orden.
-- **Referencia aprobada:** `scenes/h01-hongos.html`. Copiá su estructura: `#bg`, `#world`, `#cam` si hay cámara, `M.scene` con `grid:'dots'`, `lights` de colores y `particles`.
-- **Paleta:**
-  - Fondo violeta profundo: `--night` #07030F y `--deep` #140A2A.
-  - Neones: `--magenta` #FF3DCB, `--violet` #8B5CFF, `--cyan` #22E4FF, `--lime` #B6FF3B, `--amber` #FFB23F.
-  - Blanco frío `--white` #F7F3FF y lila `--sky` #C9B8FF.
-  - Degradé holográfico `--holo` (magenta → violeta → cian → lima) para palabras destacadas (`cls:'hl'`) y bordes de tarjeta.
-- **Tipografías:**
-  - Unbounded (900/800) para titulares y números (`.display`, `.num`, `.title`).
-  - Space Grotesk para el cuerpo.
-  - JetBrains Mono para rótulos (`.kicker`, `.tag`).
-- **Componentes:**
-  - `.card` con borde holográfico (y `.accent`).
-  - `.tag.mag|lime|cyan|amber|violet`: chips de color sólido.
-  - `.glow`, `.glow-mag`, `.glow-lime` para trazos SVG de neón.
-- **Lenguaje visual:**
-  - Line-art de neón dibujado progresivamente con DrawSVG y varios colores.
-  - Redes y ramificaciones generadas por código con `M.rng(seed)`.
-  - Pulsos de luz que viajan por los trazos.
-  - Profundidad 2.5D con cámara (`#cam` con x/y/scale), tarjetas con leve rotationY y reflejos discretos.
-- **Movimiento:** usá los tokens de `docs/APPLE-MOTION.md` (`apple`, `appleOut`, `appleIn`, `M.spring(0.15)`, `M.D`). Nada de rebotes exagerados.
-- **Reglas técnicas:** `docs/RULES.md`. Las reglas del modo verde no aplican; todo lo demás sí.
-- **Cada escena:**
-  - Dura entre 13 y 15 s y tiene 2 o 3 beats, con una idea por vez.
-  - Cada beat queda quieto al menos 1,5 s una vez construido.
-  - Empieza y termina vacía: ~0,15 s al inicio y ~0,3 s al final.
-  - Usa colores DISTINTOS como protagonistas, para que la serie no sea monótona: h02 cian/lima (química), h03 magenta/violeta (receptor), h04 arcoíris (redes), h05 ámbar/lima (ciencia).
+## Dirección de arte v2: "lámina científica 3D". Reemplaza el estilo MYCO
+El usuario pidió:
+- Un hongo más trabajado.
+- **Que no parezca hecho con IA.**
+- Elementos 3D.
+- Mejor estética.
+- **League Spartan** como tipografía prioritaria.
+
+**Referencia aprobada:** `scenes/h01-hongos.html`. Copiá su estructura: importmap de three, `createStage3D`, capa `#ann` de anotaciones, grano de película, esquinas de marco y `#plate`.
+
+- **3D real con Three.js:**
+  - Usá `lib/three-stage.mjs` (`createStage3D`, `project()`, `fbm`, `noise3`) y, si hace falta, `lib/mushroom3d.mjs`.
+  - Cada escena tiene un protagonista 3D modelado por código, iluminado como en un estudio:
+    - clave cálida,
+    - dos contraluces de color suaves,
+    - hemisférica violeta,
+    - sombras suaves,
+    - niebla (`FogExp2`) y bloom sutil (threshold ≥ 0,85).
+  - El 3D se renderiza en `M.onFrame` con `S.render()`, a partir de proxies animados en `M.tl`. Todo tiene que ser determinista.
+- **Tipografía (prioridad):** cargar `lib/fonts-spartan.css`.
+  - League Spartan 800–900 para titulares, en minúscula de oración ("Hongos mágicos", no MAYÚSCULAS), con tracking de −0,03 a −0,05em.
+  - DM Sans para el cuerpo y DM Mono para rótulos técnicos (en mayúsculas, con tracking de 0,14 a 0,22em).
+- **Paleta contenida y de autor**, no arcoíris:
+  - Fondo tinta violeta: `#0f0a1c` → `#040308`.
+  - Hueso `#F3EDE2` para el texto y color secundario `rgba(243,237,226,0.62)`.
+  - **Un** acento principal por escena, más un secundario como mucho:
+    - h02: cian `#7FD8FF` + caramelo.
+    - h03: magenta `#FF6CC4` + hueso.
+    - h04: lima `#C6F36B` + violeta `#9D8CFF`.
+    - h05: caramelo `#E0A15A` + azul `#6E9BFF`.
+  - El color fuerte va en la luz del 3D, no en degradés de texto.
+- **Lo que hace que algo parezca hecho con IA (NO hacerlo):**
+  - Degradés arcoíris en texto o bordes.
+  - Glassmorphism con borde holográfico.
+  - Glow en todo.
+  - Todo centrado y simétrico.
+  - Chips de colores por todas partes.
+  - Partículas brillantes sin motivo.
+  - Íconos genéricos.
+  - Textos en MAYÚSCULAS con glow.
+- **Lo que hace que se vea diseñado (HACERLO):**
+  - Grilla editorial: texto alineado a la izquierda en x = 140, el 3D a la derecha con la cámara corrida (`setViewOffset`).
+  - Anotaciones numeradas (01, 02…) con líneas finas de 1,5 px que siguen al objeto 3D (`S.project`).
+  - Marcas de esquina y un rótulo tipo "LÁMINA 0N".
+  - Jerarquía clara: titular grande, un solo dato protagonista y un texto de apoyo corto.
+  - Grano de película, viñeta y aire.
+- **Movimiento:**
+  - Tokens de `docs/APPLE-MOTION.md`.
+  - Cámara 3D con movimientos lentos y motivados: dolly, grúa u órbita corta.
+  - Texto con `M.textIn` / `textOut`, en palabras o letras.
+- **Técnica:** reglas de `docs/RULES.md` (salvo las de modo verde), 13–15 s por escena, solo modo `fondo`.
+- **Render:**
+  - Hoja de contacto: `node render.mjs <escena> --sheet 16 --modes fondo`.
+  - Cuadros sueltos: `--stills t --scale 0.5`.
+  - QA: `node qa.mjs <escena> --modes fondo`.
+  - Final: `node render.mjs <escena> --modes fondo`, en background.
+  - Un cuadro 3D tarda ~0,5 s, así que la hoja de contacto demora ~30 s.
+
+### Protagonista 3D de cada escena
+- **h02:** moléculas 3D de bolas y varillas: psilocibina → psilocina (el grupo fosfato se separa) y la comparación con la serotonina. Átomos con materiales físicos, enlaces como cilindros y anotaciones con los nombres de los grupos.
+- **h03:** un parche 3D de membrana (bicapa lipídica con cabezas en instancias). El receptor 5-HT2A es un haz de 7 hélices (cilindros o tubos). La psilocina entra en el bolsillo y la membrana se ilumina.
+- **h04:** dos conectomas 3D: nodos sobre una esfera o un anillo, con arcos entre nodos que se dibujan de a poco. Uno modular y ordenado, el otro integrado (con psilocibina). Rotan lento.
+- **h05:** una línea de tiempo en el espacio 3D, recorrida por un dolly de cámara, con hitos como planos o paneles finos. Después, datos clínicos en paneles editoriales y el cierre responsable.
 
 ## Storyboards
 Son una guía. Los datos tienen que salir de la ficha verificada que está más abajo; si un dato no aparece ahí, no va en pantalla.

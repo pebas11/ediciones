@@ -2,122 +2,82 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<title>H01 · Hongos mágicos: fruto y micelio</title>
+<title>H01 · Hongos mágicos: fruto y micelio (3D)</title>
 <link rel="stylesheet" href="../lib/theme.css">
-<link rel="stylesheet" href="../lib/theme-myco.css">
+<link rel="stylesheet" href="../lib/fonts-spartan.css">
+<script type="importmap">{ "imports": { "three": "../node_modules/three/build/three.module.js", "three/addons/": "../node_modules/three/examples/jsm/" } }</script>
 <style>
-  #cam { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; }
-  #scene { position: absolute; left: 0; top: 0; overflow: visible; }
+  :root { --bone: #F3EDE2; --caramel: #E0A15A; --blue: #6E9BFF; --lime: #C6F36B; --dim: rgba(243,237,226,0.62); }
+  #gl { position: absolute; inset: 0; }
+  #grain { position: absolute; inset: -20px; opacity: 0.07; mix-blend-mode: overlay; pointer-events: none; }
+  #vig { position: absolute; inset: 0; background: radial-gradient(120% 100% at 60% 45%, transparent 55%, rgba(6,4,12,0.55) 100%); }
 
-  #kicker1 { left: 150px; top: 300px; }
-  #title { left: 150px; top: 338px; }
-  #title .display { font-size: 148px; line-height: 1.22; display: block; }
-  #sub1 { left: 154px; top: 720px; font-size: 40px; font-weight: 500; color: var(--sky); }
-  #sub1 b { color: var(--white); font-weight: 700; }
+  /* marco técnico */
+  .corner { position: absolute; width: 26px; height: 26px; border-color: rgba(243,237,226,0.5); border-style: solid; border-width: 0; }
+  .c1 { left: 64px; top: 56px; border-left-width: 1.5px; border-top-width: 1.5px; }
+  .c2 { right: 64px; top: 56px; border-right-width: 1.5px; border-top-width: 1.5px; }
+  .c3 { left: 64px; bottom: 56px; border-left-width: 1.5px; border-bottom-width: 1.5px; }
+  .c4 { right: 64px; bottom: 56px; border-right-width: 1.5px; border-bottom-width: 1.5px; }
+  #plate { position: absolute; right: 100px; top: 76px; font-family: var(--f-mono); font-size: 20px; letter-spacing: 0.14em; color: var(--dim); text-align: right; }
 
-  .lbl { position: absolute; width: 560px; padding: 30px 34px 32px; }
-  .lbl .tag { margin-bottom: 18px; }
-  .lbl .t { font-family: "Unbounded", sans-serif; font-weight: 800; font-size: 40px; line-height: 1.15; letter-spacing: -0.01em; }
-  .lbl .d { margin-top: 12px; font-size: 30px; line-height: 1.3; color: var(--text-dim); }
-  #lblUp { left: 150px; top: 150px; }
-  #lblDown { left: 150px; top: 610px; }
+  #kicker { position: absolute; left: 140px; top: 300px; font-family: var(--f-mono); font-size: 24px; letter-spacing: 0.22em; color: var(--caramel); white-space: nowrap; }
+  #title { position: absolute; left: 132px; top: 338px; font-family: var(--f-display); font-weight: 800; font-size: 176px; line-height: 1.16; letter-spacing: -0.035em; color: var(--bone); }
+  #title .w2 { color: var(--caramel); }
+  #sub { position: absolute; left: 140px; top: 776px; width: 640px; font-size: 36px; line-height: 1.3; color: var(--dim); }
+  #sub b { color: var(--bone); font-weight: 500; }
 
-  #stat { left: 150px; top: 250px; width: 760px; padding: 44px 48px 46px; }
-  #stat .k { font-family: "JetBrains Mono", monospace; font-weight: 700; font-size: 24px; letter-spacing: 0.24em; color: var(--sky); }
-  #stat .big { font-family: "Unbounded", sans-serif; font-weight: 900; font-size: 200px; line-height: 1.12; letter-spacing: -0.04em; margin-top: 6px; }
-  #stat .d { font-size: 40px; line-height: 1.25; font-weight: 500; margin-top: 4px; }
-  #stat .d b { color: var(--lime); font-weight: 700; }
-  #stat .src { margin-top: 22px; font-family: "JetBrains Mono", monospace; font-size: 20px; color: var(--text-dim); letter-spacing: 0.04em; }
+  /* anotaciones sobre el modelo 3D */
+  #ann { position: absolute; inset: 0; overflow: visible; }
+  .lab { position: absolute; width: 380px; }
+  .lab .n { font-family: var(--f-mono); font-size: 20px; color: var(--caramel); letter-spacing: 0.1em; }
+  .lab .h { font-family: var(--f-display); font-weight: 700; font-size: 44px; line-height: 1.15; color: var(--bone); letter-spacing: -0.01em; }
+  .lab .d { font-size: 26px; line-height: 1.3; color: var(--dim); margin-top: 2px; }
+
+  /* beat 2 */
+  .sec { position: absolute; left: 140px; width: 620px; }
+  .sec .n { font-family: var(--f-mono); font-size: 22px; letter-spacing: 0.2em; }
+  .sec .h { font-family: var(--f-display); font-weight: 800; font-size: 84px; line-height: 1.12; letter-spacing: -0.03em; color: var(--bone); margin-top: 6px; }
+  .sec .d { font-size: 32px; line-height: 1.32; color: var(--dim); margin-top: 12px; }
+  #secUp { top: 150px; } #secUp .n { color: var(--caramel); }
+  #secDown { top: 620px; } #secDown .n { color: var(--lime); } #secDown .h em { font-style: normal; color: var(--lime); }
+  #cut { position: absolute; left: 0; right: 0; height: 1.5px; background: linear-gradient(90deg, transparent, rgba(243,237,226,0.7) 12%, rgba(243,237,226,0.7) 88%, transparent); }
+  #cutLbl { position: absolute; right: 110px; font-family: var(--f-mono); font-size: 20px; letter-spacing: 0.18em; color: var(--dim); }
+
+  /* beat 3 */
+  #stat { position: absolute; left: 140px; top: 290px; width: 760px; }
+  #stat .n { font-family: var(--f-mono); font-size: 22px; letter-spacing: 0.2em; color: var(--caramel); }
+  #stat .big { font-family: var(--f-display); font-weight: 900; font-size: 300px; line-height: 1.02; letter-spacing: -0.05em; color: var(--bone); margin: 8px 0 0 -12px; }
+  #stat .big .p { color: var(--caramel); }
+  #stat .d { font-size: 42px; line-height: 1.22; font-weight: 500; color: var(--bone); }
+  #stat .src { margin-top: 22px; font-family: var(--f-mono); font-size: 20px; letter-spacing: 0.06em; color: var(--dim); }
+  #fade { position: absolute; inset: 0; background: #06040c; opacity: 0; }
 </style>
 </head>
 <body>
-<div id="bg"></div>
 <div id="world">
+  <div id="gl"></div>
+  <div id="vig"></div>
+  <svg id="ann" viewBox="0 0 1920 1080" width="1920" height="1080"></svg>
 
-  <!-- Mundo con cámara: hongo, suelo, micelio -->
-  <div id="cam">
-    <svg id="scene" viewBox="0 0 1920 1600" width="1920" height="1600">
-      <defs>
-        <linearGradient id="gSoil" gradientUnits="userSpaceOnUse" x1="0" y1="720" x2="0" y2="1500">
-          <stop offset="0%" stop-color="#1D0C2E"/><stop offset="35%" stop-color="#130822"/><stop offset="100%" stop-color="#07030F"/>
-        </linearGradient>
-        <linearGradient id="gHolo" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="1920" y2="0">
-          <stop offset="0%" stop-color="#FF3DCB"/><stop offset="35%" stop-color="#8B5CFF"/><stop offset="65%" stop-color="#22E4FF"/><stop offset="100%" stop-color="#B6FF3B"/>
-        </linearGradient>
-        <linearGradient id="gCap" gradientUnits="userSpaceOnUse" x1="1180" y1="180" x2="1500" y2="420">
-          <stop offset="0%" stop-color="#FFB23F"/><stop offset="45%" stop-color="#FF3DCB"/><stop offset="100%" stop-color="#8B5CFF"/>
-        </linearGradient>
-        <radialGradient id="gCapFill" gradientUnits="userSpaceOnUse" cx="1340" cy="260" r="220">
-          <stop offset="0%" stop-color="#FFB23F" stop-opacity="0.45"/><stop offset="60%" stop-color="#FF3DCB" stop-opacity="0.22"/><stop offset="100%" stop-color="#8B5CFF" stop-opacity="0.08"/>
-        </radialGradient>
-        <linearGradient id="gStem" gradientUnits="userSpaceOnUse" x1="0" y1="420" x2="0" y2="720">
-          <stop offset="0%" stop-color="#F7F3FF"/><stop offset="100%" stop-color="#22E4FF"/>
-        </linearGradient>
-        <radialGradient id="gGlowRoot" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stop-color="#B6FF3B" stop-opacity="0.45"/><stop offset="100%" stop-color="#B6FF3B" stop-opacity="0"/>
-        </radialGradient>
-      </defs>
+  <div class="corner c1"></div><div class="corner c2"></div><div class="corner c3"></div><div class="corner c4"></div>
+  <div id="plate">LÁMINA 01 · PSILOCYBE CUBENSIS</div>
 
-      <!-- suelo -->
-      <g id="soil">
-        <rect x="-400" y="720" width="2720" height="900" fill="url(#gSoil)"/>
-        <g id="strata"></g>
-        <g id="pebbles"></g>
-        <line id="ground" x1="-200" y1="720" x2="2120" y2="720" stroke="url(#gHolo)" stroke-width="3" class="glow"/>
-      </g>
+  <div id="kicker">PSILOCYBE CUBENSIS — FIG. 01</div>
+  <div id="title"><div class="w1">Hongos</div><div class="w2">mágicos</div></div>
+  <div id="sub">Un organismo que <b>casi nunca vemos completo.</b></div>
 
-      <!-- micelio (se genera por código) -->
-      <ellipse id="rootGlow" cx="1340" cy="730" rx="220" ry="90" fill="url(#gGlowRoot)"/>
-      <g id="myc" class="glow-lime"></g>
-      <g id="pulses"></g>
-      <g id="tips"></g>
+  <div class="lab" id="L1"><div class="n">01</div><div class="h">Sombrero</div><div class="d">Con un pico central (umbo)</div></div>
+  <div class="lab" id="L2"><div class="n">02</div><div class="h">Laminillas</div><div class="d">Liberan millones de esporas</div></div>
+  <div class="lab" id="L3"><div class="n">03</div><div class="h">Pie y anillo</div><div class="d">Se tiñe de azul al dañarse</div></div>
 
-      <!-- hongo (Psilocybe: sombrero campanulado, anillo en el pie) -->
-      <g id="shroom" class="glow-mag">
-        <path id="capFill" d="M1178,402 C1190,300 1250,188 1340,180 C1430,188 1490,300 1502,402 C1440,424 1240,424 1178,402 Z" fill="url(#gCapFill)"/>
-        <path id="cap" d="M1178,402 C1190,300 1250,188 1340,180 C1430,188 1490,300 1502,402" fill="none" stroke="url(#gCap)" stroke-width="6" stroke-linecap="round"/>
-        <path id="capUnder" d="M1178,402 C1240,426 1440,426 1502,402" fill="none" stroke="#FF3DCB" stroke-width="4" stroke-linecap="round"/>
-        <g id="gills"></g>
-        <path id="stemL" d="M1322,418 C1318,520 1312,620 1304,720" fill="none" stroke="url(#gStem)" stroke-width="5" stroke-linecap="round"/>
-        <path id="stemR" d="M1358,418 C1362,520 1368,620 1376,720" fill="none" stroke="url(#gStem)" stroke-width="5" stroke-linecap="round"/>
-        <path id="ring" d="M1318,462 C1330,478 1350,478 1362,462" fill="none" stroke="#22E4FF" stroke-width="4" stroke-linecap="round"/>
-        <g id="bruise">
-          <path d="M1250,320 C1262,300 1276,292 1290,290" fill="none" stroke="#22E4FF" stroke-width="3" stroke-linecap="round"/>
-          <path d="M1398,258 C1410,268 1418,282 1422,300" fill="none" stroke="#22E4FF" stroke-width="3" stroke-linecap="round"/>
-        </g>
-      </g>
-      <g id="spores"></g>
-    </svg>
-  </div>
+  <div id="cut"></div><div id="cutLbl">NIVEL DEL SUELO</div>
+  <div class="sec" id="secUp"><div class="n">LO QUE VES</div><div class="h">El fruto</div><div class="d">Dura unos días: su trabajo es soltar esporas.</div></div>
+  <div class="sec" id="secDown"><div class="n">LO QUE NO VES</div><div class="h">El <em>micelio</em></div><div class="d">Una red de hilos que vive bajo tierra.</div></div>
 
-  <!-- Beat 1: título (pantalla) -->
-  <div id="kicker1" class="abs kicker"><span class="dot"></span><span class="txt">Ciencia · hongos psilocibios</span></div>
-  <div id="title" class="abs">
-    <div class="display" id="t1">HONGOS</div>
-    <div class="display glowtext" id="t2">MÁGICOS</div>
-  </div>
-  <div id="sub1" class="abs">Lo que vemos es <b>solo la punta</b></div>
+  <div id="stat"><div class="n" id="statK">HONGOS CON PSILOCIBINA</div><div class="big"><span class="p" id="statP">+</span><span id="statNum">0</span></div><div class="d" id="statTxt">especies conocidas</div><div class="src" id="statSrc">Fuente</div></div>
 
-  <!-- Beat 2: arriba / abajo de la tierra -->
-  <div class="card lbl" id="lblUp"><div class="accent"></div>
-    <span class="tag amber">Lo que ves</span>
-    <div class="t">El hongo</div>
-    <div class="d">Es el <b style="color:var(--white)">fruto</b>: aparece unos días para soltar esporas.</div>
-  </div>
-  <div class="card lbl" id="lblDown"><div class="accent"></div>
-    <span class="tag lime">Lo que no ves</span>
-    <div class="t">El micelio</div>
-    <div class="d">Una red de hilos finísimos que vive <b style="color:var(--white)">bajo tierra</b>.</div>
-  </div>
-
-  <!-- Beat 3: dato -->
-  <div class="card abs" id="stat"><div class="accent"></div>
-    <div class="k">HONGOS CON PSILOCIBINA</div>
-    <div class="big hl" id="statNum">+0</div>
-    <div class="d" id="statTxt">especies en el mundo</div>
-    <div class="src" id="statSrc">Fuente</div>
-  </div>
-
+  <canvas id="grain" width="512" height="512" style="width:1960px;height:1120px"></canvas>
+  <div id="fade"></div>
 </div>
 
 <script src="../node_modules/gsap/dist/gsap.min.js"></script>
@@ -125,153 +85,243 @@
 <script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
 <script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
 <script src="../lib/stage.js"></script>
-<script>
-// Datos verificados (se completan con la ficha de PubMed)
-const STAT = { value: 200, prefix: '+', text: 'especies de hongos <b>producen psilocibina</b>', src: 'Guzmán et al., 1998 · Van Court et al., 2022' };
+<script type="module">
+import { createStage3D, THREE, fbm } from '../lib/three-stage.mjs';
+import { buildMushroom } from '../lib/mushroom3d.mjs';
 
-M.scene({
-  duration: 14,
-  grid: 'dots',
-  push: 0.02,
-  lights: [
-    { x: 0.18, y: 0.30, r: 1000, c: 'rgba(255,61,203,0.14)', ax: 80, ay: 40, sp: 0.07 },
-    { x: 0.78, y: 0.35, r: 1100, c: 'rgba(139,92,255,0.18)', ax: 60, ay: 60, sp: 0.05 },
-    { x: 0.62, y: 0.90, r: 900, c: 'rgba(182,255,59,0.07)', ax: 90, ay: 30, sp: 0.06 },
-    { x: 0.40, y: 0.05, r: 800, c: 'rgba(34,228,255,0.08)', ax: 70, ay: 30, sp: 0.09 },
-  ],
-  particles: { rgb: ['255,61,203', '34,228,255', '182,255,59', '201,184,255'], n: 70 },
-}, (tl, M) => {
+// Dato del beat 3 (de la ficha verificada)
+const STAT = { prefix: '+', value: 200, text: 'especies de hongos producen psilocibina', src: 'Van Court et al., 2022 · Guzmán et al., 1998' };
+
+M.scene({ duration: 14, push: 0 }, async (tl, M) => {
   const $ = (s) => document.querySelector(s);
-  const NS = 'http://www.w3.org/2000/svg';
-  const mk = (tag, attrs, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); parent.appendChild(e); return e; };
-  const r = M.rng(11);
-  const G = 720;               // línea de tierra (coordenadas del mundo)
-  const ROOT = { x: 1340, y: G };
+  const r = M.rng(21);
 
-  /* ---------- suelo: estratos y piedritas ---------- */
-  const strata = $('#strata');
-  const sCols = ['#FFB23F', '#FF3DCB', '#8B5CFF', '#22E4FF'];
-  for (let i = 0; i < 6; i++) {
-    const y = G + 90 + i * 110 + r() * 30;
-    let d = `M-200,${y}`;
-    for (let x = -200; x <= 2120; x += 160) d += ` Q${x + 80},${y + (r() - 0.5) * 40} ${x + 160},${y + (r() - 0.5) * 16}`;
-    mk('path', { d, fill: 'none', stroke: sCols[i % 4], 'stroke-width': 1.5, opacity: 0.16 - i * 0.018, class: 'stratum' }, strata);
-  }
-  const peb = $('#pebbles');
-  for (let i = 0; i < 26; i++) {
-    const x = r() * 1920, y = G + 60 + r() * 700, rx = 6 + r() * 16;
-    mk('ellipse', { cx: x, cy: y, rx, ry: rx * (0.5 + r() * 0.3), fill: 'none', stroke: '#C9B8FF', 'stroke-width': 1.2, opacity: 0.18 }, peb);
-  }
+  /* ---------------- grano de película (estático, sobre todo) ---------------- */
+  { const g = $('#grain').getContext('2d'); const im = g.createImageData(512, 512); const rn = M.rng(3);
+    for (let i = 0; i < im.data.length; i += 4) { const v = 128 + (rn() - 0.5) * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+    g.putImageData(im, 0, 0); }
 
-  /* ---------- laminillas del sombrero ---------- */
-  const gills = $('#gills');
-  for (let i = 0; i <= 12; i++) {
-    const u = i / 12, x = 1190 + u * 300, y = 404 + Math.sin(u * Math.PI) * 14;
-    mk('line', { x1: x, y1: y, x2: 1340 + (x - 1340) * 0.12, y2: 424, stroke: '#FF9BE8', 'stroke-width': 1.6, opacity: 0.8, class: 'gill' }, gills);
-  }
+  /* ---------------- escena 3D ---------------- */
+  const S = createStage3D($('#gl'), { bgTop: '#0f0a1c', bgBottom: '#040308', bgGlow: '#2a1440', bloom: { strength: 0.38, radius: 0.5, threshold: 0.9 }, exposure: 1.05 });
+  const { scene, camera, renderer } = S;
+  renderer.localClippingEnabled = true;
+  scene.fog = new THREE.FogExp2('#08050f', 0.035);
 
-  /* ---------- micelio: ramificación determinista ---------- */
-  const COLS = ['#FFB23F', '#FF3DCB', '#8B5CFF', '#22E4FF', '#B6FF3B', '#B6FF3B', '#E2FF9E'];
-  const branches = [];
-  function grow(x, y, a, len, depth, t0) {
-    if (depth > 6 || len < 22) return;
-    const ex = x + Math.cos(a) * len, ey = y + Math.sin(a) * len;
-    if (ey < G + 8 || ey > G + 640 || ex < 700 || ex > 1860) return;
-    const bend = (r() - 0.5) * len * 0.5;
-    const cx = (x + ex) / 2 + Math.cos(a + Math.PI / 2) * bend, cy = (y + ey) / 2 + Math.sin(a + Math.PI / 2) * bend;
-    const p = mk('path', { d: `M${x.toFixed(1)},${y.toFixed(1)} Q${cx.toFixed(1)},${cy.toFixed(1)} ${ex.toFixed(1)},${ey.toFixed(1)}`, fill: 'none', stroke: COLS[depth], 'stroke-width': Math.max(1.2, 4.2 - depth * 0.55), 'stroke-linecap': 'round' }, $('#myc'));
-    const dur = 0.38 + len / 700;
-    branches.push({ p, t0, dur, depth, ex, ey });
-    const kids = depth < 2 ? 3 : (r() < 0.75 ? 2 : 1);
-    for (let k = 0; k < kids; k++) {
-      const na = a + (k - (kids - 1) / 2) * (0.55 + r() * 0.35) + (r() - 0.5) * 0.3;
-      grow(ex, ey, na, len * (0.68 + r() * 0.12), depth + 1, t0 + dur * 0.8);
+  const m1 = buildMushroom({ seed: 1 });
+  const m2 = buildMushroom({ seed: 2, stemH: 1.25, capScale: 0.72 });
+  const m3 = buildMushroom({ seed: 3, stemH: 0.8, capScale: 0.5 });
+  m1.group.position.set(0.15, 0, 0.75);
+  m2.group.position.set(0.95, 0, 0.05); m2.group.rotation.set(0, 1.9, 0.12);
+  m3.group.position.set(-0.62, 0, 1.15); m3.group.rotation.set(0, -0.8, -0.16);
+  const shrooms = [m1, m2, m3];
+  shrooms.forEach((m) => scene.add(m.group));
+
+  // luces: clave cálida, contraluces de color, relleno violeta
+  const key = new THREE.DirectionalLight('#ffd6a0', 2.4); key.position.set(-3, 5, 5); key.castShadow = true; key.shadow.mapSize.set(2048, 2048); key.shadow.radius = 5;
+  Object.assign(key.shadow.camera, { left: -5, right: 5, top: 5, bottom: -5 }); key.shadow.camera.updateProjectionMatrix(); scene.add(key);
+  const rimA = new THREE.DirectionalLight('#ff6cc4', 1.0); rimA.position.set(4, 2.5, -3); scene.add(rimA);
+  const rimB = new THREE.DirectionalLight('#7fd8ff', 0.9); rimB.position.set(-4, 1.8, -3.5); scene.add(rimB);
+  scene.add(new THREE.HemisphereLight('#5a4790', '#0b0711', 0.45));
+  const under = new THREE.PointLight('#c6f36b', 0, 5, 1.8); under.position.set(0.2, -1.0, 3.0); scene.add(under);
+
+  /* ---------------- bloque de tierra (diorama en corte) ---------------- */
+  const BW = 7.2, BD = 3.6, BH = 2.3, FZ = BD / 2;      // ancho, profundidad, alto; cara frontal en z = FZ
+  const soil = new THREE.Group(); scene.add(soil);
+  // superficie superior con relieve (bordes a nivel 0 para que cierre con las caras)
+  const top = new THREE.PlaneGeometry(BW, BD, 220, 110); top.rotateX(-Math.PI / 2);
+  { const p = top.attributes.position, col = new Float32Array(p.count * 3), a = new THREE.Color('#24170f'), b = new THREE.Color('#40291a'), c2 = new THREE.Color('#110c10'), moss = new THREE.Color('#2f3a1c');
+    for (let i = 0; i < p.count; i++) { const x = p.getX(i), z = p.getZ(i);
+      const edge = Math.min(1, Math.min(BW / 2 - Math.abs(x), BD / 2 - Math.abs(z)) / 0.18);
+      const n = fbm(x * 1.4, 0.5, z * 1.4), n2 = fbm(x * 7, 2.5, z * 7);
+      p.setY(i, (0.045 * n + 0.012 * n2) * edge);
+      const c = a.clone().lerp(b, 0.5 + 0.5 * n2).lerp(c2, Math.max(0, n) * 0.8);
+      if (fbm(x * 2.2, 9, z * 2.2) > 0.25) c.lerp(moss, 0.45);
+      col.set([c.r, c.g, c.b], i * 3); }
+    top.setAttribute('color', new THREE.BufferAttribute(col, 3)); top.computeVertexNormals(); }
+  const topM = new THREE.Mesh(top, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.96 }));
+  topM.receiveShadow = true; soil.add(topM);
+  // caras del corte con estratos
+  const strataFace = (w, h, seed) => {
+    const g = new THREE.PlaneGeometry(w, h, Math.round(w * 40), Math.round(h * 40));
+    const p = g.attributes.position, col = new Float32Array(p.count * 3);
+    const bands = ['#3b2616', '#2a1b12', '#4a2f1c', '#22160f', '#35241a', '#1a120e'].map((h2) => new THREE.Color(h2));
+    for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i);
+      const yy = (h / 2 - y) + 0.08 * fbm(x * 0.9 + seed, 3.3, 1);
+      const k = Math.max(0, Math.min(5, Math.floor(Math.pow(Math.max(0, yy) / h, 0.8) * 6)));
+      const c = bands[k].clone().lerp(bands[Math.min(5, k + 1)], 0.5 + 0.5 * fbm(x * 3, y * 3, seed)).multiplyScalar(0.75 + 0.5 * (0.5 + 0.5 * fbm(x * 9, y * 9, seed + 2)));
+      col.set([c.r, c.g, c.b], i * 3); p.setZ(i, 0.01 * fbm(x * 12, y * 12, seed)); }
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.computeVertexNormals(); return g; };
+  const faceMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 });
+  const front = new THREE.Mesh(strataFace(BW, BH, 1), faceMat); front.position.set(0, -BH / 2, FZ); soil.add(front);
+  const left = new THREE.Mesh(strataFace(BD, BH, 5), faceMat); left.rotation.y = -Math.PI / 2; left.position.set(-BW / 2, -BH / 2, 0); soil.add(left);
+  const right = new THREE.Mesh(strataFace(BD, BH, 9), faceMat); right.rotation.y = Math.PI / 2; right.position.set(BW / 2, -BH / 2, 0); soil.add(right);
+  // piedritas incrustadas en el corte
+  const pebGeo = new THREE.IcosahedronGeometry(1, 1);
+  const inset = new THREE.InstancedMesh(pebGeo, new THREE.MeshStandardMaterial({ color: '#6a5446', roughness: 0.9, flatShading: true }), 160);
+  { const mm = new THREE.Matrix4(), q = new THREE.Quaternion();
+    for (let i = 0; i < 160; i++) { const s = 0.012 + Math.pow(r(), 3) * 0.07; q.setFromEuler(new THREE.Euler(r() * 3, r() * 3, r() * 3));
+      mm.compose(new THREE.Vector3((r() - 0.5) * (BW - 0.2), -0.08 - r() * (BH - 0.15), FZ - s * 0.4), q, new THREE.Vector3(s, s * 0.7, s * 0.6)); inset.setMatrixAt(i, mm); } }
+  soil.add(inset);
+  // piedritas en la superficie
+  const peb = new THREE.InstancedMesh(pebGeo, new THREE.MeshStandardMaterial({ color: '#54433b', roughness: 0.9, flatShading: true }), 70);
+  { const mm = new THREE.Matrix4(), q = new THREE.Quaternion();
+    for (let i = 0; i < 70; i++) { const s = 0.015 + r() * 0.045; q.setFromEuler(new THREE.Euler(r() * 3, r() * 3, r() * 3));
+      mm.compose(new THREE.Vector3((r() - 0.5) * (BW - 0.4), s * 0.2, (r() - 0.5) * (BD - 0.4)), q, new THREE.Vector3(s, s * 0.6, s * 0.9)); peb.setMatrixAt(i, mm); } }
+  peb.castShadow = true; peb.receiveShadow = true; soil.add(peb);
+  // aristas del bloque: líneas finas estilo lámina técnica
+  const edgeGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(BW, BH, BD)); edgeGeo.translate(0, -BH / 2, 0);
+  const edges = new THREE.LineSegments(edgeGeo, new THREE.LineBasicMaterial({ color: '#f3ede2', transparent: true, opacity: 0.28 })); soil.add(edges);
+  // sombra de contacto suave debajo del bloque
+  const shadowC = document.createElement('canvas'); shadowC.width = shadowC.height = 128; { const g2 = shadowC.getContext('2d'); const gr = g2.createRadialGradient(64, 64, 4, 64, 64, 64); gr.addColorStop(0, 'rgba(0,0,0,0.75)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g2.fillStyle = gr; g2.fillRect(0, 0, 128, 128); }
+  const floorSh = new THREE.Mesh(new THREE.PlaneGeometry(BW * 1.6, BD * 1.9), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(shadowC), transparent: true, depthWrite: false }));
+  floorSh.rotation.x = -Math.PI / 2; floorSh.position.y = -BH - 0.25; soil.add(floorSh);
+
+  /* ---------------- micelio: red fina sobre la cara del corte ---------------- */
+  const hyphae = [];
+  const cols = ['#fff1d2', '#f7e6b6', '#ecefae', '#d6ecaa', '#bfe6c4', '#a9dcd2'];
+  function branch(p0, dir, len, depth, t0) {
+    if (depth > 5 || len < 0.07) return;
+    const pts = [p0.clone()]; let p = p0.clone(); const d = dir.clone();
+    const steps = 7;
+    for (let i = 0; i < steps; i++) {
+      d.x += (r() - 0.5) * 0.55; d.y += (r() - 0.58) * 0.4; d.normalize();
+      p = p.clone().addScaledVector(d, len / steps);
+      p.z = FZ + 0.008 + 0.006 * r();
+      if (p.y > -0.035) { p.y = -0.035; d.y = -Math.abs(d.y); }
+      if (p.y < -BH + 0.1 || p.x < -1.5 || p.x > BW / 2 - 0.1) { if (pts.length < 3) return; break; }   // corta la rama en el borde
+      pts.push(p);
     }
-    if (depth >= 4 && r() < 0.6) branches[branches.length - 1].tip = true;
+    const curve = new THREE.CatmullRomCurve3(pts);
+    const rad = Math.max(0.0035, 0.013 - depth * 0.0017);
+    const early = pts.length < steps + 1;
+    const geo = new THREE.TubeGeometry(curve, 28, rad, 5, false);
+    const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: new THREE.Color(cols[Math.min(depth, cols.length - 1)]).multiplyScalar(0.8) }));
+    geo.setDrawRange(0, 0); soil.add(mesh);
+    const dur = 0.4 + len * 0.6;
+    const h = { mesh, geo, total: geo.index.count, curve, t0, dur, depth, prog: { v: 0 } };
+    hyphae.push(h);
+    tl.to(h.prog, { v: 1, duration: dur, ease: 'appleOut' }, t0);
+    const kids = early ? 0 : depth < 1 ? 3 : r() < 0.62 ? 2 : 1;
+    for (let k = 0; k < kids; k++) {
+      const nd = new THREE.Vector3(d.x + (r() - 0.5) * 1.8, d.y + (r() - 0.4) * 0.9, 0).normalize();
+      branch(p, nd, len * (0.6 + r() * 0.16), depth + 1, t0 + dur * 0.72);
+    }
   }
-  const T_MYC = 5.05;
-  [Math.PI * 0.5, Math.PI * 0.2, Math.PI * 0.8, Math.PI * 0.08, Math.PI * 0.92].forEach((a, i) => grow(ROOT.x + (i - 2) * 10, ROOT.y + 4, a, 150 + r() * 40, 0, T_MYC + i * 0.08));
-  branches.forEach((b) => M.draw(b.p, b.t0, { dur: b.dur, ease: 'appleOut' }));
-  // nodos en las puntas
-  const tips = $('#tips');
-  branches.filter((b) => b.tip).forEach((b) => {
-    const c = mk('circle', { cx: b.ex, cy: b.ey, r: 4.5, fill: '#E2FF9E' }, tips);
-    gsap.set(c, { svgOrigin: `${b.ex} ${b.ey}` });
-    tl.from(c, { scale: 0, duration: 0.4, ease: M.spring(0.15) }, b.t0 + b.dur);
+  const T_M = 6.0;
+  shrooms.forEach((m, i) => {
+    const bx = m.group.position.x;
+    [[-1, -0.7], [1, -0.6], [0.15, -1], [-0.3, -1]].forEach(([dx, dy], k) => branch(new THREE.Vector3(bx + (k - 1.5) * 0.03, -0.04, FZ + 0.01), new THREE.Vector3(dx, dy, 0).normalize(), 0.75 + r() * 0.35 - i * 0.1, 0, T_M + i * 0.22 + k * 0.07));
   });
-  // pulsos de señal que viajan por la red (beat 3)
-  const pulses = $('#pulses');
-  const main = branches.filter((b) => b.depth <= 2);
-  main.forEach((b, i) => {
-    const q = b.p.cloneNode(); q.setAttribute('stroke', '#FFFFFF'); q.setAttribute('stroke-width', 3.2); pulses.appendChild(q);
-    const L = b.p.getTotalLength();
-    gsap.set(q, { attr: { 'stroke-dasharray': `26 ${L + 40}`, 'stroke-dashoffset': 26 }, opacity: 0 });
-    const st = 9.4 + b.depth * 0.45 + (i % 5) * 0.12;
-    tl.set(q, { opacity: 0.95 }, st);
-    tl.to(q, { attr: { 'stroke-dashoffset': -L }, duration: 0.55 + L / 900, ease: 'none' }, st);
-    tl.set(q, { opacity: 0 }, st + 0.55 + L / 900);
+  const tipGeo = new THREE.SphereGeometry(1, 10, 8);
+  hyphae.filter((h, i) => h.depth >= 4 && i % 2 === 0).forEach((h) => {
+    const s = new THREE.Mesh(tipGeo, new THREE.MeshBasicMaterial({ color: '#fbffe8' }));
+    s.position.copy(h.curve.getPointAt(1)); s.scale.setScalar(0.0001); soil.add(s);
+    tl.to(s.scale, { x: 0.011, y: 0.011, z: 0.011, duration: 0.4, ease: M.spring(0.12) }, h.t0 + h.dur);
+  });
+  const pulses = hyphae.filter((h) => h.depth <= 1).map((h, i) => {
+    const s = new THREE.Mesh(tipGeo, new THREE.MeshBasicMaterial({ color: '#ffffff' })); s.scale.setScalar(0.0001); soil.add(s);
+    const pr = { u: 0, on: 0 }; const st = 9.9 + h.depth * 0.45 + (i % 6) * 0.13;
+    tl.set(pr, { on: 1 }, st); tl.to(pr, { u: 1, duration: 0.6 + h.dur * 0.4, ease: 'none' }, st); tl.set(pr, { on: 0 }, st + 0.6 + h.dur * 0.4);
+    return { s, h, pr };
   });
 
-  /* ---------- esporas (procedural) ---------- */
-  const sp = $('#spores');
-  const S = Array.from({ length: 34 }, (_, i) => ({ x0: 1200 + r() * 280, ph: r() * 6.28, v: 26 + r() * 40, t0: 1.6 + r() * 3.2, s: 1.6 + r() * 2.4, c: ['#FF9BE8', '#FFD48A', '#E2FF9E', '#9EF3FF'][i % 4] }));
-  const sEls = S.map((s) => mk('circle', { r: s.s, fill: s.c, opacity: 0 }, sp));
+  /* ---------------- escaneo inicial (wireframe → sólido) ---------------- */
+  const scan = { y: -0.2 };
+  const planeSolid = new THREE.Plane(new THREE.Vector3(0, -1, 0), scan.y);   // conserva y < scan
+  const planeWire = new THREE.Plane(new THREE.Vector3(0, 1, 0), -scan.y);    // conserva y > scan
+  shrooms.forEach((m) => { m.solids.forEach((s) => (s.material.clippingPlanes = [planeSolid])); m.wireMat.clippingPlanes = [planeWire]; });
+  const ringGeo = new THREE.RingGeometry(1.25, 1.265, 128); ringGeo.rotateX(-Math.PI / 2);
+  const scanRing = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: '#8fe8ff', transparent: true, opacity: 0.9, side: THREE.DoubleSide }));
+  scene.add(scanRing);
+  tl.to(scan, { y: 3.0, duration: 2.1, ease: 'apple' }, 0.35);
 
-  /* ---------- Beat 1 · título + hongo (0 – 4.6 s) ---------- */
-  gsap.set('#cam', { x: 0, y: 0, scale: 1 });
-  M.draw($('#ground'), 0.2, { dur: 1.1, ease: 'apple', from: '50% 50%' });
-  const k1 = M.textIn($('#kicker1 .txt'), 0.2, { type: 'words', dur: 0.8 });
-  M.zoomIn($('#kicker1 .dot'), 0.2, { ease: M.spring(0.15) });
-  const t1 = M.textIn($('#t1'), 0.35, { dur: M.D.reveal, stagger: 0.04, ease: 'appleOut' });
-  const t2 = M.textIn($('#t2'), 0.6, { dur: M.D.reveal, stagger: 0.045, ease: 'appleOut', cls: 'hl' });
-  M.draw($('#stemL'), 0.55, { dur: 0.8, ease: 'appleOut', from: '100% 100%' });
-  M.draw($('#stemR'), 0.55, { dur: 0.8, ease: 'appleOut', from: '100% 100%' });
-  M.draw($('#cap'), 1.05, { dur: 1.0, ease: 'apple', from: '50% 50%' });
-  M.draw($('#capUnder'), 1.35, { dur: 0.7, ease: 'apple', from: '50% 50%' });
-  tl.from('#capFill', { opacity: 0, duration: 0.9, ease: 'appleOut' }, 1.6);
-  tl.from('.gill', { opacity: 0, duration: 0.3, stagger: 0.03, ease: 'appleOut' }, 1.6);
-  M.draw($('#ring'), 1.7, { dur: 0.5, ease: 'appleOut' });
-  tl.from('#bruise path', { drawSVG: '0%', duration: 0.6, stagger: 0.15, ease: 'appleOut' }, 2.0);
-  const sub = M.textIn($('#sub1'), 1.7, { type: 'words', dur: 0.7, stagger: 0.05, ease: 'appleOut' });
-  tl.from('#rootGlow', { opacity: 0, duration: 1.0 }, 4.6);
+  /* ---------------- cámara ---------------- */
+  const cam = { ang: -0.5, rad: 7.6, y: 1.5, lx: 0.25, ly: 1.22, lz: 0.6, shift: -300 };
+  tl.to(cam, { ang: -0.24, duration: 4.8, ease: 'apple' }, 0);
+  // beat 2: se aleja y baja para mostrar el corte del suelo (diorama)
+  tl.to(cam, { ang: -0.1, rad: 11.4, y: 1.2, lx: 0.9, ly: -0.25, lz: 0.6, shift: -420, duration: 1.8, ease: 'apple' }, 4.5);
+  // beat 3: gira un poco y deja lugar al dato a la izquierda
+  tl.to(cam, { ang: 0.1, rad: 11.0, y: 1.5, lx: 0.9, ly: 0.05, shift: -640, duration: 1.6, ease: 'apple' }, 9.35);
+  tl.to(cam, { ang: 0.24, duration: 3.6, ease: 'none' }, 10.95);
+  tl.to(under, { intensity: 2.2, duration: 2.5, ease: 'appleOut' }, 6.2);
 
-  // salida del título
-  M.textOut(k1, 4.2, { type: 'words' });
-  M.zoomOut($('#kicker1 .dot'), 4.2);
-  M.textOut(t1, 4.25, { stagger: 0.02 });
-  M.textOut(t2, 4.32, { stagger: 0.02 });
-  M.textOut(sub, 4.2, { type: 'words', stagger: 0.02 });
+  /* ---------------- anotaciones (líneas que siguen al 3D) ---------------- */
+  const svg = $('#ann'); const NS = 'http://www.w3.org/2000/svg';
+  const mkL = () => { const l = document.createElementNS(NS, 'polyline'); l.setAttribute('fill', 'none'); l.setAttribute('stroke', 'rgba(243,237,226,0.75)'); l.setAttribute('stroke-width', '1.5'); svg.appendChild(l); const d = document.createElementNS(NS, 'circle'); d.setAttribute('r', '5'); d.setAttribute('fill', '#E0A15A'); svg.appendChild(d); return { l, d }; };
+  const ANN = [
+    { el: $('#L1'), a: m1.anchors.umbo, pos: [1520, 190], t: 2.0 },
+    { el: $('#L2'), a: m1.anchors.gills, pos: [1520, 440], t: 2.45 },
+    { el: $('#L3'), a: m1.anchors.stem, pos: [1520, 640], t: 2.9 },
+  ].map((o) => ({ ...o, ...mkL(), p: { v: 0 } }));
+  ANN.forEach((o) => {
+    gsap.set(o.el, { left: o.pos[0], top: o.pos[1] });
+    tl.to(o.p, { v: 1, duration: 0.7, ease: 'appleOut' }, o.t);
+    M.textIn(o.el.querySelector('.h'), o.t + 0.25, { type: 'words', dur: 0.6, ease: 'appleOut' });
+    M.textIn(o.el.querySelector('.n'), o.t + 0.2, { type: 'words', dur: 0.5, ease: 'appleOut' });
+    M.textIn(o.el.querySelector('.d'), o.t + 0.4, { type: 'words', dur: 0.6, stagger: 0.03, ease: 'appleOut' });
+    tl.to(o.p, { v: 0, duration: 0.45, ease: 'appleIn' }, 4.3);
+    tl.to(o.el, { opacity: 0, y: -10, duration: 0.4, ease: 'appleIn' }, 4.3);
+  });
 
-  /* ---------- Beat 2 · cámara baja a la tierra (4.6 – 9.4 s) ---------- */
-  // pie del hongo (1340,720) → pantalla (1180,470) con escala 0.72
-  tl.to('#cam', { x: 1180 - 1340 * 0.72, y: 470 - 720 * 0.72, scale: 0.72, duration: 1.3, ease: 'apple' }, 4.45);
-  gsap.set(['#lblUp', '#lblDown'], { transformPerspective: 1400, rotationY: 8 });
-  M.popIn($('#lblUp'), 5.6, { dur: M.D.reveal, rotX: 10, ease: 'appleOut' });
-  M.popIn($('#lblDown'), 6.6, { dur: M.D.reveal, rotX: 10, ease: 'appleOut' });
-  M.popOut($('#lblUp'), 9.1, { dur: 0.45 });
-  M.popOut($('#lblDown'), 9.18, { dur: 0.45 });
+  /* ---------------- tipografía ---------------- */
+  const k1 = M.textIn($('#kicker'), 0.3, { type: 'words', dur: 0.7, ease: 'appleOut' });
+  const t1 = M.textIn($('#title .w1'), 0.45, { dur: 0.9, stagger: 0.035, ease: 'appleOut' });
+  const t2 = M.textIn($('#title .w2'), 0.7, { dur: 0.9, stagger: 0.035, ease: 'appleOut' });
+  const sb = M.textIn($('#sub'), 1.3, { type: 'words', dur: 0.7, stagger: 0.035, ease: 'appleOut' });
+  tl.from('.corner', { opacity: 0, scale: 0.6, duration: 0.6, stagger: 0.06, ease: 'appleOut' }, 0.2);
+  const pl = M.textIn($('#plate'), 0.6, { type: 'words', dur: 0.6, ease: 'appleOut' });
+  M.textOut(k1, 4.2, { type: 'words' }); M.textOut(t1, 4.25, { stagger: 0.015 }); M.textOut(t2, 4.3, { stagger: 0.015 }); M.textOut(sb, 4.2, { type: 'words', stagger: 0.01 });
 
-  /* ---------- Beat 3 · red viva + dato (9.4 – 14 s) ---------- */
-  tl.to('#cam', { x: 1370 - 1340 * 0.72, y: 480 - 720 * 0.72, scale: 0.72, duration: 1.4, ease: 'apple' }, 9.25);
-  $('#statTxt').innerHTML = STAT.text; $('#statSrc').textContent = STAT.src;
-  gsap.set('#stat', { transformPerspective: 1400, rotationY: 8 });
-  M.popIn($('#stat'), 9.7, { dur: M.D.reveal, rotX: 10, ease: 'appleOut' });
-  M.counter($('#statNum'), { from: 0, to: STAT.value, prefix: STAT.prefix, at: 9.95, dur: 1.4, ease: 'expo.out' });
+  // beat 2
+  const cutY = { v: 1200 };
+  const sU = [M.textIn($('#secUp .n'), 6.0, { type: 'words', dur: 0.6, ease: 'appleOut' }), M.textIn($('#secUp .h'), 6.1, { type: 'words', dur: 0.8, ease: 'appleOut' }), M.textIn($('#secUp .d'), 6.35, { type: 'words', dur: 0.7, stagger: 0.03, ease: 'appleOut' })];
+  const sD = [M.textIn($('#secDown .n'), 7.0, { type: 'words', dur: 0.6, ease: 'appleOut' }), M.textIn($('#secDown .h'), 7.1, { type: 'words', dur: 0.8, ease: 'appleOut' }), M.textIn($('#secDown .d'), 7.35, { type: 'words', dur: 0.7, stagger: 0.03, ease: 'appleOut' })];
+  tl.fromTo('#cut', { scaleX: 0 }, { scaleX: 1, duration: 1.0, ease: 'apple' }, 5.8);
+  const cl = M.textIn($('#cutLbl'), 6.2, { type: 'words', dur: 0.6, ease: 'appleOut' });
+  [...sU, ...sD].forEach((sp, i) => M.textOut(sp, 9.0 + (i % 3) * 0.03, { type: 'words', stagger: 0.01 }));
+  M.textOut(cl, 9.05, { type: 'words' });
+  tl.to('#cut', { scaleX: 0, duration: 0.5, ease: 'appleIn' }, 9.1);
 
-  // salida final
-  M.popOut($('#stat'), 12.95, { dur: 0.5 });
-  tl.to('#cam', { y: '+=60', scale: 0.76, duration: 0.9, ease: 'appleIn' }, 13.0);
-  tl.to(['#myc', '#tips', '#shroom', '#soil', '#rootGlow'], { opacity: 0, duration: 0.55, ease: 'appleIn' }, 13.15);
+  // beat 3
+  $('#statNum').textContent = '0'; $('#statP').textContent = STAT.prefix; $('#statTxt').textContent = STAT.text; $('#statSrc').textContent = STAT.src;
+  const s1 = M.textIn($('#statK'), 9.95, { type: 'words', dur: 0.6, ease: 'appleOut' });
+  tl.from('#stat .big', { yPercent: 30, opacity: 0, duration: 0.9, ease: 'appleOut' }, 10.05);
+  M.counter($('#statNum'), { from: 0, to: STAT.value, at: 10.1, dur: 1.5, ease: 'expo.out' });
+  const s2 = M.textIn($('#statTxt'), 10.45, { type: 'words', dur: 0.7, stagger: 0.03, ease: 'appleOut' });
+  const s3 = M.textIn($('#statSrc'), 10.8, { type: 'words', dur: 0.6, stagger: 0.02, ease: 'appleOut' });
+  tl.to('#stat', { opacity: 0, y: -16, duration: 0.5, ease: 'appleIn' }, 13.05);
+  tl.to(['.corner', '#plate'], { opacity: 0, duration: 0.4, ease: 'appleIn' }, 13.2);
+  tl.to('#fade', { opacity: 1, duration: 0.55, ease: 'appleIn' }, 13.3);
 
-  /* ---------- por frame: esporas ---------- */
-  M.onFrame((t) => {
-    S.forEach((s, i) => {
-      const u = t - s.t0;
-      const on = u > 0 && t < 13.3;
-      const y = 410 - u * s.v, x = s.x0 + Math.sin(u * 1.4 + s.ph) * 18;
-      const a = on ? Math.min(1, u * 1.5) * Math.max(0, 1 - u / 5) : 0;
-      sEls[i].setAttribute('cx', x.toFixed(1)); sEls[i].setAttribute('cy', y.toFixed(1)); sEls[i].setAttribute('opacity', a.toFixed(3));
+  /* ---------------- por cuadro ---------------- */
+  const tmp = new THREE.Vector3();
+  M.onFrame(() => {
+    // escaneo
+    planeSolid.constant = scan.y; planeWire.constant = -scan.y;
+    const scanning = scan.y > -0.1 && scan.y < 2.95;
+    scanRing.visible = scanning; scanRing.position.y = scan.y;
+    shrooms.forEach((m) => m.wires.forEach((w) => (w.visible = scan.y < 2.95)));
+    // micelio
+    hyphae.forEach((h) => h.geo.setDrawRange(0, Math.floor(h.total * h.prog.v / 3) * 3));
+    pulses.forEach(({ s, h, pr }) => { if (pr.on && pr.u > 0 && pr.u < 1) { s.position.copy(h.curve.getPointAt(pr.u)); s.scale.setScalar(0.03); } else s.scale.setScalar(0.0001); });
+    // cámara (con desplazamiento de lente para dejar lugar al texto)
+    camera.position.set(Math.sin(cam.ang) * cam.rad, cam.y, Math.cos(cam.ang) * cam.rad);
+    camera.lookAt(cam.lx, cam.ly, cam.lz);
+    camera.setViewOffset(1920, 1080, cam.shift, 0, 1920, 1080);
+    S.render();
+    // anotaciones
+    ANN.forEach((o) => {
+      const p = S.project(o.a);
+      const lx = o.pos[0] - 24, ly = o.pos[1] + 44;
+      const mx = p.x + (lx - p.x) * 0.55;
+      const v = o.p.v;
+      const ex = p.x + (lx - p.x) * v, ey = p.y + (ly - p.y) * Math.min(1, v * 1.6);
+      o.l.setAttribute('points', v > 0.001 ? `${p.x.toFixed(1)},${p.y.toFixed(1)} ${(p.x + (mx - p.x) * Math.min(1, v * 1.6)).toFixed(1)},${ey.toFixed(1)} ${ex.toFixed(1)},${ey.toFixed(1)}` : '');
+      o.d.setAttribute('cx', p.x.toFixed(1)); o.d.setAttribute('cy', p.y.toFixed(1)); o.d.setAttribute('r', (5 * Math.min(1, v * 3)).toFixed(2));
     });
+    // línea de corte: proyección del nivel del suelo al frente
+    tmp.set(BW / 2, 0, FZ); const pc = S.project(tmp);
+    $('#cut').style.top = pc.y.toFixed(1) + 'px'; $('#cutLbl').style.top = (pc.y - 34).toFixed(1) + 'px';
   });
 });
 </script>
