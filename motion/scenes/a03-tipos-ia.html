@@ -1,0 +1,611 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>A03 · Tipos de IA (diagramas vivos)</title>
+<link rel="stylesheet" href="../lib/theme.css">
+<link rel="stylesheet" href="../lib/fonts-spartan.css">
+<style>
+  /* Diagramas vivos: grafito, líneas y nodos en hueso, un color funcional apagado por familia de red. */
+  body { background: #15171A; }
+  #cv { position: absolute; inset: 0; }
+  #grain { position: absolute; inset: -20px; opacity: 0.05; mix-blend-mode: overlay; pointer-events: none; }
+  #vig { position: absolute; inset: 0; background: radial-gradient(120% 110% at 50% 48%, transparent 55%, rgba(8,9,10,0.55) 100%); pointer-events: none; }
+  .lab { position: absolute; left: 140px; top: 916px; font-family: var(--f-mono); font-weight: 400; font-size: 24px; line-height: 1.3;
+         letter-spacing: 0.24em; text-transform: uppercase; color: #E9E6DF; opacity: 0; white-space: nowrap; }
+  .lab i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 18px; vertical-align: 3px; }
+  #fade { position: absolute; inset: 0; background: #15171A; opacity: 1; }
+</style>
+</head>
+<body>
+<div id="world">
+  <canvas id="cv" width="1920" height="1080"></canvas>
+  <div id="vig"></div>
+  <div id="labs"></div>
+  <canvas id="grain" width="512" height="512" style="width:1960px;height:1120px"></canvas>
+  <div id="fade"></div>
+</div>
+<script src="../node_modules/gsap/dist/gsap.min.js"></script>
+<script src="../node_modules/gsap/dist/SplitText.min.js"></script>
+<script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
+<script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
+<script src="../lib/stage.js"></script>
+<script src="../lib/audio.js"></script>
+<script>
+/* Storyboard (30 s). Un único conjunto de nodos se reorganiza de una arquitectura a la siguiente
+   mientras la señal fluye; cada tipo muestra QUÉ hace con los datos (sin texto, salvo un rótulo mono chico).
+   1 Perceptrón   3 entradas con peso (grosor) → la neurona se llena hasta el umbral → dispara
+   2 Red densa    capas 4-6-6-3, la activación cruza capa por capa → gana una salida
+   3 CNN          imagen 8×8 (anillo); un filtro 3×3 la recorre → 2 mapas (bordes verticales / horizontales)
+   4 RNN          una celda con bucle → se despliega en el tiempo (5 pasos), el estado pasa de uno a otro
+   5 Autoencoder  reloj de arena 8-5-2-5-8: el mismo patrón entra, se comprime y se reconstruye
+   6 GAN          generador ⟶ imagen ⟶ discriminador; 3 rondas: ✕ ✕ ✓ mientras la imagen mejora
+   7 Transformer  fila de tokens; cada uno mira a todos con arcos de grosor = atención → red completa
+   8 Difusión     nube de ruido que se limpia en 5 pasos hasta formar una imagen (sol y montañas)
+   9 Refuerzo     agente ↔ entorno: prueba y choca; después va directo a la meta → recompensa vuelve
+   cierre         todo se repliega en una sola neurona; fundido al grafito */
+const TR = 0.68;                                   // duración de cada transformación entre arquitecturas
+const LIVE = [2.7, 2.4, 2.7, 2.5, 2.4, 2.7, 2.5, 2.5, 2.9];
+M.scene({ duration: 30, push: 0, audio: { key: 'D', mode: 'lydian', bed: { cycle: 8, bright: 0.85, sub: 0.15 } } }, (tl, M) => {
+  const $ = (s) => document.querySelector(s);
+  const ctx = $('#cv').getContext('2d');
+  { const g = $('#grain').getContext('2d'); const im = g.createImageData(512, 512); const rn = M.rng(3);
+    for (let i = 0; i < im.data.length; i += 4) { const v = 128 + (rn() - 0.5) * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+    g.putImageData(im, 0, 0); }
+
+  /* ---------- paleta y utilidades ---------- */
+  const BG = [21, 23, 26], BONE = [233, 230, 223], AMB = [201, 154, 75], SAGE = [143, 169, 138],
+        TERRA = [196, 110, 82], SLATE = [122, 146, 178], LILAC = [162, 148, 190];
+  const TAU = Math.PI * 2;
+  const rgba = (c, a) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${Math.max(0, Math.min(1, a)).toFixed(3)})`;
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, m) => a + (b - a) * m;
+  const mixc = (A, B, m) => [lerp(A[0], B[0], m), lerp(A[1], B[1], m), lerp(A[2], B[2], m)];
+  const seg = (t, a, b) => clamp((t - a) / (b - a));
+  const eA = gsap.parseEase('apple'), eO = gsap.parseEase('appleOut'), eI = gsap.parseEase('appleIn'), eSp = M.spring(0.15);
+  const pop = (lt, d, dur = 0.5) => (lt <= d ? 0 : eSp(clamp((lt - d) / dur)));
+  const nd = (x, y, o = {}) => ({ x, y, w: o.w ?? 15, h: o.h ?? o.w ?? 15, q: o.q ?? 0, fc: o.fc ?? BONE, fa: o.fa ?? 0, sc: o.sc ?? BONE, sa: o.sa ?? 1, sw: o.sw ?? 2 });
+  const gauss = (r) => { const u = Math.max(1e-6, r()), v = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(TAU * v); };
+
+  function line(ax, ay, bx, by, c, a, w, e = 1) {
+    if (a <= 0.004 || e <= 0 || w <= 0.05) return;
+    ctx.strokeStyle = rgba(c, a); ctx.lineWidth = w; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(ax + (bx - ax) * e, ay + (by - ay) * e); ctx.stroke();
+  }
+  function dot(x, y, r, c, a) { if (a <= 0.004 || r <= 0.1) return; ctx.fillStyle = rgba(c, a); ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill(); }
+  function ring(x, y, r, c, a, w = 2) { if (a <= 0.004 || r <= 0.1) return; ctx.strokeStyle = rgba(c, a); ctx.lineWidth = w; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.stroke(); }
+  function head(x, y, ang, s, c, a) {
+    if (a <= 0.004) return; ctx.fillStyle = rgba(c, a); ctx.beginPath();
+    ctx.moveTo(x, y); ctx.lineTo(x - s * Math.cos(ang - 0.45), y - s * Math.sin(ang - 0.45)); ctx.lineTo(x - s * Math.cos(ang + 0.45), y - s * Math.sin(ang + 0.45)); ctx.closePath(); ctx.fill();
+  }
+  // curva cuadrática parcial (0..e) + punto en k
+  const qpt = (p0, c, p1, k) => [lerp(lerp(p0[0], c[0], k), lerp(c[0], p1[0], k), k), lerp(lerp(p0[1], c[1], k), lerp(c[1], p1[1], k), k)];
+  function qcurve(p0, c, p1, col, a, w, e = 1) {
+    if (a <= 0.004 || e <= 0) return; ctx.strokeStyle = rgba(col, a); ctx.lineWidth = w; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(p0[0], p0[1]);
+    const n = 28; for (let i = 1; i <= n; i++) { const p = qpt(p0, c, p1, (i / n) * e); ctx.lineTo(p[0], p[1]); } ctx.stroke();
+  }
+  function drawNode(n) {
+    if (n.w < 0.35 || n.h < 0.35) return;
+    const m = Math.min(n.w, n.h), rad = m * (1 - n.q) + m * n.q * 0.14;
+    ctx.beginPath(); ctx.roundRect(n.x - n.w, n.y - n.h, n.w * 2, n.h * 2, rad);
+    if (n.sa > 0.02) { ctx.fillStyle = rgba(BG, 1); ctx.fill(); }
+    if (n.fa > 0.004) { ctx.fillStyle = rgba(n.fc, n.fa); ctx.fill(); }
+    if (n.sa > 0.004 && n.sw > 0.05) { ctx.strokeStyle = rgba(n.sc, n.sa); ctx.lineWidth = n.sw; ctx.stroke(); }
+  }
+
+  /* =====================================================================================
+     ARQUITECTURAS: nodes(lt) → lista de nodos (orden estable), under/over(lt, a, S) → trazos.
+     lt = tiempo local (puede ser < 0 durante la entrada o > duración durante la salida).
+     S = posiciones actuales de SUS nodos (siguen el morph).
+     ===================================================================================== */
+  const B = [];
+
+  /* ---------- 1 · Perceptrón ---------- */
+  {
+    const W = [1, 0.45, 0.75], IX = 700, OX = 1100, AX = 1380;
+    B.push({ key: 'perc', name: 'Perceptrón', col: AMB, act: 2.55,
+      nodes(lt) {
+        const ins = [400, 540, 680].map((y, j) => nd(IX, y, { w: 16 * pop(lt, 0.05 + j * 0.09), fc: AMB, fa: W[j] * eA(seg(lt, 0.95 + j * 0.08, 1.2 + j * 0.08)) }));
+        return [...ins, nd(OX, 540, { w: 30 * pop(lt, 0.3), fc: AMB, fa: lt >= 1.95 ? 1 : 0 })];
+      },
+      under(lt, a, S) {
+        const o = S[3];
+        for (let j = 0; j < 3; j++) {
+          const n = S[j];
+          line(n.x, n.y, o.x, o.y, BONE, 0.4 * a, 1 + 4.5 * W[j], eO(seg(lt, 0.45 + j * 0.08, 0.9 + j * 0.08)));
+          const k = seg(lt, 1.15 + j * 0.05, 1.7 + j * 0.05);
+          if (k > 0 && k < 1) { const kk = eA(k); dot(lerp(n.x, o.x, kk), lerp(n.y, o.y, kk), 4 + 2.5 * W[j], AMB, a * (0.5 + 0.5 * W[j])); }
+        }
+        const e = eO(seg(lt, 1.95, 2.35));
+        line(o.x, o.y, AX, o.y, BONE, 0.4 * a, 2.5, e);
+        if (e > 0.98) dot(AX, o.y, 5, BONE, 0.7 * a);
+        const k = seg(lt, 1.97, 2.45); if (k > 0 && k < 1) dot(lerp(o.x + 30, AX, eA(k)), o.y, 6, AMB, a);
+      },
+      over(lt, a, S) {
+        const o = S[3], lev = eA(seg(lt, 1.5, 1.95));
+        if (lev > 0 && lt < 1.96) {
+          ctx.save(); ctx.beginPath(); ctx.arc(o.x, o.y, Math.max(0, o.w - 1), 0, TAU); ctx.clip();
+          ctx.fillStyle = rgba(AMB, 0.95 * a); ctx.fillRect(o.x - o.w, o.y + o.w - 2 * o.w * lev, 2 * o.w, 2 * o.w * lev); ctx.restore();
+          ring(o.x, o.y, o.w, BONE, a, 2);
+        }
+        const k = seg(lt, 1.95, 2.8); if (k > 0 && k < 1) ring(o.x, o.y, o.w + 6 + 64 * eO(k), AMB, (1 - k) * 0.7 * a, 2);
+      },
+      sfx(t0) { M.sfx(t0 + 1.95, 'tap', { deg: 4, oct: 5, gain: -2 }); M.sfx(t0 + 1.18, 'swell', { dur: 0.75, gain: -9, degs: [0, 4, 7] }); },
+    });
+  }
+
+  /* ---------- 2 · Red densa (MLP) ---------- */
+  {
+    const X = [600, 840, 1080, 1320], C = [4, 6, 6, 3], GAP = 112, r = M.rng(11);
+    const act = C.map((n, li) => Array.from({ length: n }, (_, k) => (li === 3 ? (k === 1 ? 1 : 0.22) : 0.2 + r() * 0.8)));
+    const wt = []; for (let li = 0; li < 3; li++) wt.push(Array.from({ length: C[li] * C[li + 1] }, () => r()));
+    const L = (li) => 0.5 + li * 0.36;
+    const idx = []; let c = 0; C.forEach((n) => { idx.push(Array.from({ length: n }, () => c++)); });
+    B.push({ key: 'mlp', name: 'Red densa', col: AMB, act: 2.15,
+      nodes(lt) {
+        const out = [];
+        C.forEach((n, li) => { for (let k = 0; k < n; k++) out.push(nd(X[li], 540 + (k - (n - 1) / 2) * GAP, { w: 15, fc: AMB, fa: act[li][k] * eA(seg(lt, L(li), L(li) + 0.22)) })); });
+        return out;
+      },
+      under(lt, a, S) {
+        for (let li = 0; li < 3; li++) {
+          const e = eO(seg(lt, -0.3 + li * 0.1, 0.2 + li * 0.1)), kp = seg(lt, L(li) + 0.04, L(li + 1));
+          let q = 0;
+          for (let i = 0; i < C[li]; i++) for (let j = 0; j < C[li + 1]; j++) {
+            const w = wt[li][q++], A = S[idx[li][i]], Bn = S[idx[li + 1][j]];
+            line(A.x, A.y, Bn.x, Bn.y, BONE, a * (0.08 + 0.14 * w), 0.8 + 1.4 * w, e);
+            if (kp > 0 && kp < 1) { const kk = eA(kp); dot(lerp(A.x, Bn.x, kk), lerp(A.y, Bn.y, kk), 2.4 + 1.6 * w, AMB, a * act[li][i] * (0.3 + 0.7 * w)); }
+          }
+        }
+        const o = S[idx[3][1]], e2 = eO(seg(lt, 1.72, 2.1));
+        line(o.x, o.y, 1540, o.y, BONE, 0.4 * a, 2.5, e2);
+        if (e2 > 0.98) dot(1540, o.y, 5, BONE, 0.7 * a);
+      },
+      over(lt, a, S) {
+        const o = S[idx[3][1]], k = seg(lt, 1.72, 2.5);
+        if (k > 0 && k < 1) ring(o.x, o.y, o.w + 5 + 44 * eO(k), AMB, (1 - k) * 0.7 * a, 2);
+      },
+      sfx(t0) { [1, 2].forEach((li, i) => M.sfx(t0 + L(li) + 0.02, 'tap', { deg: [0, 4][i], oct: 5, bright: 0.7, gain: -6 })); M.sfx(t0 + 1.72, 'tap', { deg: 7, oct: 5, gain: -3 }); },
+    });
+  }
+
+  /* ---------- 3 · CNN ---------- */
+  {
+    const GX = 660, GY = 540, CS = 44, FS = 32, MX = 1310, MY = [405, 675];
+    const IMG = Array.from({ length: 64 }, (_, i) => { const x = i % 8 - 3.5, y = Math.floor(i / 8) - 3.5; return clamp(1 - Math.abs(Math.hypot(x, y) - 2.55) / 1.05); });
+    const KX = [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], KY = [[-1, -2, -1], [0, 0, 0], [1, 2, 1]];
+    const conv = (K) => { const o = []; for (let y = 0; y < 6; y++) for (let x = 0; x < 6; x++) { let s = 0; for (let j = 0; j < 3; j++) for (let i = 0; i < 3; i++) s += K[j][i] * IMG[(y + j) * 8 + x + i]; o.push(Math.abs(s)); } const m = Math.max(...o); return o.map((v) => v / m); };
+    const FM = [conv(KX), conv(KY)];
+    const S0 = 0.3, S1 = 1.8;
+    const step = (lt) => (lt < S0 ? -1 : Math.min(35, Math.floor(seg(lt, S0, S1) * 36)));
+    const gx0 = GX - 4 * CS, gy0 = GY - 4 * CS;
+    const cell = (m, c) => [MX + ((c % 6) - 2.5) * FS, MY[m] + (Math.floor(c / 6) - 2.5) * FS];
+    B.push({ key: 'cnn', name: 'CNN', col: SAGE, act: 2.1,
+      nodes(lt) {
+        const out = [], st = step(lt);
+        for (let i = 0; i < 64; i++) out.push(nd(gx0 + (i % 8 + 0.5) * CS, gy0 + (Math.floor(i / 8) + 0.5) * CS, { w: 18, q: 1, fc: BONE, fa: 0.07 + 0.85 * IMG[i], sa: 0 }));
+        for (let m = 0; m < 2; m++) for (let c = 0; c < 36; c++) {
+          const on = c <= st, [x, y] = cell(m, c);
+          out.push(nd(x, y, { w: 13, q: 1, fc: SAGE, fa: on ? 0.1 + 0.88 * FM[m][c] : 0.05, sa: on ? 0 : 0.2, sw: 1 }));
+        }
+        return out;
+      },
+      under() {},
+      over(lt, a) {
+        const st = step(lt); if (st < 0) return;
+        const ka = a * eO(seg(lt, 0.12, 0.3)) * (1 - eI(seg(lt, 1.85, 2.1)));
+        if (ka <= 0.004) return;
+        const kx = st % 6, ky = Math.floor(st / 6), x = gx0 + kx * CS, y = gy0 + ky * CS;
+        ctx.fillStyle = rgba(SAGE, 0.14 * ka); ctx.fillRect(x, y, 3 * CS, 3 * CS);
+        ctx.strokeStyle = rgba(SAGE, ka); ctx.lineWidth = 3; ctx.strokeRect(x, y, 3 * CS, 3 * CS);
+        for (let m = 0; m < 2; m++) {
+          const [cx, cy] = cell(m, st);
+          line(x + 3 * CS, y, cx - FS / 2, cy - FS / 2, SAGE, 0.42 * ka, 1.2);
+          line(x + 3 * CS, y + 3 * CS, cx - FS / 2, cy + FS / 2, SAGE, 0.42 * ka, 1.2);
+          ctx.strokeStyle = rgba(SAGE, ka); ctx.lineWidth = 2; ctx.strokeRect(cx - FS / 2, cy - FS / 2, FS, FS);
+        }
+      },
+      sfx(t0) { M.sfx(t0 + S0, 'scan', { dur: S1 - S0, from: 600, to: 3200, q: 6, gain: -2 }); },
+    });
+  }
+
+  /* ---------- 4 · RNN ---------- */
+  {
+    const XS = [560, 760, 960, 1160, 1360], CY = 540, IY = 720, OY = 360, HW = 46;
+    const U = (lt, i) => eA(seg(lt, 0.3 + Math.abs(i - 2) * 0.06, 1.0 + Math.abs(i - 2) * 0.06));
+    const P = (i) => 1.15 + i * 0.17;          // paso i procesado
+    B.push({ key: 'rnn', name: 'RNN', col: SLATE, act: 2.05,
+      nodes(lt) {
+        const out = [];
+        for (let i = 0; i < 5; i++) {
+          const x = lerp(960, XS[i], U(lt, i)), s = seg(lt, P(i) - 0.12, P(i) + 0.05);
+          out.push(nd(x, CY, { w: HW, q: 0.62, fc: SLATE, fa: eA(s) * (0.28 + 0.14 * i) }));
+          out.push(nd(x, IY, { w: 12, fc: BONE, fa: 0.85 * eA(seg(lt, P(i) - 0.2, P(i) - 0.08)), sa: 0.9 }));
+          out.push(nd(x, OY, { w: 12, fc: SLATE, fa: 0.9 * eA(seg(lt, P(i) + 0.05, P(i) + 0.18)), sa: 0.9 }));
+        }
+        return out;
+      },
+      under(lt, a, S) {
+        for (let i = 0; i < 5; i++) {
+          const c = S[i * 3], xi = S[i * 3 + 1], yo = S[i * 3 + 2];
+          const va = a * eO(seg(lt, -0.25, 0.1));
+          line(xi.x, xi.y - 12, c.x, c.y + HW, BONE, 0.45 * va, 1.8); head(c.x, c.y + HW + 2, -Math.PI / 2, 11, BONE, 0.6 * va);
+          line(c.x, c.y - HW, yo.x, yo.y + 12, BONE, 0.45 * va, 1.8); head(yo.x, yo.y + 14, -Math.PI / 2, 11, BONE, 0.6 * va);
+          const ki = seg(lt, P(i) - 0.2, P(i) - 0.02); if (ki > 0 && ki < 1) dot(xi.x, lerp(xi.y, c.y + HW, eA(ki)), 4.5, BONE, a);
+          if (i < 4) {
+            const n2 = S[(i + 1) * 3], e = eO(seg(lt, 0.8 + i * 0.05, 1.1 + i * 0.05));
+            const x0 = c.x + HW + 4, x1 = n2.x - HW - 6;
+            if (x1 > x0 + 4) { line(x0, CY, x1, CY, BONE, 0.55 * a, 2.2, e); if (e > 0.95) head(x1 + 4, CY, 0, 13, BONE, 0.7 * a); }
+            const k = seg(lt, P(i) + 0.02, P(i + 1) - 0.1); if (k > 0 && k < 1) dot(lerp(x0, x1, eA(k)), CY, 6, SLATE, a);
+          }
+        }
+        // bucle recurrente (celda plegada): sale por la derecha y vuelve a entrar
+        const la = a * eO(seg(lt, -0.3, 0.1)) * (1 - eI(seg(lt, 0.25, 0.55)));
+        if (la > 0.004) {
+          const c = S[6], cx = c.x + HW + 34, R = 42, e = eO(seg(lt, -0.3, 0.15));
+          ctx.strokeStyle = rgba(BONE, 0.7 * la); ctx.lineWidth = 2.4; ctx.beginPath(); ctx.arc(cx, CY, R, Math.PI + 0.75, Math.PI + 0.75 + (TAU - 1.5) * e); ctx.stroke();
+          if (e > 0.95) { const an = Math.PI - 0.75; head(cx + R * Math.cos(an), CY + R * Math.sin(an), an + Math.PI / 2 + 0.25, 12, BONE, 0.8 * la); }
+          const k = seg(lt, -0.1, 0.3); if (k > 0 && k < 1) { const an = Math.PI + 0.75 + (TAU - 1.5) * eA(k); dot(cx + R * Math.cos(an), CY + R * Math.sin(an), 5, SLATE, la); }
+        }
+      },
+      over() {},
+      sfx(t0) { for (let i = 0; i < 5; i++) M.sfx(t0 + P(i) - 0.02, 'tick', { gain: -1 - i * 0.4, pan: -0.5 + i * 0.25 }); },
+    });
+  }
+
+  /* ---------- 5 · Autoencoder ---------- */
+  {
+    const X = [560, 760, 960, 1160, 1360], C = [8, 5, 2, 5, 8], GAP = 72, r = M.rng(23);
+    const V = [0.3, 0.9, 0.55, 0.15, 0.8, 1.0, 0.4, 0.65];
+    const act = C.map((n, li) => Array.from({ length: n }, (_, k) => (li === 0 ? V[k] : li === 4 ? clamp(V[k] + (r() - 0.5) * 0.1) : li === 2 ? 1 : 0.3 + r() * 0.6)));
+    const idx = []; let c = 0; C.forEach((n) => idx.push(Array.from({ length: n }, () => c++)));
+    const L = (li) => 0.45 + li * 0.3;
+    B.push({ key: 'ae', name: 'Autoencoder', col: TERRA, act: 2.05,
+      nodes(lt) {
+        const out = [];
+        C.forEach((n, li) => { for (let k = 0; k < n; k++) out.push(nd(X[li], 540 + (k - (n - 1) / 2) * GAP, { w: li === 2 ? 17 : 13, fc: TERRA, fa: act[li][k] * eA(seg(lt, L(li), L(li) + 0.2)) })); });
+        return out;
+      },
+      under(lt, a, S) {
+        // silueta de reloj de arena
+        const pa = a * eO(seg(lt, -0.35, 0.25));
+        if (pa > 0.004) {
+          const top = idx.map((l) => [S[l[0]].x, S[l[0]].y - 34]), bot = idx.map((l) => [S[l[l.length - 1]].x, S[l[l.length - 1]].y + 34]);
+          ctx.beginPath(); ctx.moveTo(top[0][0] - 40, top[0][1]); top.forEach((p) => ctx.lineTo(p[0], p[1])); ctx.lineTo(top[4][0] + 40, top[4][1]);
+          ctx.lineTo(bot[4][0] + 40, bot[4][1]); for (let i = 4; i >= 0; i--) ctx.lineTo(bot[i][0], bot[i][1]); ctx.lineTo(bot[0][0] - 40, bot[0][1]); ctx.closePath();
+          ctx.fillStyle = rgba(TERRA, 0.07 * pa); ctx.fill();
+        }
+        for (let li = 0; li < 4; li++) {
+          const e = eO(seg(lt, -0.3 + li * 0.08, 0.2 + li * 0.08)), kp = seg(lt, L(li) + 0.04, L(li + 1));
+          for (const i of idx[li]) for (const j of idx[li + 1]) {
+            const A = S[i], Bn = S[j]; line(A.x, A.y, Bn.x, Bn.y, BONE, a * 0.13, 1, e);
+            if (kp > 0 && kp < 1) { const kk = eA(kp); dot(lerp(A.x, Bn.x, kk), lerp(A.y, Bn.y, kk), 2.6, TERRA, a * 0.8); }
+          }
+        }
+        // perfil de entrada y de salida: barras espejadas (mismo patrón)
+        for (let k = 0; k < 8; k++) {
+          const ni = S[idx[0][k]], no = S[idx[4][k]];
+          const gi = eO(seg(lt, 0.1 + k * 0.03, 0.45 + k * 0.03)), go = eO(seg(lt, L(4) + 0.05 + k * 0.03, L(4) + 0.4 + k * 0.03));
+          ctx.fillStyle = rgba(TERRA, 0.85 * a);
+          if (gi > 0) { const w = 110 * V[k] * gi; ctx.fillRect(ni.x - 34 - w, ni.y - 5, w, 10); }
+          if (go > 0) { const w = 110 * act[4][k] * go; ctx.fillRect(no.x + 34, no.y - 5, w, 10); }
+        }
+      },
+      over() {},
+      sfx(t0) { M.sfx(t0 + L(2) + 0.05, 'swell', { dur: 0.85, degs: [0, 4, 7], gain: -4 }); M.sfx(t0 + L(4) + 0.08, 'tap', { deg: 4, oct: 5, gain: -3 }); },
+    });
+  }
+
+  /* ---------- 6 · GAN ---------- */
+  {
+    const GXs = [400, 520, 640], GC = [2, 4, 6], DXs = [1280, 1400, 1520], DC = [6, 4, 1], GAP = 70, IX = 960, IY = 540, CS = 36, VX = 1592;
+    const r = M.rng(31);
+    const TGT = Array.from({ length: 36 }, (_, i) => { const x = i % 6 - 2.5, y = Math.floor(i / 6) - 2.5; return clamp(2.6 - (Math.abs(x) + Math.abs(y)) * 0.95); });
+    const NZ = [0, 1, 2, 3].map(() => Array.from({ length: 36 }, () => r()));
+    const Q = [0, 0.3, 0.66, 1];
+    const R = (k) => 0.4 + k * 0.72;
+    const stage = (lt) => { let s = 0; for (let k = 0; k < 3; k++) if (lt >= R(k) + 0.26) s = k + 1; return s; };
+    const imgVal = (lt, i) => { const s = stage(lt); const q = Q[s]; return q * TGT[i] + (1 - q) * NZ[s][i] * 0.85; };
+    const ids = { g: [], img: [], d: [] }; let c = 0;
+    GC.forEach((n) => ids.g.push(Array.from({ length: n }, () => c++)));
+    for (let i = 0; i < 36; i++) ids.img.push(c++);
+    DC.forEach((n) => ids.d.push(Array.from({ length: n }, () => c++)));
+    const ly = (n, k) => 540 + (k - (n - 1) / 2) * GAP;
+    const verdict = (lt) => { for (let k = 2; k >= 0; k--) if (lt >= R(k) + 0.56) return k; return -1; };
+    B.push({ key: 'gan', name: 'GAN', col: TERRA, act: 2.3,
+      nodes(lt) {
+        const out = [];
+        GC.forEach((n, li) => { for (let k = 0; k < n; k++) { let f = 0; for (let q = 0; q < 3; q++) f = Math.max(f, 1 - Math.abs(lt - (R(q) + li * 0.07)) / 0.18); out.push(nd(GXs[li], ly(n, k), { w: 12, fc: TERRA, fa: 0.25 + 0.7 * clamp(f), sc: TERRA, sa: 0.95 })); } });
+        for (let i = 0; i < 36; i++) out.push(nd(IX + ((i % 6) - 2.5) * CS, IY + (Math.floor(i / 6) - 2.5) * CS, { w: 15, q: 1, fc: BONE, fa: 0.06 + 0.86 * imgVal(lt, i), sa: 0 }));
+        const v = verdict(lt);
+        DC.forEach((n, li) => { for (let k = 0; k < n; k++) {
+          let f = 0; for (let q = 0; q < 3; q++) f = Math.max(f, 1 - Math.abs(lt - (R(q) + 0.34 + li * 0.08)) / 0.16);
+          const last = li === 2;
+          out.push(nd(DXs[li], ly(n, k), { w: last ? 20 : 12, fc: last && v === 2 ? BONE : BONE, fa: last ? (v === 2 ? 0.9 : 0.12 + 0.5 * clamp(f)) : 0.12 + 0.55 * clamp(f), sa: 0.95 }));
+        } });
+        return out;
+      },
+      under(lt, a, S) {
+        const e = (d) => eO(seg(lt, -0.3 + d, 0.2 + d));
+        for (let li = 0; li < 2; li++) for (const i of ids.g[li]) for (const j of ids.g[li + 1]) line(S[i].x, S[i].y, S[j].x, S[j].y, TERRA, 0.3 * a, 1.1, e(li * 0.06));
+        for (let k = 0; k < 6; k++) {
+          const g = S[ids.g[2][k]], p = S[ids.img[k * 6]], q = S[ids.img[k * 6 + 5]], d = S[ids.d[0][k]];
+          line(g.x, g.y, p.x - CS / 2 - 6, p.y, TERRA, 0.3 * a, 1.1, e(0.14));
+          line(q.x + CS / 2 + 6, q.y, d.x, d.y, BONE, 0.3 * a, 1.1, e(0.2));
+        }
+        for (let li = 0; li < 2; li++) for (const i of ids.d[li]) for (const j of ids.d[li + 1]) line(S[i].x, S[i].y, S[j].x, S[j].y, BONE, 0.26 * a, 1.1, e(0.26 + li * 0.06));
+        // pulsos por ronda: generador → imagen, imagen → discriminador
+        for (let q = 0; q < 3; q++) {
+          const k1 = seg(lt, R(q), R(q) + 0.26);
+          if (k1 > 0 && k1 < 1) for (let k = 0; k < 6; k++) { const g = S[ids.g[2][k]], p = S[ids.img[k * 6]]; dot(lerp(GXs[0], p.x - CS / 2, eA(k1)), lerp(540, p.y, eA(k1)), 3.2, TERRA, a * 0.9); }
+          const k2 = seg(lt, R(q) + 0.3, R(q) + 0.56);
+          if (k2 > 0 && k2 < 1) for (let k = 0; k < 6; k++) { const p = S[ids.img[k * 6 + 5]]; dot(lerp(p.x + CS / 2, DXs[2], eA(k2)), lerp(p.y, 540, eA(k2)), 3.2, BONE, a * 0.9); }
+        }
+      },
+      over(lt, a) {
+        const v = verdict(lt); if (v < 0) return;
+        const t = lt - (R(v) + 0.56), s = eO(clamp(t / 0.2)), fade = v < 2 ? 1 - eI(seg(t, 0.36, 0.5)) : 1;
+        const al = a * s * fade;
+        if (al <= 0.004) return;
+        const cx = VX + 34, cy = IY, z = 20 * (0.7 + 0.3 * s);
+        ctx.lineWidth = 5; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        if (v < 2) { ctx.strokeStyle = rgba(TERRA, al); ctx.beginPath(); ctx.moveTo(cx - z, cy - z); ctx.lineTo(cx + z, cy + z); ctx.moveTo(cx + z, cy - z); ctx.lineTo(cx - z, cy + z); ctx.stroke(); }
+        else { ctx.strokeStyle = rgba(BONE, al); ctx.beginPath(); ctx.moveTo(cx - z, cy + 1); ctx.lineTo(cx - z * 0.3, cy + z * 0.75); ctx.lineTo(cx + z * 1.05, cy - z * 0.85); ctx.stroke();
+          const k = seg(t, 0, 0.7); if (k < 1) ring(DXs[2], IY, 20 + 5 + 40 * eO(k), BONE, (1 - k) * 0.6 * a, 2); }
+      },
+      sfx(t0) {
+        for (let q = 0; q < 3; q++) {
+          M.sfx(t0 + R(q) + 0.02, 'tap', { deg: 0, oct: 4, gain: -6, bright: 0.8, pan: -0.4 });
+          if (q < 2) M.sfx(t0 + R(q) + 0.56, 'tick', { gain: -2, pan: 0.45 });
+          else M.sfx(t0 + R(q) + 0.56, 'tap', { deg: 4, oct: 5, gain: -2, pan: 0.35 });
+        }
+      },
+    });
+  }
+
+  /* ---------- 7 · Transformer ---------- */
+  {
+    const N = 8, X0 = 505, DX = 130, TY = 740, r = M.rng(41);
+    const base = Array.from({ length: N }, () => 0.12 + r() * 0.3);
+    const Wn = Array.from({ length: N }, (_, i) => { const s = Array.from({ length: N }, (_, j) => (j === i ? -9 : Math.exp(2.4 * r() + (Math.abs(i - j) === 1 ? 0.6 : 0)))); const m = Math.max(...s); return s.map((v) => Math.max(0, v / m)); });
+    const Q0 = 0.35, DQ = 0.19, ALL = Q0 + N * DQ + 0.05;
+    const arc = (A, Bn, e, col, al, w) => {
+      if (al <= 0.004 || e <= 0) return; const x1 = A.x, x2 = Bn.x, TY = (A.y + Bn.y) / 2, cx = (x1 + x2) / 2, R = Math.abs(x2 - x1) / 2, fromLeft = x1 < x2;
+      if (R < 2) return;
+      ctx.strokeStyle = rgba(col, al); ctx.lineWidth = w; ctx.lineCap = 'round'; ctx.beginPath();
+      if (fromLeft) ctx.arc(cx, TY - 26, R, Math.PI, Math.PI + Math.PI * e); else ctx.arc(cx, TY - 26, R, 0, -Math.PI * e, true);
+      ctx.stroke();
+    };
+    const qOf = (lt) => (lt < Q0 || lt >= Q0 + N * DQ ? -1 : Math.floor((lt - Q0) / DQ));
+    B.push({ key: 'tf', name: 'Transformer', col: SLATE, act: 2.2,
+      nodes(lt) {
+        const q = qOf(lt), out = [];
+        for (let i = 0; i < N; i++) {
+          let fa = base[i], y = TY;
+          if (q >= 0) { if (i === q) { fa = 0.95; y = TY - 6; } else fa = base[i] + 0.55 * Wn[q][i]; }
+          if (lt >= ALL) fa = base[i] + 0.35 * eA(seg(lt, ALL, ALL + 0.3));
+          out.push(nd(X0 + i * DX, y, { w: 38, h: 22, q: 0.55, fc: SLATE, fa }));
+        }
+        return out;
+      },
+      under(lt, a, S) {
+        const q = qOf(lt);
+        if (q >= 0) {
+          const s0 = Q0 + q * DQ, e = eO(seg(lt, s0, s0 + 0.13));
+          for (let j = 0; j < N; j++) if (j !== q) { const w = Wn[q][j]; arc(S[q], S[j], e, SLATE, a * (0.25 + 0.75 * w), 1 + 8 * w); }
+          if (q > 0) { const p = q - 1, f = 1 - seg(lt, s0, s0 + 0.1); for (let j = 0; j < N; j++) if (j !== p) { const w = Wn[p][j]; arc(S[p], S[j], 1, SLATE, a * f * (0.25 + 0.75 * w), 1 + 8 * w); } }
+        }
+        const ea = eO(seg(lt, ALL, ALL + 0.35)), last = 1 - seg(lt, ALL, ALL + 0.12);
+        if (lt >= ALL) {
+          for (let j = 0; j < N; j++) if (j !== N - 1) { const w = Wn[N - 1][j]; arc(S[N - 1], S[j], 1, SLATE, a * last * (0.25 + 0.75 * w), 1 + 8 * w); }
+          for (let i = 0; i < N; i++) for (let j = i + 1; j < N; j++) { const w = (Wn[i][j] + Wn[j][i]) / 2; arc(S[i], S[j], ea, BONE, a * (0.06 + 0.3 * w), 0.8 + 3.2 * w); }
+        }
+      },
+      over() {},
+      sfx(t0) { M.sfx(t0 + Q0, 'shimmer', { degs: [4, 7, 9], oct: 5, spread: 0.05, gain: -4 }); M.sfx(t0 + ALL, 'shimmer', { degs: [2, 4, 7], oct: 5, spread: 0.08, gain: -7 }); },
+    });
+  }
+
+  /* ---------- 8 · Difusión ---------- */
+  {
+    const G = 14, CS = 36, r = M.rng(53);
+    const pix = [];
+    for (let gy = 0; gy < G; gy++) for (let gx = 0; gx < G; gx++) {
+      const sun = clamp(2.35 - Math.hypot(gx - 9.6, gy - 3.4));
+      const m1 = clamp((gy - (4.6 + Math.abs(gx - 4.2) * 1.05)) * 0.9 + 0.5) * 0.92;
+      const m2 = clamp((gy - (7.3 + Math.abs(gx - 10.2) * 0.85)) * 0.9 + 0.5) * 0.6;
+      const v = Math.max(0.05, sun, m1, m2);
+      pix.push({ x: 960 + (gx - 6.5) * CS, y: 540 + (gy - 6.5) * CS, v, sun: sun > Math.max(m1, m2) ? 1 : 0,
+        sx: 960 + clamp(gauss(r) * 250, -620, 620), sy: 540 + clamp(gauss(r) * 150, -330, 330), n: [r(), r(), r(), r(), r(), r()], hot: r() > 0.86 ? 1 : 0 });
+    }
+    const LV = [1, 0.7, 0.46, 0.26, 0.11, 0], T = (s) => 0.3 + s * 0.33;
+    const sig = (lt) => { let s = 1; for (let k = 1; k <= 5; k++) s += (LV[k] - LV[k - 1]) * eA(seg(lt, T(k), T(k) + 0.2)); return s; };
+    const stepOf = (lt) => { let k = 0; for (let s = 1; s <= 5; s++) if (lt >= T(s)) k = s; return k; };
+    B.push({ key: 'dif', name: 'Difusión', col: TERRA, act: 2.25,
+      nodes(lt) {
+        const s = sig(lt), k = stepOf(lt);
+        return pix.map((p) => {
+          const val = (1 - s) * p.v + s * p.n[k] * 0.8, rad = 16 * Math.sqrt(clamp(val));
+          return nd(lerp(p.x, p.sx, s), lerp(p.y, p.sy, s), { w: rad, fc: mixc(BONE, TERRA, (1 - s) * p.sun + s * p.hot), fa: 0.92, sa: 0 });
+        });
+      },
+      under() {},
+      over() {},
+      sfx(t0) { M.sfx(t0 - 0.2, 'grow', { dur: 1.3, density: 150, gain: -3 }); M.sfx(t0 + T(5), 'swell', { dur: 1.5, degs: [0, 4, 7, 11], gain: -4 }); M.sfx(t0 + T(5) + 0.02, 'tap', { deg: 7, oct: 5, gain: -4 }); },
+    });
+  }
+
+  /* ---------- 9 · Aprendizaje por refuerzo ---------- */
+  {
+    const GC = [1180, 540], CS = 76, WALL = new Set(['1,1', '2,1', '1,3', '2,3', '3,3']);
+    const cpos = (c, rr) => [GC[0] + (c - 2) * CS, GC[1] + (rr - 2) * CS];
+    const EP1 = [[0, 4], [1, 4], [2, 4], [3, 4]], EP2 = [[0, 4], [0, 3], [0, 2], [1, 2], [2, 2], [3, 2], [4, 2], [4, 1], [4, 0]];
+    const E1 = (i) => 0.45 + (i - 1) * 0.15, BUMP = 0.95, RST = 1.2, E2 = (i) => 1.45 + (i - 1) * 0.09, WIN = E2(8) + 0.09;
+    const BR = [[660, 478], [660, 602], [770, 540]];
+    const agentAt = (lt) => {
+      let p = cpos(...EP1[0]);
+      if (lt < RST) {
+        for (let i = 1; i < EP1.length; i++) { const k = eA(seg(lt, E1(i), E1(i) + 0.12)); if (k > 0) { const a = cpos(...EP1[i - 1]), b = cpos(...EP1[i]); p = [lerp(a[0], b[0], k), lerp(a[1], b[1], k)]; } }
+        const b = seg(lt, BUMP, BUMP + 0.2); if (b > 0 && b < 1) p = [p[0], p[1] - Math.sin(Math.PI * b) * CS * 0.32];
+        return p;
+      }
+      const k0 = eA(seg(lt, RST, RST + 0.18)), end = cpos(...EP1[3]), st = cpos(...EP2[0]);
+      p = [lerp(end[0], st[0], k0), lerp(end[1], st[1], k0)];
+      for (let i = 1; i < EP2.length; i++) { const k = eA(seg(lt, E2(i), E2(i) + 0.09)); if (k > 0) { const a = cpos(...EP2[i - 1]), b = cpos(...EP2[i]); p = [lerp(a[0], b[0], k), lerp(a[1], b[1], k)]; } }
+      return p;
+    };
+    const val = (c, rr, lt) => { const i = EP2.findIndex(([x, y]) => x === c && y === rr); if (i < 0) return 0; return eA(seg(lt, WIN + 0.1 + (8 - i) * 0.05, WIN + 0.3 + (8 - i) * 0.05)) * (0.2 + 0.5 * i / 8); };
+    B.push({ key: 'rl', name: 'Refuerzo', col: LILAC, act: 2.6,
+      nodes(lt) {
+        const out = [];
+        for (let rr = 0; rr < 5; rr++) for (let c = 0; c < 5; c++) {
+          const [x, y] = cpos(c, rr), w = WALL.has(c + ',' + rr);
+          const bump = c === 3 && rr === 3 ? 1 - Math.abs(seg(lt, BUMP, BUMP + 0.4) * 2 - 1) : 0;
+          out.push(nd(x, y, { w: 33, q: 1, fc: w ? BONE : LILAC, fa: w ? 0.4 + 0.45 * bump : val(c, rr, lt), sa: w ? 0 : 0.28, sw: 1.2 }));
+        }
+        const brain = eA(seg(lt, WIN + 0.4, WIN + 0.6));
+        BR.forEach(([x, y], i) => out.push(nd(x, y, { w: i === 2 ? 18 : 13, fc: LILAC, fa: 0.2 + 0.7 * brain * (i === 2 ? 1 : 0.7) })));
+        const [ax, ay] = agentAt(lt);
+        out.push(nd(ax, ay, { w: 17, fc: LILAC, fa: 1, sa: 0 }));
+        return out;
+      },
+      under(lt, a, S) {
+        const e = eO(seg(lt, -0.25, 0.25));
+        line(S[25].x, S[25].y, S[27].x, S[27].y, BONE, 0.35 * a, 1.4, e); line(S[26].x, S[26].y, S[27].x, S[27].y, BONE, 0.35 * a, 1.4, e);
+        // bucle agente ↔ entorno: acción (arriba) y recompensa (abajo)
+        const A0 = [S[27].x + 28, S[27].y - 14], A1 = [S[10].x - 56, S[10].y - 62], AC = [880, 410];
+        const B0 = [S[10].x - 56, S[10].y + 62], B1 = [S[27].x + 28, S[27].y + 14], BC = [880, 670];
+        const e2 = eO(seg(lt, 0.0, 0.4));
+        qcurve(A0, AC, A1, BONE, 0.5 * a, 2, e2); if (e2 > 0.95) { const p = qpt(A0, AC, A1, 0.98); head(A1[0] + 2, A1[1], Math.atan2(A1[1] - p[1], A1[0] - p[0]), 12, BONE, 0.7 * a); }
+        qcurve(B0, BC, B1, BONE, 0.5 * a, 2, e2); if (e2 > 0.95) { const p = qpt(B0, BC, B1, 0.98); head(B1[0] + 2, B1[1], Math.atan2(B1[1] - p[1], B1[0] - p[0]), 12, BONE, 0.7 * a); }
+        for (const [t0, col] of [[0.3, BONE], [RST + 0.05, BONE]]) { const k = seg(lt, t0, t0 + 0.3); if (k > 0 && k < 1) { const p = qpt(A0, AC, A1, eA(k)); dot(p[0], p[1], 5, col, 0.9 * a); } }
+        { const k = seg(lt, BUMP + 0.12, BUMP + 0.45); if (k > 0 && k < 1) { const p = qpt(B0, BC, B1, eA(k)); dot(p[0], p[1], 4, BONE, 0.45 * a); } }
+        { const k = seg(lt, WIN + 0.08, WIN + 0.42); if (k > 0 && k < 1) { const p = qpt(B0, BC, B1, eA(k)); dot(p[0], p[1], 8, LILAC, a); } }
+      },
+      over(lt, a, S) {
+        // rastro del agente
+        const trail = (path, tfn, upto, col, al) => {
+          ctx.strokeStyle = rgba(col, al); ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.beginPath();
+          let [x, y] = cpos(...path[0]); ctx.moveTo(x, y);
+          for (let i = 1; i < path.length; i++) { const k = eA(seg(upto, tfn(i), tfn(i) + (path === EP1 ? 0.12 : 0.09))); if (k <= 0) break; const p0 = cpos(...path[i - 1]), p1 = cpos(...path[i]); ctx.lineTo(lerp(p0[0], p1[0], k), lerp(p0[1], p1[1], k)); }
+          ctx.stroke();
+        };
+        const t1a = a * (1 - eI(seg(lt, RST - 0.1, RST + 0.15)));
+        if (t1a > 0.004 && lt > E1(1)) trail(EP1, E1, lt, BONE, 0.35 * t1a);
+        if (lt > E2(1)) trail(EP2, E2, lt, LILAC, 0.75 * a);
+        drawNode(S[28]);
+        const [gx, gy] = cpos(4, 0), k = seg(lt, WIN, WIN + 0.8);
+        const s = 1 + 0.25 * Math.sin(Math.PI * seg(lt, WIN, WIN + 0.3));
+        ctx.save(); ctx.translate(gx, gy); ctx.rotate(Math.PI / 4); ctx.strokeStyle = rgba(LILAC, a * eO(seg(lt, -0.1, 0.3))); ctx.lineWidth = 2.5;
+        ctx.strokeRect(-11 * s, -11 * s, 22 * s, 22 * s); ctx.restore();
+        if (k > 0 && k < 1) { ring(gx, gy, 20 + 70 * eO(k), LILAC, (1 - k) * 0.8 * a, 2.5); ring(gx, gy, 20 + 38 * eO(k), LILAC, (1 - k) * 0.5 * a, 1.5); }
+        const kb = seg(lt, WIN + 0.42, WIN + 1.0); if (kb > 0 && kb < 1) ring(S[27].x, S[27].y, 20 + 40 * eO(kb), LILAC, (1 - kb) * 0.6 * a, 2);
+      },
+      sfx(t0) {
+        for (let i = 1; i < EP1.length; i++) M.sfx(t0 + E1(i), 'tick', { tone: 'glass', gain: -5, pan: -0.1 + i * 0.12 });
+        M.sfx(t0 + BUMP + 0.08, 'tap', { deg: 0, oct: 3, bright: 0.5, gain: -3 });
+        [2, 4, 6].forEach((i, n) => M.sfx(t0 + E2(i), 'tap', { deg: [0, 2, 4][n], oct: 5, bright: 0.6, gain: -8 }));
+        M.sfx(t0 + WIN, 'shimmer', { degs: [4, 7, 11], oct: 5, spread: 0.04, gain: -2 });
+      },
+    });
+  }
+
+  /* ---------- cierre: todo vuelve a ser una neurona ---------- */
+  B.push({ key: 'end', name: '', col: AMB, act: 0.3, nodes(lt) { return [nd(960, 540, { w: 16, fc: AMB, fa: 1 })]; }, under() {},
+    over(lt, a, S) { const k = seg(lt, -0.05, 0.5); if (k > 0 && k < 1) ring(S[0].x, S[0].y, 20 + 36 * eO(k), AMB, (1 - k) * 0.6 * a, 2); } });
+
+  /* ---------- horario ---------- */
+  let t = 0.25;
+  B.forEach((b, i) => { b.t0 = t; b.t1 = t + (LIVE[i] ?? 0.6); t = b.t1 + (i === B.length - 2 ? 0.45 : TR); });
+
+  /* =====================================================================================
+     POOL DE NODOS: cada arquitectura toma nodos del pool; entre dos arquitecturas se
+     emparejan por cercanía (los que sobran se funden en el vecino más cercano, los que
+     faltan nacen de él).
+     ===================================================================================== */
+  const NP = 200;
+  const perms = [];
+  B.forEach((b, k) => {
+    const specs = b.nodes(0);
+    if (k === 0) { perms.push(specs.map((_, j) => j)); return; }
+    const prev = B[k - 1], pS = prev.nodes(prev.t1 - prev.t0), pP = perms[k - 1];
+    const pairs = [];
+    pP.forEach((pi, a) => specs.forEach((s, j) => pairs.push([Math.hypot(pS[a].x - s.x, pS[a].y - s.y), pi, j])));
+    pairs.sort((u, v) => u[0] - v[0] || u[1] - v[1] || u[2] - v[2]);
+    const perm = new Array(specs.length).fill(-1), usedP = new Set();
+    for (const [, pi, j] of pairs) { if (perm[j] >= 0 || usedP.has(pi)) continue; perm[j] = pi; usedP.add(pi); }
+    let free = 0; const inPrev = new Set(pP);
+    for (let j = 0; j < specs.length; j++) if (perm[j] < 0) { while (usedP.has(free) || inPrev.has(free)) free++; perm[j] = free; usedP.add(free); }
+    perms.push(perm);
+  });
+  // transiciones precalculadas: estado de salida y de llegada por nodo del pool
+  const TRN = [];
+  for (let k = 0; k < B.length - 1; k++) {
+    const A = B[k].nodes(B[k].t1 - B[k].t0), Bn = B[k + 1].nodes(0), pa = perms[k], pb = perms[k + 1];
+    const from = new Array(NP).fill(null), to = new Array(NP).fill(null);
+    pa.forEach((pi, j) => (from[pi] = A[j]));
+    pb.forEach((pi, j) => (to[pi] = Bn[j]));
+    const visA = A.filter((n) => n.w > 0.5), visB = Bn.filter((n) => n.w > 0.5);
+    const near = (list, x, y) => { let best = list[0], d = 1e18; for (const n of list) { const dd = (n.x - x) ** 2 + (n.y - y) ** 2; if (dd < d) { d = dd; best = n; } } return best; };
+    const rr = M.rng(100 + k), items = [];
+    for (let i = 0; i < NP; i++) {
+      let f = from[i], g = to[i];
+      if (!f && !g) continue;
+      if (!f) { const n = near(visA, g.x, g.y); f = { ...g, x: n.x, y: n.y, w: 0, h: 0 }; }
+      if (!g) { const n = near(visB, f.x, f.y); g = { ...f, x: n.x, y: n.y, w: 0, h: 0 }; }
+      items.push({ i, f, g, sx: clamp((g.x - 300) / 1320), bow: (rr() - 0.5) * 70 });
+    }
+    TRN.push(items);
+  }
+
+  /* ---------- rótulos (1–2 palabras, mono, chicos) ---------- */
+  const labs = $('#labs');
+  B.forEach((b, k) => {
+    if (!b.name) return;
+    const d = document.createElement('div'); d.className = 'lab'; d.id = 'lab-' + b.key;
+    d.innerHTML = `<i style="background:${rgba(b.col, 1)}"></i>${b.name}`; labs.appendChild(d);
+    tl.fromTo(d, { opacity: 0, x: -14 }, { opacity: 0.72, x: 0, duration: M.D.base, ease: 'appleOut' }, b.t0 + 0.05);
+    tl.to(d, { opacity: 0, x: 8, duration: 0.3, ease: 'appleIn' }, b.t1 + 0.02);
+  });
+  // tramos con movimiento (para la hoja de cues de qa): transformación + acción de cada arquitectura
+  B.forEach((b, k) => { const s = k ? B[k - 1].t1 : 0.2; tl.to({ v: 0 }, { v: 1, duration: b.t0 + b.act - s, ease: 'none' }, s); });
+  // fundidos desde/hacia el grafito
+  tl.fromTo('#fade', { opacity: 1 }, { opacity: 0, duration: 0.45, ease: 'appleOut' }, 0);
+  tl.to('#fade', { opacity: 1, duration: 0.33, ease: 'appleIn' }, 29.55);
+
+  /* ---------- sonido ---------- */
+  B.forEach((b) => b.sfx && b.sfx(b.t0));
+  M.sfx(B[B.length - 2].t1 - 0.02, 'whoosh', { dur: 0.55, peak: 0.4, gain: -8, dir: -1 });
+
+  /* ---------- dibujo por cuadro ---------- */
+  const DOTS = []; for (let x = 120; x <= 1800; x += 60) for (let y = 60; y <= 1020; y += 60) DOTS.push([x, y]);
+  M.onFrame((tt) => {
+    ctx.fillStyle = rgba(BG, 1); ctx.fillRect(0, 0, 1920, 1080);
+    ctx.fillStyle = rgba(BONE, 0.045); for (const [x, y] of DOTS) ctx.fillRect(x - 1, y - 1, 2, 2);
+    let k = 0; while (k < B.length - 1 && tt >= B[k].t1) { if (tt < B[k + 1].t0) break; k++; }
+    const inTr = k < B.length - 1 && tt >= B[k].t1 && tt < B[k + 1].t0;
+    const layers = [];               // [beat, lt, alpha, S]
+    let pool = new Array(NP).fill(null);
+    if (!inTr) {
+      const b = B[k], lt = tt - b.t0, sp = b.nodes(lt);
+      perms[k].forEach((pi, j) => (pool[pi] = sp[j]));
+      layers.push([b, lt, 1, sp]);
+    } else {
+      const b0 = B[k], b1 = B[k + 1], m = (tt - b0.t1) / (b1.t0 - b0.t1), SG = 0.35;
+      for (const it of TRN[k]) {
+        const p = eA(clamp(m * (1 + SG) - SG * it.sx)), f = it.f, g = it.g;
+        const dx = g.x - f.x, dy = g.y - f.y, L = Math.hypot(dx, dy) || 1, bw = Math.sin(Math.PI * p) * it.bow * Math.min(1, L / 200);
+        pool[it.i] = { x: lerp(f.x, g.x, p) - dy / L * bw, y: lerp(f.y, g.y, p) + dx / L * bw, w: lerp(f.w, g.w, p), h: lerp(f.h, g.h, p), q: lerp(f.q, g.q, p),
+          fc: mixc(f.fc, g.fc, p), fa: lerp(f.fa, g.fa, p), sc: mixc(f.sc, g.sc, p), sa: lerp(f.sa, g.sa, p), sw: lerp(f.sw, g.sw, p) };
+      }
+      layers.push([b0, tt - b0.t0, 1 - eO(seg(m, 0, 0.45)), perms[k].map((pi) => pool[pi])]);
+      layers.push([b1, tt - b1.t0, eA(seg(m, 0.35, 1)), perms[k + 1].map((pi) => pool[pi])]);
+    }
+    for (const [b, lt, a, S] of layers) if (a > 0.004) b.under(lt, a, S);
+    for (const n of pool) if (n) drawNode(n);
+    for (const [b, lt, a, S] of layers) if (a > 0.004) b.over(lt, a, S);
+  });
+});
+</script>
+</body>
+</html>

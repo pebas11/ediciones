@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>A01 · AGI</title>
+<link rel="stylesheet" href="../lib/theme.css">
+<link rel="stylesheet" href="../lib/fonts-spartan.css">
+<style>
+  /* Bauhaus / suizo: papel cálido, formas planas, primarios apagados. Sin texto. */
+  body { background: #F2EDE4; }
+  #cv { position: absolute; inset: 0; }
+  #grain { position: absolute; inset: -20px; opacity: 0.10; mix-blend-mode: multiply; pointer-events: none; }
+  #fade { position: absolute; inset: 0; background: #F2EDE4; opacity: 1; }
+</style>
+</head>
+<body>
+<div id="world">
+  <canvas id="cv" width="1920" height="1080"></canvas>
+  <canvas id="grain" width="512" height="512" style="width:1960px;height:1120px"></canvas>
+  <div id="fade"></div>
+</div>
+<script src="../node_modules/gsap/dist/gsap.min.js"></script>
+<script src="../node_modules/gsap/dist/SplitText.min.js"></script>
+<script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
+<script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
+<script src="../lib/stage.js"></script>
+<script src="../lib/audio.js"></script>
+<script>
+/* Storyboard (14 s) — sin texto
+   0,15–1,1   la grilla suiza se dibuja; aparecen 8 sistemas estrechos, uno por celda
+   1,1–3,9    cada uno hace SU tarea, aislado: gira · ordena · traduce · clasifica · encaja · predice · equilibra · completa
+   3,9–4,9    se tienden líneas entre vecinos; donde cruzan, las paredes de las celdas se abren
+   4,85–5,95  los aparatos se borran, los sistemas se frenan y cada uno se condensa en UNA forma (su ficha)
+   6,0–7,2    las fichas convergen (la red se contrae) y se funden en una forma negra: impacto
+   7,95–9,35  la forma general se vuelve el semicírculo rojo y da una vuelta (lo que hacía el 1.º)
+   9,35–10,75 se corta en tajadas → barras azules → las ordena (lo que hacía el 2.º)
+   10,75–12,65 las barras se juntan en un cuadrado que se divide en triángulo, cuadrado y círculo (forma nueva)
+   12,65–13,35 vuelve a ser una; fundido al papel */
+M.scene({ duration: 14, push: 0, audio: { key: 'D', mode: 'lydian', bed: { cycle: 9, bright: 0.9 } } }, (tl, M) => {
+  const $ = (s) => document.querySelector(s);
+  const ctx = $('#cv').getContext('2d');
+  { const g = $('#grain').getContext('2d'); const im = g.createImageData(512, 512); const rn = M.rng(3);
+    for (let i = 0; i < im.data.length; i += 4) { const v = 170 + rn() * 85; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+    g.putImageData(im, 0, 0); }
+
+  const C = { paper: '#F2EDE4', red: '#D2452B', blue: '#2E4A9E', yellow: '#E8B63B', ink: '#1B1A18' };
+  const TAU = Math.PI * 2, clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v)), lerp = (a, b, m) => a + (b - a) * m;
+  const eA = gsap.parseEase('apple'), eO = gsap.parseEase('appleOut'), eI = gsap.parseEase('appleIn'), eSp = M.spring(0.18);
+  const mixC = gsap.utils.interpolate;
+  const CX = 960, CY = 540;
+
+  /* ---------- formas: N puntos por ángulo desde un origen interior → morph punto a punto ---------- */
+  const N = 160;
+  const fromPoly = (verts, o = [0, 0]) => { const out = [];
+    for (let i = 0; i < N; i++) { const a = -Math.PI / 2 + i / N * TAU, dx = Math.cos(a), dy = Math.sin(a); let best = 1e9;
+      for (let j = 0; j < verts.length; j++) { const A = [verts[j][0] - o[0], verts[j][1] - o[1]], B0 = verts[(j + 1) % verts.length], B = [B0[0] - o[0], B0[1] - o[1]];
+        const ex = B[0] - A[0], ey = B[1] - A[1], den = dx * ey - dy * ex; if (Math.abs(den) < 1e-12) continue;
+        const t = (A[0] * ey - A[1] * ex) / den, s = (A[0] * dy - A[1] * dx) / den; if (t > 0 && s >= -1e-9 && s <= 1 + 1e-9 && t < best) best = t; }
+      out.push([dx * best + o[0], dy * best + o[1]]); }
+    return out; };
+  const SH = {
+    circle: Array.from({ length: N }, (_, i) => { const a = -Math.PI / 2 + i / N * TAU; return [Math.cos(a), Math.sin(a)]; }),
+    square: fromPoly([[-1, -1], [1, -1], [1, 1], [-1, 1]]),
+    tri: fromPoly([0, 1, 2].map((k) => [Math.cos(-Math.PI / 2 + k * TAU / 3), Math.sin(-Math.PI / 2 + k * TAU / 3)])),
+    half: fromPoly(Array.from({ length: 49 }, (_, k) => { const a = Math.PI + k / 48 * Math.PI; return [Math.cos(a), Math.sin(a)]; }), [0, -0.42]),
+  };
+  const lerpPts = (A, B, m) => (m <= 0 ? A : m >= 1 ? B : A.map((p, i) => [p[0] + (B[i][0] - p[0]) * m, p[1] + (B[i][1] - p[1]) * m]));
+  const drawBlob = (b) => { if (b.sx < 0.3 && b.sy < 0.3) return; ctx.save(); ctx.translate(b.x, b.y); if (b.rot) ctx.rotate(b.rot); ctx.beginPath();
+    const P = b.pts; for (let i = 0; i < N; i++) { const p = P[i]; i ? ctx.lineTo(p[0] * b.sx, p[1] * b.sy) : ctx.moveTo(p[0] * b.sx, p[1] * b.sy); }
+    ctx.closePath(); ctx.fillStyle = b.c; ctx.fill(); ctx.restore(); };
+  const line = (x1, y1, x2, y2, w = 3, c = C.ink) => { if (w < 0.05) return; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.lineWidth = w; ctx.strokeStyle = c; ctx.lineCap = 'butt'; ctx.stroke(); };
+
+  /* ---------- grilla de 4 × 2 celdas ---------- */
+  const S = 392, G = 32, X0 = 128, Y0 = 132;
+  const cells = Array.from({ length: 8 }, (_, i) => { const x = X0 + (i % 4) * (S + G), y = Y0 + Math.floor(i / 4) * (S + G);
+    return { i, x, y, cx: x + S / 2, cy: y + S / 2, on: { v: 0 }, frame: { v: 0 }, gap: [{ v: 0 }, { v: 0 }, { v: 0 }, { v: 0 }] }; });
+
+  /* ---------- sistemas estrechos: app(lt) dibuja el aparato en tinta; blobs(lt) devuelve SIEMPRE la misma
+     cantidad de formas de color (coordenadas locales a la celda) ---------- */
+  const sideCls = (j) => [1, -1, -1, 1, -1, 1, 1, -1][((j % 8) + 8) % 8];
+  const sorter = (lt, start, SW, hold, reset) => {   // posiciones (en ranuras) de cada barra en un ordenamiento burbuja animado
+    const steps = [], ord = start.slice();
+    for (let a = 0; a < ord.length; a++) for (let b = 0; b < ord.length - 1 - a; b++) if (ord[b] > ord[b + 1]) { steps.push(b); [ord[b], ord[b + 1]] = [ord[b + 1], ord[b]]; }
+    const cyc = steps.length * SW + hold + reset, u = reset ? lt % cyc : lt;
+    const slotOf = (arr) => { const p = []; arr.forEach((bar, s) => (p[bar] = s)); return p; };
+    const cur = start.slice(), nS = Math.min(steps.length, Math.floor(u / SW));
+    for (let s = 0; s < nS; s++) { const b = steps[s]; [cur[b], cur[b + 1]] = [cur[b + 1], cur[b]]; }
+    let P = slotOf(cur);
+    if (nS < steps.length) { const b = steps[nS], f = eA(clamp((u - nS * SW) / (SW - 0.06))); P[cur[b]] = b + f; P[cur[b + 1]] = b + 1 - f; }
+    else if (reset && u > steps.length * SW + hold) { const f = eA(clamp((u - steps.length * SW - hold) / (reset - 0.1))); const P0 = slotOf(start); P = P.map((p, bar) => p + (P0[bar] - p) * f); }
+    return P; };
+  const SYS = [
+    // 0 · gira (paso de 90° por segundo)
+    { per: 1.0, want: 0.75,
+      app() { ctx.beginPath(); ctx.arc(0, 0, 124, 0, TAU); ctx.lineWidth = 3; ctx.strokeStyle = C.ink; ctx.stroke(); },
+      top() { ctx.beginPath(); ctx.arc(0, 0, 6, 0, TAU); ctx.fillStyle = C.ink; ctx.fill(); },
+      blobs(lt) { const k = Math.floor(lt), u = eA(clamp((lt - k) / 0.55)); return [{ pts: SH.half, x: 0, y: 0, sx: 124, sy: 124, rot: (k + u) * Math.PI / 2, c: C.red }]; } },
+    // 1 · ordena
+    { per: 5 * 0.42 + 0.9 + 0.7, want: 2.6,
+      app() { line(-140, 126, 140, 126, 3); },
+      blobs(lt) { const H = [60, 100, 140, 180, 220], P = sorter(lt, [3, 0, 4, 1, 2], 0.42, 0.9, 0.7);
+        return H.map((h, bar) => ({ pts: SH.square, x: -108 + P[bar] * 54, y: 126 - h / 2, sx: 19, sy: h / 2, rot: 0, c: C.blue })); } },
+    // 2 · traduce un patrón: puntos (tinta) → barras (amarillo) al cruzar la línea
+    { per: 448 / 44, want: 3.0,
+      app() { line(0, -130, 0, 130, 3); },
+      blobs(lt) { const R = [9, 20, 14, 26, 12, 22, 17, 10], K = R.length, SP = 56, out = [];
+        for (let k = 0; k < K; k++) { const x = -224 + ((lt * 44 + k * SP) % (K * SP)), m = eA(clamp((x + 12) / 24)), r = R[k];
+          out.push({ pts: lerpPts(SH.circle, SH.square, m), x, y: 0, sx: lerp(r, 11, m), sy: lerp(r, r * 4.4, m), rot: 0, c: m < 0.5 ? C.ink : C.yellow }); }
+        return out; } },
+    // 3 · clasifica: rojos a un lado, azules al otro
+    { per: 0.8 * 8, want: 1.95,
+      app(lt) { const P = 0.8, k = Math.floor((lt - 0.5) / P), u = eA(clamp(((lt - 0.5) - k * P) / 0.3)), ang = lerp(sideCls(k - 1), sideCls(k), u) * 0.5;
+        ctx.save(); ctx.translate(0, -36); ctx.rotate(ang); line(-60, 0, 60, 0, 5); ctx.restore();
+        [-1, 1].forEach((s) => { ctx.beginPath(); ctx.moveTo(s * 96 - 40, 90); ctx.lineTo(s * 96 - 40, 146); ctx.lineTo(s * 96 + 40, 146); ctx.lineTo(s * 96 + 40, 90); ctx.lineWidth = 3; ctx.strokeStyle = C.ink; ctx.stroke(); }); },
+      top() { ctx.beginPath(); ctx.arc(0, -36, 6, 0, TAU); ctx.fillStyle = C.ink; ctx.fill(); },
+      blobs(lt) { const P = 0.8, out = [], k1 = Math.floor(lt / P);
+        for (let k = k1 - 2; k <= k1; k++) { const u = lt - k * P, s = sideCls(k); let x = 0, y = -200, sc = 0;
+          if (u >= 0 && u <= 1.75) { sc = 1;
+            if (u < 0.5) y = -200 + 140 * (u / 0.5) ** 2; else if (u < 1.1) { const f = eI(clamp((u - 0.5) / 0.6)); x = s * 96 * f; y = -60 + 182 * f; } else { x = s * 96; y = 122; sc = 1 - eI(clamp((u - 1.35) / 0.4)); } }
+          out[((k % 3) + 3) % 3] = { pts: SH.circle, x, y, sx: 20 * sc, sy: 20 * sc, rot: 0, c: s < 0 ? C.red : C.blue }; }
+        return out; } },
+    // 4 · encaja: prueba giros hasta que entra
+    { per: 3.4, want: 2.5,
+      app() { ctx.save(); ctx.translate(0, 84); ctx.beginPath(); for (let k = 0; k < 3; k++) { const a = -Math.PI / 2 + k * TAU / 3; ctx.lineTo(Math.cos(a) * 80, Math.sin(a) * 80); } ctx.closePath(); ctx.lineWidth = 3; ctx.strokeStyle = C.ink; ctx.lineJoin = 'miter'; ctx.stroke(); ctx.restore(); },
+      blobs(lt) { const u = lt % 3.4, d = Math.PI / 6; let rot = Math.PI, y = -84;
+        if (u < 0.5) rot = Math.PI; else if (u < 0.95) rot = Math.PI - d * eA(clamp((u - 0.5) / 0.45)); else if (u < 1.3) rot = Math.PI - d; else if (u < 1.75) rot = Math.PI - d - d * eA(clamp((u - 1.3) / 0.45));
+        else { rot = Math.PI - 2 * d; if (u < 2.3) y = -84 + 168 * eA(clamp((u - 1.75) / 0.55)); else if (u < 2.8) y = 84; else { const f = eA(clamp((u - 2.8) / 0.55)); y = 84 - 168 * f; rot = Math.PI - 2 * d + 2 * d * f; } }
+        return [{ pts: SH.tri, x: 0, y, sx: 68, sy: 68, rot, c: C.yellow }]; } },
+    // 5 · predice la trayectoria antes de lanzar
+    { per: 2.6, want: 1.25,
+      app(lt) { const u = lt % 2.6, pr = eO(clamp(u / 0.7)), tail = u < 2.0 ? 0 : eA(clamp((u - 2.0) / 0.5)), P = (f) => [-132 + 264 * f, 108 - 400 * f * (1 - f)];
+        ctx.save(); ctx.setLineDash([1, 13]); ctx.lineCap = 'round'; ctx.lineWidth = 6; ctx.strokeStyle = C.ink; ctx.beginPath();
+        const i0 = Math.floor(tail * 80), i1 = Math.floor(pr * 80); for (let i = i0; i <= i1; i++) { const [x, y] = P(i / 80); i === i0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); }
+        ctx.stroke(); ctx.restore(); line(-156, 132, 156, 132, 3); },
+      blobs(lt) { const u = lt % 2.6; let f = 0, sc = 1;
+        if (u < 0.6) sc = eO(clamp(u / 0.4)); else if (u < 1.9) f = eA(clamp((u - 0.6) / 1.3)); else { f = 1; sc = 1 - eI(clamp((u - 2.1) / 0.4)); }
+        return [{ pts: SH.circle, x: -132 + 264 * f, y: 108 - 400 * f * (1 - f) - 24, sx: 22 * sc, sy: 22 * sc, rot: 0, c: C.red }]; } },
+    // 6 · equilibra
+    { per: TAU / 1.7, want: 1.0,
+      app(lt) { const th = -0.17 * Math.sin(1.7 * lt); ctx.save(); ctx.translate(0, 62); ctx.rotate(th); line(-146, 0, 146, 0, 7); ctx.restore();
+        ctx.beginPath(); ctx.moveTo(0, 62); ctx.lineTo(-32, 126); ctx.lineTo(32, 126); ctx.closePath(); ctx.fillStyle = C.ink; ctx.fill(); },
+      blobs(lt) { const th = -0.17 * Math.sin(1.7 * lt), s = 92 * Math.sin(1.7 * lt - 0.5), up = -27;
+        return [{ pts: SH.circle, x: Math.cos(th) * s - Math.sin(th) * up, y: 62 + Math.sin(th) * s + Math.cos(th) * up, sx: 23, sy: 23, rot: 0, c: C.blue }]; } },
+    // 7 · completa el patrón
+    { per: 3.2, want: 2.15,
+      app() { ctx.lineWidth = 2.5; ctx.strokeStyle = C.ink; for (let r = 0; r < 3; r++) for (let q = 0; q < 3; q++) ctx.strokeRect(-108 + q * 78, -108 + r * 78, 60, 60); },
+      blobs(lt) { const u = lt % 3.2;
+        return [0, 4, 8, 2, 6].map((c, k) => { let s = eO(clamp((u - 0.2 - k * 0.32) / 0.3)); if (u > 2.5) s *= 1 - eI(clamp((u - 2.5) / 0.4));
+          return { pts: SH.square, x: -78 + (c % 3) * 78, y: -78 + Math.floor(c / 3) * 78, sx: 25 * s, sy: 25 * s, rot: 0, c: c === 4 ? C.red : C.ink }; }); } },
+  ];
+
+  /* ---------- tiempos ---------- */
+  const T_ON = 0.55, T_CONN = 3.9, T_APP = 4.85, T1 = 5.05, T2 = 5.45, T_COND = 5.45, T_TRAV = 6.0, T_ONE = 7.2;
+  const startOf = (i) => T_ON + i * 0.06;
+  const base = (i) => (T1 - startOf(i)) + (T2 - T1) / 2;
+  SYS.forEach((s, i) => { s.off = (((s.want - base(i)) % s.per) + s.per) % s.per; });
+  const ltOf = (i, t) => { const s0 = startOf(i), D = T2 - T1; let f;
+    if (t <= T1) f = Math.max(0, t - s0); else if (t < T2) { const u = (t - T1) / D; f = (T1 - s0) + D * (u - u * u / 2); } else f = base(i);
+    return SYS[i].off + f; };
+
+  /* captura: qué formas de color siguen en la fusión (visibles y dentro de su celda al congelarse) */
+  const pool = [];
+  cells.forEach((c, i) => SYS[i].blobs(ltOf(i, T2)).forEach((b, j) => {
+    const r = Math.max(b.sx, b.sy); b.keep = b.sx > 2 && Math.abs(b.x) + b.sx < S / 2 - 6 && Math.abs(b.y) + r < S / 2 - 6;
+    if (b.keep) pool.push({ ...b, x: c.cx + b.x, y: c.cy + b.y, cell: i, j, rot: b.rot || 0 });
+  }));
+  const keepSet = new Set(pool.map((p) => p.cell + ':' + p.j));
+  const NP = pool.length;
+
+  /* cada sistema se condensa en UNA forma (su ficha), en el centro de su celda */
+  const TOK = [
+    { pts: SH.half, s: 84, c: C.red }, { pts: SH.square, s: 56, c: C.blue }, { pts: SH.circle, s: 62, c: C.yellow }, { pts: SH.circle, s: 58, c: C.ink },
+    { pts: SH.tri, s: 82, c: C.yellow }, { pts: SH.circle, s: 60, c: C.red }, { pts: SH.circle, s: 60, c: C.blue }, { pts: SH.square, s: 54, c: C.ink } ];
+  const tokRot = cells.map((c, i) => { const p = pool.find((q) => q.cell === i); return i === 0 || i === 4 ? p.rot : 0; });
+  const tokOf = (i) => ({ pts: TOK[i].pts, x: cells[i].cx, y: cells[i].cy + (i === 0 ? 30 : 0), sx: TOK[i].s, sy: TOK[i].s, rot: tokRot[i], c: TOK[i].c });
+
+  /* ---------- poses de la forma general (NP formas superpuestas; cada pose arranca donde terminó la anterior) ---------- */
+  const R1 = 150, HR = 170, HX = CX, HY = CY + 95;             // HX, HY: centro del lado plano del semicírculo (= línea base de las barras)
+  const bake = (pts, sx, sy = sx) => pts.map((q) => [q[0] * sx, q[1] * sy]);
+  const st = (pts, x, y, c, rot = 0) => ({ pts, x, y, sx: 1, sy: 1, rot, c });
+  const centroid = (V) => { let A = 0, x = 0, y = 0; V.forEach((a, i) => { const b = V[(i + 1) % V.length], k = a[0] * b[1] - b[0] * a[1]; A += k; x += (a[0] + b[0]) * k; y += (a[1] + b[1]) * k; }); return [x / (3 * A), y / (3 * A)]; };
+  // el semicírculo cortado en 5 tajadas verticales (juntas = el semicírculo entero)
+  const SW5 = 2 * HR / 5, SLICE = Array.from({ length: 5 }, (_, k) => {
+    const x0 = -HR + k * SW5 - 0.4, x1 = -HR + (k + 1) * SW5 + 0.4, V = [[x0, 0.4], [x1, 0.4]];
+    for (let m = 0; m <= 20; m++) { const x = x1 + (x0 - x1) * m / 20; V.push([x, -Math.sqrt(Math.max(0, HR * HR - x * x))]); }
+    const c = centroid(V); return { c, pts: fromPoly(V.map((q) => [q[0] - c[0], q[1] - c[1]])) }; });
+  const HB = [70, 115, 160, 205, 250], START = [1, 0, 2, 4, 3], SLOT = (s) => HX - 2 * 78 + s * 78;
+  const barPts = HB.map((h) => bake(SH.square, 27, h / 2));
+  const QS = 92, strip = (s) => ({ pts: bake(SH.square, QS / 5 + 0.4, QS), x: CX - QS + QS / 5 + 2 * QS / 5 * s, y: CY });
+  const sqPts = bake(SH.square, QS), triPts = bake(SH.tri, 124), cirPts = bake(SH.circle, 102);
+  const TRI = [{ pts: triPts, x: CX - 300, y: CY + 20, c: C.yellow }, { pts: sqPts, x: CX, y: CY, c: C.red }, { pts: cirPts, x: CX + 300, y: CY, c: C.blue }];
+  const ramp = (u, a, b) => clamp((u - a) / (b - a));
+
+  const U = () => pool.map(() => ({ pts: SH.circle, x: CX, y: CY, sx: R1, sy: R1, rot: 0, c: C.ink }));
+  // 1) toma la forma del que giraba: semicírculo rojo que da una vuelta
+  const SPIN = (lt) => { const m = eA(clamp(lt / 0.5)), rot = eA(ramp(lt, 0.52, 1.32)) * TAU;
+    const A = { pts: SH.circle, x: CX, y: CY, sx: R1, sy: R1, rot: 0, c: C.ink }, B = { pts: SH.half, x: HX, y: HY, sx: HR, sy: HR, rot: 0, c: C.red };
+    return pool.map(() => { const s = mixState(A, B, m, eA(ramp(lt, 0.1, 0.45))); s.rot = rot; return s; }); };
+  // 2) se corta en tajadas que se vuelven las barras del que ordenaba, y las ordena
+  const SORT = (lt) => { const m = eA(ramp(lt, 0.08, 0.5)), mc = lt >= 0.26 ? 1 : 0, P = sorter(Math.max(0, lt - 0.55), START, 0.42, 9, 0);
+    return pool.map((_, k) => { const s = k % 5, bar = START[s], sl = SLICE[s], h = HB[bar];
+      const A = st(sl.pts, HX + sl.c[0], HY + sl.c[1], C.red), B = st(barPts[bar], SLOT(P[bar]), HY - h / 2, C.blue);
+      return mixState(A, B, m, mc); }); };
+  // 3) forma nueva: las barras se juntan en un cuadrado que se divide en triángulo, cuadrado y círculo
+  const TRIAD = (lt) => pool.map((_, k) => {
+    if (lt < 0.45) { const bar = START[k % 5], h = HB[bar], m = eA(clamp(lt / 0.45)), sp = strip(bar);
+      return mixState(st(barPts[bar], SLOT(bar), HY - h / 2, C.blue), st(sp.pts, sp.x, sp.y, C.red), m, lt >= 0.4 ? 1 : 0); }
+    const g = k % 3, T = TRI[g], m = eA(ramp(lt, 0.55 + g * 0.04, 1.1 + g * 0.04));
+    return mixState(st(sqPts, CX, CY, C.red), st(T.pts, T.x, T.y, T.c), m, g === 2 ? (m >= 0.3 ? 1 : 0) : ramp(m, 0.15, 0.4)); });
+  // 4) vuelve a ser una sola forma
+  const END = (lt) => { const m = eA(clamp(lt / 0.55)); return pool.map((_, k) => { const T = TRI[k % 3];
+    return mixState(st(T.pts, T.x, T.y, T.c), st(bake(SH.circle, R1), CX, CY, C.ink), m, ramp(m, 0.55, 0.85)); }); };
+  const SEQ = [{ pose: U, at: T_ONE }, { pose: SPIN, at: 7.95 }, { pose: SORT, at: 9.35 }, { pose: TRIAD, at: 10.75 }, { pose: END, at: 12.65 }];
+  const mixState = (A, B, m, mc = m, ms = m) => ({ pts: lerpPts(A.pts, B.pts, ms), x: lerp(A.x, B.x, m), y: lerp(A.y, B.y, m), sx: lerp(A.sx, B.sx, m), sy: lerp(A.sy, B.sy, m), rot: lerp(A.rot, B.rot, m), c: mc <= 0 ? A.c : mc >= 1 ? B.c : mixC(A.c, B.c, mc) });
+  const one = { r: 0.84 };   // al llegar, las fichas se asientan en un círculo algo más chico y la forma "se infla"
+  const travel = (t) => eA(clamp((t - T_TRAV) / (T_ONE - T_TRAV)));
+  const fusionState = (t) => { const mp = travel(t), tgt = { pts: SH.circle, x: CX, y: CY, sx: R1 * one.r, sy: R1 * one.r, rot: 0, c: C.ink };
+    return pool.map((p) => { const i = p.cell, tok = tokOf(i);
+      if (t < T_TRAV) { const u = eA(clamp((t - T_COND - i * 0.03) / 0.5)); return mixState(p, tok, u, u >= 0.35 ? 1 : 0, u); }
+      const u = clamp((t - T_TRAV) / (T_ONE - T_TRAV)); return mixState(tok, tgt, mp, eA(clamp((u - 0.6) / 0.4)), eA(clamp((u - 0.35) / 0.65))); }); };
+  const poolAt = (t) => {
+    if (t < T_ONE) return fusionState(t);
+    for (let k = SEQ.length - 1; k >= 0; k--) if (t >= SEQ[k].at) { const out = SEQ[k].pose(t - SEQ[k].at); if (k === 0) out.forEach((q) => { q.sx *= one.r; q.sy *= one.r; }); return out; } };
+
+  /* ---------- líneas entre vecinos (se tienden desde ambos lados) ---------- */
+  const edges = [];
+  for (let i = 0; i < 8; i++) { if (i % 4 < 3) edges.push([i, i + 1]); if (i < 4) edges.push([i, i + 4]); }
+  const eProg = edges.map(() => ({ v: 0 }));
+
+  /* ---------- timeline ---------- */
+  tl.to('#fade', { opacity: 0, duration: 0.45, ease: 'none' }, 0.12);
+  const grid = { v: 0 }, app = { v: 1 };
+  tl.to(grid, { v: 1, duration: 1.2, ease: 'appleOut' }, 0.15);
+  cells.forEach((c, i) => { tl.to(c.frame, { v: 1, duration: 0.75, ease: 'appleOut' }, 0.18 + i * 0.05); tl.to(c.on, { v: 1, duration: 0.6, ease: 'appleOut' }, startOf(i)); });
+  edges.forEach((e, k) => tl.to(eProg[k], { v: 1, duration: 0.6, ease: 'appleOut' }, T_CONN + k * 0.045));
+  // las paredes se abren donde las cruza una línea (lados internos) y un poco después las externas
+  cells.forEach((c, i) => { const col = i % 4, row = Math.floor(i / 4);
+    const inner = [row === 1, col < 3, row === 0, col > 0];   // arriba, derecha, abajo, izquierda
+    c.gap.forEach((g, s) => tl.to(g, { v: 1, duration: 0.6, ease: 'apple' }, (inner[s] ? T_CONN + 0.42 : T_CONN + 0.62) + (i % 4) * 0.03)); });
+  tl.to(app, { v: 0, duration: 0.5, ease: 'appleIn' }, T_APP);
+  tl.to(one, { r: 1, duration: 0.7, ease: eSp }, T_ONE);
+  tl.to('#fade', { opacity: 1, duration: 0.4, ease: 'appleIn' }, 13.35);
+  tl.set({}, {}, 14);
+
+  /* ---------- sonido: pocos eventos, cada uno con motivo ---------- */
+  [0, 2, 4, 7].forEach((d, k) => M.sfx(startOf(k * 2) + 0.02, 'tap', { deg: d, oct: 5, bright: 0.75, gain: -4 - k * 0.5, pan: -0.6 + k * 0.4 }));   // aparecen los sistemas
+  M.sfx(T_CONN, 'scan', { dur: 0.9, from: 400, to: 2400, q: 4, gain: -4 });                 // se tienden las líneas
+  M.sfx(T_CONN + 0.45, 'tick', { tone: 'glass', gain: -3 });                                  // se abren las paredes
+  M.sfx(T_COND + 0.05, 'tap', { deg: 4, oct: 4, bright: 0.6, gain: -5 });                      // cada sistema, una ficha
+  M.sfx(T_ONE, 'swell', { dur: 1.2, gain: -1 }).sfx(T_ONE, 'impact', { weight: 0.9 });       // se funden en una
+  M.sfx(8.47, 'whoosh', { dur: 0.8, peak: 0.5, gain: -7, dir: 1 });                                   // da una vuelta
+  M.sfx(9.43, 'tick', { gain: -2 });                                                            // se corta en tajadas
+  M.sfx(9.9, 'tap', { deg: 4, oct: 4, gain: -4 }).sfx(10.32, 'tap', { deg: 7, oct: 4, gain: -4 });   // dos intercambios
+  M.sfx(11.15, 'tick', { tone: 'glass', gain: -4 });                                          // las barras se vuelven un cuadrado
+  M.sfx(11.3, 'shimmer', { degs: [2, 4, 7], spread: 0.05, gain: -4 });                         // forma nueva: triángulo, cuadrado, círculo
+  M.sfx(12.72, 'tap', { deg: 0, oct: 4, bright: 0.7, gain: -3 });                               // vuelve a ser una
+
+  /* ---------- dibujo por cuadro ---------- */
+  const sideSeg = (c, s) => { const { x, y } = c; return [[x, y, x + S, y], [x + S, y, x + S, y + S], [x + S, y + S, x, y + S], [x, y + S, x, y]][s]; };
+  M.onFrame((t) => {
+    ctx.fillStyle = C.paper; ctx.fillRect(0, 0, 1920, 1080);
+    // grilla suiza sutil: 12 columnas y 6 líneas base
+    ctx.save(); ctx.globalAlpha = 0.075 * grid.v; ctx.strokeStyle = C.ink; ctx.lineWidth = 1;
+    for (let k = 0; k <= 12; k++) { const x = X0 + k * (1664 / 12); ctx.beginPath(); ctx.moveTo(x, 60); ctx.lineTo(x, 1020); ctx.stroke(); }
+    for (let k = 0; k <= 6; k++) { const y = Y0 + k * (816 / 6); ctx.beginPath(); ctx.moveTo(60, y); ctx.lineTo(1860, y); ctx.stroke(); }
+    ctx.restore();
+
+    // paredes de las celdas (se dibujan en orden y se abren desde el centro de cada lado)
+    cells.forEach((c) => { for (let s = 0; s < 4; s++) { const vis = clamp(c.frame.v * 4 - s), g = c.gap[s].v; if (vis <= 0 || g >= 1) continue;
+      const [x1, y1, x2, y2] = sideSeg(c, s), ex = x1 + (x2 - x1) * vis, ey = y1 + (y2 - y1) * vis, h = 0.5 * (1 - g);
+      if (g <= 0) line(x1, y1, ex, ey, 2.5); else { line(x1, y1, x1 + (x2 - x1) * h, y1 + (y2 - y1) * h, 2.5); line(x2, y2, x2 + (x1 - x2) * h, y2 + (y1 - y2) * h, 2.5); } } });
+
+    // centros de cada sistema (se mueven con la fusión)
+    const fused = t >= T_COND;
+    const P = fused ? poolAt(t) : null, mT = travel(t);
+    const ctr = cells.map((c) => [lerp(c.cx, CX, mT), lerp(c.cy, CY, mT)]);
+
+    // líneas entre vecinos
+    if (t < T_ONE) edges.forEach(([a, b], k) => { const p = eProg[k].v; if (p <= 0) return; const A = ctr[a], B = ctr[b], h = p / 2;
+      const w = 2.5 * (1 - eI(clamp((t - T_TRAV) / (T_ONE - T_TRAV))));
+      line(A[0], A[1], A[0] + (B[0] - A[0]) * h, A[1] + (B[1] - A[1]) * h, w); line(B[0], B[1], B[0] + (A[0] - B[0]) * h, B[1] + (A[1] - B[1]) * h, w); });
+
+    if (!fused) {
+      cells.forEach((c, i) => { const s = c.on.v; if (s <= 0) return; const lt = ltOf(i, t), sys = SYS[i], sc = 0.86 + 0.14 * s;
+        ctx.save(); ctx.beginPath(); ctx.rect(c.x + 2, c.y + 2, S - 4, S - 4); ctx.clip(); ctx.translate(c.cx, c.cy); ctx.scale(sc, sc);
+        ctx.globalAlpha = s * app.v; sys.app && sys.app(lt); ctx.globalAlpha = s;
+        sys.blobs(lt).forEach((b, j) => { const k = keepSet.has(i + ':' + j) ? 1 : app.v; drawBlob({ ...b, sx: b.sx * k, sy: b.sy * k, rot: b.rot || 0 }); });
+        ctx.globalAlpha = s * app.v; sys.top && sys.top(lt);
+        ctx.restore(); });
+    } else {
+      P.forEach(drawBlob);
+    }
+  });
+});
+</script>
+</body>
+</html>
