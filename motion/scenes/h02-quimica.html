@@ -14,7 +14,7 @@
   #grain { position: absolute; inset: -20px; opacity: 0.06; mix-blend-mode: overlay; pointer-events: none; }
   #vig { position: absolute; inset: 0; background: radial-gradient(115% 100% at 62% 42%, transparent 50%, rgba(4,3,2,0.6) 100%); }
   .t { position: absolute; left: 140px; font-family: var(--f-display); color: var(--bone); letter-spacing: -0.035em; line-height: 1.25; white-space: nowrap; }
-  #name { top: 540px; font-size: 168px; font-weight: 800; }
+  #name { top: 550px; font-size: 150px; font-weight: 800; }
   #name span { display: inline-block; }
   #prima { top: 372px; font-size: 150px; }
   #prima .a { display: block; font-weight: 300; }
@@ -65,7 +65,8 @@ M.scene({ duration: 14, push: 0 }, async (tl, M) => {
   key.shadow.mapSize.set(2048, 2048); key.shadow.radius = 5; key.shadow.bias = -0.0005; key.shadow.normalBias = 0.03;
   Object.assign(key.shadow.camera, { left: -12, right: 12, top: 12, bottom: -14, near: 1, far: 60 }); key.shadow.camera.updateProjectionMatrix();
   scene.add(key); scene.add(key.target);
-  const rim = new THREE.DirectionalLight('#7fa2ff', 2.0); rim.position.set(13, 7, -9); scene.add(rim);
+  // contraluz frío rasante desde la derecha: filo azul en los bordes derechos desde el primer cuadro (como h01)
+  const rim = new THREE.DirectionalLight('#7fa2ff', 2.0); rim.position.set(14, 5, -3); scene.add(rim);
   scene.add(new THREE.HemisphereLight('#3a3440', '#140d08', 0.4));
   const act = new THREE.PointLight('#7fa2ff', 0, 16, 2); act.position.set(0.5, 1.0, -5.5); scene.add(act);
 
@@ -96,11 +97,13 @@ M.scene({ duration: 14, push: 0 }, async (tl, M) => {
     if (nMe) { add('Me1', 'C', Nm.clone().add(dir(12, 1.47, 0.55))); add('Me2', 'C', Nm.clone().add(dir(132, 1.47, -0.55))); bond('Nam', 'Me1'); bond('Nam', 'Me2'); }
     if (phos || oh4) { add('O4', 'O', RING.C4.clone().add(dir(90, 1.37))); bond('C4', 'O4'); }
     if (phos) {
-      const O4 = A[ix.O4].p, P = O4.clone().add(dir(150, 1.6));
+      // P fuera del plano del anillo (torsión C4–O4–P, como en la molécula real) y tetraedro girado sobre el eje O–P:
+      // así, desde la cámara, P y sus 4 O se ven separados (orientación elegida midiendo la separación en pantalla)
+      const O4 = A[ix.O4].p, P = O4.clone().add(dir(150, 1.6, -0.9));
       add('P', 'P', P, { grp: 'phos' }); bond('O4', 'P', 1, { cut: true });
-      // fosfato tetraédrico real: un O en el plano (P=O) y dos por delante y por detrás (P–OH)
-      const u = O4.clone().sub(P).normalize(), w1 = V(-u.y, u.x, 0), w2 = V(0, 0, 1), c = -1 / 3, s = Math.sqrt(8 / 9);
-      const tet = (k) => { const a = k * 2 * Math.PI / 3; return u.clone().multiplyScalar(c).addScaledVector(w1, s * Math.cos(a)).addScaledVector(w2, s * Math.sin(a)); };
+      // fosfato tetraédrico real: P=O y dos P–OH
+      const u = O4.clone().sub(P).normalize(), w1 = V(-u.y, u.x, 0).normalize(), w2 = V().crossVectors(u, w1).normalize(), c = -1 / 3, s = Math.sqrt(8 / 9);
+      const tet = (k) => { const a = k * 2 * Math.PI / 3 + 5.55; return u.clone().multiplyScalar(c).addScaledVector(w1, s * Math.cos(a)).addScaledVector(w2, s * Math.sin(a)); };
       add('Pd', 'O', P.clone().addScaledVector(tet(0), 1.49), { grp: 'phos' }); bond('P', 'Pd', 2, { grp: 'phos' });
       add('Pa', 'O', P.clone().addScaledVector(tet(1), 1.57), { grp: 'phos' }); bond('P', 'Pa', 1, { grp: 'phos' });
       add('Pb', 'O', P.clone().addScaledVector(tet(2), 1.57), { grp: 'phos' }); bond('P', 'Pb', 1, { grp: 'phos' });
@@ -128,11 +131,14 @@ M.scene({ duration: 14, push: 0 }, async (tl, M) => {
   }
 
   /* ---------------- materiales ---------------- */
-  const EL = { C: { r: 0.38, c: '#b3a79a' }, N: { r: 0.39, c: '#b9c7e3' }, O: { r: 0.39, c: '#E3A560' }, P: { r: 0.5, c: '#d98a2e' } };
+  // N en gris azulado de valor MEDIO (más oscuro que el C): se distingue por temperatura, no compite en brillo.
+  // El azul luminoso queda reservado para lo activo (psilocina) y el núcleo común.
+  const EL = { C: { r: 0.38, c: '#b3a79a' }, N: { r: 0.39, c: '#95a1b6' }, O: { r: 0.39, c: '#E3A560' }, P: { r: 0.5, c: '#d98a2e' } };
   const STICK = '#d6ccbf';
   const phys = (c, o = {}) => new THREE.MeshPhysicalMaterial({ color: c, roughness: 0.34, metalness: 0, clearcoat: 0.6, clearcoatRoughness: 0.25, ...o });
   // contraluz azul por material (Fresnel): la molécula "se enciende" sin teñir su color base
   const RIM_SRC = { value: new THREE.Color('#7fa2ff') };
+  const RIM_BASE = 0.3;                                               // contraluz frío tenue desde el cuadro 0 (regla 3)
   function withRim(mat) {
     mat.userData.rim = { value: 0 };
     mat.onBeforeCompile = (sh) => {
@@ -146,40 +152,42 @@ M.scene({ duration: 14, push: 0 }, async (tl, M) => {
   const sphGeo = new THREE.SphereGeometry(1, 48, 32);
   const cylGeo = new THREE.CylinderGeometry(1, 1, 1, 22, 1, false);
   const UP = V(0, 1, 0), ZL = V(0, 0, 1);
-  const BLUE = new THREE.Color('#7fa2ff'), STICK_C = new THREE.Color(STICK), STICK_B = new THREE.Color('#7fa0ea');
+  const BLUE = new THREE.Color('#7fa2ff'), STICK_B = new THREE.Color('#7fa0ea');
 
-  function buildMolecule(spec, pos) {
+  // dim < 1: misma paleta en valor más bajo (la serotonina se lee secundaria y neutra, sin acento)
+  function buildMolecule(spec, { parent = scene, dim = 1, shrink = 1, contour = false } = {}) {
     const { A, B, ix } = tryptamine(spec);
-    const g = new THREE.Group(); g.position.copy(pos); scene.add(g);
+    const g = new THREE.Group(); parent.add(g);
     const phosG = new THREE.Group(); g.add(phosG);                  // el fosfato se mueve como un bloque
+    const shade = (c) => new THREE.Color(c).multiplyScalar(dim);
     A.forEach((a) => {
       a.p.sub(ORIGIN);
-      a.mat = withRim(phys(EL[a.el].c, a.el === 'P' ? { roughness: 0.3, metalness: 0.15 } : {}));
+      a.mat = withRim(phys(shade(EL[a.el].c), a.el === 'P' ? { roughness: 0.3, metalness: 0.15 } : {}));
       if (a.grp === 'phos') a.mat.transparent = true;
       a.mesh = new THREE.Mesh(sphGeo, a.mat); a.mesh.position.copy(a.p); a.mesh.castShadow = a.mesh.receiveShadow = true;
       (a.grp === 'phos' ? phosG : g).add(a.mesh);
       a.show = { v: 0 };
     });
     B.forEach((bd) => {
-      bd.mat = phys(STICK, { roughness: 0.4, clearcoat: 0.4 });
+      bd.base = shade(STICK);
+      bd.mat = phys(bd.base.clone(), { roughness: 0.4, clearcoat: 0.4 });
       if (bd.grp === 'phos' || bd.cut) bd.mat.transparent = true;
-      const mk = (parent) => { const c = new THREE.Mesh(cylGeo, bd.mat); c.castShadow = c.receiveShadow = true; parent.add(c); return c; };
+      const mk = (par) => { const c = new THREE.Mesh(cylGeo, bd.mat); c.castShadow = c.receiveShadow = true; par.add(c); return c; };
       bd.sticks = Array.from({ length: bd.o === 2 ? 2 : 1 }, () => mk(bd.grp === 'phos' ? phosG : g));
       if (bd.cut) bd.half = mk(phosG);                              // mitad del enlace O–P que se va con el fosfato
       bd.g = { v: 0 };
     });
-    // contorno azul del núcleo indol (detrás del plano de los anillos: no toca ninguna pieza)
-    const ringPts = PERIM.map((k) => { const p = A[ix[k]].p; return new THREE.Vector2(p.x, p.y); });
-    const ol = outline(ringPts, 0.8);
-    const curve = new THREE.CatmullRomCurve3(ol.map((p) => V(p.x, p.y, -0.55)), true, 'centripetal');
-    const tubeGeo = new THREE.TubeGeometry(curve, 240, 0.045, 8, true);
-    const tube = new THREE.Mesh(tubeGeo, new THREE.MeshBasicMaterial({ color: '#b3c8ff', toneMapped: false }));
-    const haloGeo = new THREE.TubeGeometry(curve, 240, 0.14, 8, true);
-    const halo = new THREE.Mesh(haloGeo, new THREE.MeshBasicMaterial({ color: '#7fa2ff', transparent: true, opacity: 0.13, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
-    const fill = new THREE.Mesh(new THREE.ShapeGeometry(new THREE.Shape(ol)), new THREE.MeshBasicMaterial({ color: '#7fa2ff', transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }));
-    fill.position.z = -0.6;
-    [tube, halo].forEach((m) => { m.geometry.setDrawRange(0, 0); g.add(m); }); g.add(fill);
-    return { A, B, ix, g, phosG, at: (id) => A[ix[id]], contour: { v: 0, total: tubeGeo.index.count, tube, halo, fill }, glow: { v: 0 }, core: { v: 0 } };
+    const m = { A, B, ix, g, phosG, shrink, at: (id) => A[ix[id]], glow: { v: 0 }, core: { v: 0 }, contour: null };
+    if (contour) {
+      // contorno del núcleo indol: UNA línea fina en el plano de la molécula (sin halo ni relleno), apenas detrás de los anillos
+      const ringPts = PERIM.map((k) => { const p = A[ix[k]].p; return new THREE.Vector2(p.x, p.y); });
+      const curve = new THREE.CatmullRomCurve3(outline(ringPts, 0.9).map((p) => V(p.x, p.y, -0.3)), true, 'centripetal');
+      const tubeGeo = new THREE.TubeGeometry(curve, 240, 0.028, 8, true);
+      const tube = new THREE.Mesh(tubeGeo, new THREE.MeshBasicMaterial({ color: '#8FB0FF', toneMapped: false }));
+      tubeGeo.setDrawRange(0, 0); g.add(tube);
+      m.contour = { v: 0, total: tubeGeo.index.count, tube };
+    }
+    return m;
   }
 
   const heavyBFS = (m, root) => {
@@ -196,74 +204,80 @@ M.scene({ duration: 14, push: 0 }, async (tl, M) => {
     return dep;
   }
 
-  const mA = buildMolecule({ phos: true }, V(0, 0, 0));
-  const mB = buildMolecule({ oh5: true, nMe: false }, V(3.0, -5.6, 0));   // en diagonal, sin tocarse
+  const mA = buildMolecule({ phos: true }, { contour: true });
+  // serotonina: hija del grupo de la psilocina (gira con ella), en un plano 0,9 Å DETRÁS (nunca se atraviesan).
+  // Al encajar, se proyecta exactamente detrás de la psilocina desde la cámara: el indol común se ve como UNA sola forma
+  // y solo sobresale lo distinto (el O en C5). Más oscura y neutra: se lee secundaria.
+  const mB = buildMolecule({ oh5: true, nMe: false }, { parent: mA.g, dim: 0.66, shrink: 0.96 });
+  mB.A.forEach((a) => (a.show.v = 1)); mB.B.forEach((bd) => (bd.g.v = 1));
 
   /* ---------------- beat 1: psilocibina se arma y rota ---------------- */
   grow(mA, 0.2, 0.12);
 
   /* ---------------- beat 2: pierde el fosfato → psilocina (activa, azul) ---------------- */
-  const T_CUT = 5.0;
+  // secuencia: 5,0 corte + "bi" sale con el fosfato → 6,1 onda azul → 6,7 la palabra se vuelve azul (sigue a la imagen)
+  const T_CUT = 5.0, T_WAVE = 6.1;
   const cutB = mA.B.find((bd) => bd.cut); cutB.k = { v: 0 };
   const phos = { d: 0, rot: 0, fade: 1 };
   tl.to(cutB.k, { v: 1, duration: 0.5, ease: 'appleOut' }, T_CUT);
-  tl.to(phos, { d: 9, rot: 1.1, duration: 2.3, ease: 'power2.in' }, T_CUT + 0.05);
-  tl.to(phos, { fade: 0, duration: 0.8, ease: 'appleIn' }, T_CUT + 1.4);
-  const P0 = mA.at('P').p.clone(), phosDir = V(-0.55, 0.45, -0.7).normalize(), phosAxis = V(0.3, 0.2, 0.93).normalize();
-  // destello cálido en los dos átomos del enlace que se corta (sin piezas sueltas)
+  tl.to(phos, { d: 7, rot: 0.9, duration: 1.4, ease: 'power2.in' }, T_CUT + 0.05);
+  tl.to(phos, { fade: 0, duration: 0.7, ease: 'appleIn' }, T_CUT + 0.55);
+  // se va casi recto hacia el fondo (la oscuridad lo absorbe), lejos del texto y del borde superior
+  const P0 = mA.at('P').p.clone(), phosDir = V(-0.15, 0.25, -1).normalize(), phosAxis = V(0.3, 0.2, 0.93).normalize();
+  // destello en los dos átomos del enlace que se corta, en su propio color (no lava el caramelo ni el ámbar)
   const flash = { v: 0 }; tl.to(flash, { v: 1, duration: 0.14, ease: 'appleOut' }, T_CUT); tl.to(flash, { v: 0, duration: 0.6, ease: 'appleIn' }, T_CUT + 0.14);
-  const WARM = new THREE.Color('#ffb46a');
   // onda de activación desde el O4 recién liberado
   const depAct = heavyBFS(mA, 'O4'); let maxD = 0; depAct.forEach((v, i) => { if (mA.A[i].grp !== 'phos') maxD = Math.max(maxD, v); });
   const wave = { w: 0 };
-  tl.to(wave, { w: 1, duration: 1.3, ease: 'apple' }, T_CUT + 0.7);
-  tl.to(mA.glow, { v: 1, duration: 1.3, ease: 'apple' }, T_CUT + 0.7);
-  tl.to(act, { intensity: 30, duration: 1.4, ease: 'apple' }, T_CUT + 0.8);
-  
-  /* ---------------- beat 3: junto a la serotonina, núcleo indol común ---------------- */
-  const T3 = 8.95;
-  tl.to(mA.glow, { v: 0, duration: 1.0, ease: 'apple' }, T3);
-  tl.to(act, { intensity: 0, duration: 1.0, ease: 'apple' }, T3);
-  grow(mB, T3 + 0.35, 0.1);
-  const T_CORE = T3 + 1.4;
-  [mA, mB].forEach((m) => {
-    tl.to(m.contour, { v: 1, duration: 1.15, ease: 'apple' }, T_CORE);
-    tl.to(m.core, { v: 1, duration: 0.9, ease: 'apple' }, T_CORE + 0.2);
-  });
+  tl.to(wave, { w: 1, duration: 1.0, ease: 'apple' }, T_WAVE);
+  tl.to(mA.glow, { v: 1, duration: 1.0, ease: 'apple' }, T_WAVE);
+  tl.to(act, { intensity: 30, duration: 1.1, ease: 'apple' }, T_WAVE + 0.05);
 
-  // rotación lenta (misma orientación para las dos moléculas)
-  const spin = { a: -0.5 };
+  /* ---------------- beat 3: la serotonina se superpone; el núcleo indol común coincide ---------------- */
+  const T3 = 8.95, T_SERO = T3 + 0.1, T_DOCK = T_SERO + 1.3, T_CORE = T_DOCK + 0.05;
+  // la psilocina CONSERVA su azul (sigue siendo "la azul"); la serotonina llega neutra y más oscura
+  tl.to(mA.glow, { v: 0.6, duration: 1.0, ease: 'apple' }, T3);
+  tl.to(act, { intensity: 14, duration: 1.0, ease: 'apple' }, T3);
+  const SERO0 = V(7.4, -7.0, -0.9);                                        // fuera de cuadro, abajo a la derecha
+  const sero = { u: 0 };
+  tl.to(sero, { u: 1, duration: T_DOCK - T_SERO, ease: 'apple' }, T_SERO);    // se desliza y encaja detrás
+  tl.to(mA.contour, { v: 1, duration: 1.0, ease: 'apple' }, T_CORE);        // contorno del indol común (uno solo: es la forma compartida)
+  tl.to(mA.core, { v: 1, duration: 0.9, ease: 'apple' }, T_CORE + 0.15);
+
+  // rotación lenta
+  const spin = { a: -0.35 };
   tl.to(spin, { a: 0.1, duration: T3, ease: 'none' }, 0);
-  tl.to(spin, { a: -0.28, duration: 1.4, ease: 'apple' }, T3);
-  tl.to(spin, { a: 0.02, duration: 3.5, ease: 'none' }, T3 + 1.4);
+  tl.to(spin, { a: -0.22, duration: 1.4, ease: 'apple' }, T3);
+  tl.to(spin, { a: -0.1, duration: 13.9 - (T3 + 1.4), ease: 'none' }, T3 + 1.4);
 
   /* ---------------- cámara ---------------- */
-  const cam = { ang: -0.1, el: 0.16, rad: 23.6, lx: 0.4, ly: 0.75, lz: 0, shift: -420 };
+  const cam = { ang: -0.1, el: 0.16, rad: 23.6, lx: 0.4, ly: 0.75, lz: 0, shift: -460 };
   tl.to(cam, { ang: 0.04, rad: 22.6, duration: 4.8, ease: 'apple' }, 0);
   tl.to(cam, { ang: 0.1, rad: 21.4, lx: 0.9, ly: 0.45, duration: 2.6, ease: 'apple' }, 4.8);
   tl.to(cam, { ang: 0.14, rad: 21.0, duration: T3 - 7.4, ease: 'none' }, 7.4);
-  tl.to(cam, { ang: 0, el: 0.1, rad: 37, lx: 0.7, ly: -2.15, shift: -334, duration: 1.7, ease: 'apple' }, T3);
-  tl.to(cam, { rad: 36, duration: 3.2, ease: 'none' }, T3 + 1.7);
+  tl.to(cam, { ang: 0.04, el: 0.1, rad: 23.4, lx: 0.55, ly: 0.45, shift: -452, duration: 1.4, ease: 'apple' }, T3);
+  tl.to(cam, { rad: 23.0, duration: 13.9 - (T3 + 1.4), ease: 'none' }, T3 + 1.4);
 
   /* ---------------- texto (skill motion-copy: 6 palabras en total) ---------------- */
   const nA = M.textIn($('#nA'), 0.9, { dur: 1.0, stagger: 0.035, ease: 'appleOut' });
   const nB = M.textIn($('#nB'), 0.9 + 7 * 0.035, { dur: 1.0, stagger: 0.035, ease: 'appleOut' });
   const nC = M.textIn($('#nC'), 0.9 + 9 * 0.035, { dur: 1.0, stagger: 0.035, ease: 'appleOut' });
-  // "bi" se tiñe del color del fosfato, se va con él; "na" cierra el hueco y la palabra se vuelve azul
+  // "bi" se tiñe del color del fosfato y se va con él; "na" cierra el hueco enseguida
   tl.to('#nB', { color: '#E3A560', duration: 0.35, ease: 'apple' }, T_CUT - 0.45);
-  M.textOut(nB, T_CUT + 0.1, { stagger: 0.04, dur: 0.45 });
+  M.textOut(nB, T_CUT + 0.02, { stagger: { each: 0.04, from: 'end' }, dur: 0.38 });   // sale primero la "i" (la vecina de "na")
   const wB = $('#nB').getBoundingClientRect().width;
-  tl.to('#nC', { x: -wB, duration: 0.8, ease: 'apple' }, T_CUT + 0.22);
-  tl.to(['#nA', '#nC'], { color: '#8FB0FF', duration: 0.9, ease: 'apple' }, T_CUT + 0.75);
+  tl.to('#nC', { x: -wB, duration: 0.52, ease: 'apple' }, T_CUT + 0.18);          // cierra el hueco sin pisar las letras que salen
+  // la palabra se vuelve azul DESPUÉS de que la onda recorre la molécula
+  tl.to(['#nA', '#nC'], { color: '#8FB0FF', duration: 0.5, ease: 'apple' }, T_WAVE + 0.6);
   M.textOut(nA, T3 - 0.2, { stagger: 0.015 }); M.textOut(nC, T3 - 0.2 + 7 * 0.015, { stagger: 0.015 });
 
-  const pA = M.textIn($('#prima .a'), T3 + 0.8, { type: 'words', dur: 0.8, stagger: 0.06, ease: 'appleOut' });
-  const pB = M.textIn($('#prima .b'), T3 + 1.05, { dur: 0.9, stagger: 0.03, ease: 'appleOut' });
+  const pA = M.textIn($('#prima .a'), T3 + 0.95, { type: 'words', dur: 0.8, stagger: 0.06, ease: 'appleOut' });
+  const pB = M.textIn($('#prima .b'), T3 + 1.2, { dur: 0.9, stagger: 0.03, ease: 'appleOut' });
   M.textOut(pA, 13.05, { type: 'words', stagger: 0.02 }); M.textOut(pB, 13.1, { stagger: 0.012 });
   tl.to('#fade', { opacity: 1, duration: 0.55, ease: 'appleIn' }, 13.3);
 
   /* ---------------- por cuadro ---------------- */
-  const qP = new THREE.Quaternion(), dv = V(), side = V(), tmp = V(), e0 = V(), e1 = V();
+  const qP = new THREE.Quaternion(), dv = V(), side = V(), tmp = V(), e0 = V(), e1 = V(), camL = V(), dock = V();
   const setStick = (c, p0, p1, r, off) => {
     dv.subVectors(p1, p0); const len = dv.length();
     if (len < 1e-3) { c.visible = false; return; }
@@ -272,28 +286,28 @@ M.scene({ duration: 14, push: 0 }, async (tl, M) => {
     c.quaternion.setFromUnitVectors(UP, dv); c.scale.set(r, len, r);
   };
   function update(m) {
-    const inPhos = m === mA;
+    const isA = m === mA;
     // fosfato: se separa como bloque, gira y se aleja hacia la oscuridad
-    if (inPhos) {
+    if (isA) {
       qP.setFromAxisAngle(phosAxis, phos.rot);
       m.phosG.quaternion.copy(qP);
       m.phosG.position.copy(P0).addScaledVector(phosDir, phos.d).sub(tmp.copy(P0).applyQuaternion(qP));
     }
     const glow = m.glow.v, core = m.core.v, w = wave.w * (maxD + 1.5);
     m.A.forEach((a, i) => {
-      const s = EL[a.el].r * a.show.v;
+      const s = EL[a.el].r * a.show.v * m.shrink;
       a.mesh.scale.setScalar(Math.max(1e-4, s)); a.mesh.visible = s > 1e-3 && !(a.grp === 'phos' && phos.fade < 0.01);
-      if (a.id === 'O4' || a.id === 'P') { a.mat.emissive.copy(WARM); a.mat.emissiveIntensity = 0.9 * flash.v; }
+      if (isA && (a.id === 'O4' || a.id === 'P')) { a.mat.emissive.set(EL[a.el].c); a.mat.emissiveIntensity = 0.3 * flash.v; }
       if (a.grp === 'phos') { a.mat.opacity = phos.fade; a.mat.depthWrite = phos.fade > 0.99; return; }
-      // azul: onda (psilocina activa) + núcleo común (beat 3)
-      let e = 0;
-      if (inPhos) { const x = w - depAct.get(i); e = glow * Math.min(1, Math.max(0, x)) * (1.3 + 1.0 * Math.exp(-x * x * 1.2)) * (a.el === 'N' ? 0.6 : 1); }
-      if (a.ring) e = Math.max(e, 1.1 * core);
+      // azul: contraluz base + onda (psilocina activa) + núcleo común (beat 3)
+      let e = RIM_BASE;
+      if (isA) { const x = w - depAct.get(i); e = Math.max(e, glow * Math.min(1, Math.max(0, x)) * (1.3 + 1.0 * Math.exp(-x * x * 1.2)) * (a.el === 'N' ? 0.6 : 1)); }
+      if (a.ring) e = Math.max(e, 1.8 * core);
       a.mat.userData.rim.value = e;
     });
     m.B.forEach((bd) => {
       const A0 = m.A[bd.a], A1 = m.A[bd.b], g = bd.g.v;
-      const dbl = bd.o === 2, r = dbl ? 0.068 : 0.1, off = dbl ? 0.12 : 0;
+      const dbl = bd.o === 2, r = (dbl ? 0.068 : 0.1) * m.shrink, off = dbl ? 0.12 : 0;
       if (bd.grp === 'phos') { bd.mat.opacity = phos.fade; bd.mat.depthWrite = phos.fade > 0.99; }
       e0.copy(A0.p); e1.copy(A0.p).lerp(A1.p, g);
       if (bd.cut) {
@@ -310,23 +324,29 @@ M.scene({ duration: 14, push: 0 }, async (tl, M) => {
       if (g < 0.002 || (bd.grp === 'phos' && phos.fade < 0.01)) { bd.sticks.forEach((c) => (c.visible = false)); return; }
       bd.sticks.forEach((c, j) => setStick(c, e0, e1, r, dbl ? (j ? off : -off) : 0));
       if (bd.grp === 'phos') return;
+      // varillas: acompañan sin robar protagonismo (la activación la llevan los átomos)
       let e = 0;
-      if (inPhos) { const x = w - Math.max(depAct.get(bd.a), depAct.get(bd.b)); e = glow * Math.min(1, Math.max(0, x)) * (0.45 + 0.7 * Math.exp(-x * x * 1.2)); }
+      if (isA) { const x = w - Math.max(depAct.get(bd.a), depAct.get(bd.b)); e = glow * Math.min(1, Math.max(0, x)) * (0.45 + 0.7 * Math.exp(-x * x * 1.2)); }
       if (A0.ring && A1.ring) e = Math.max(e, 0.5 * core);
-      bd.mat.color.copy(STICK_C).lerp(STICK_B, Math.min(1, e / 0.45)); bd.mat.emissive.copy(BLUE); bd.mat.emissiveIntensity = e * 0.5;
+      bd.mat.color.copy(bd.base).lerp(STICK_B, 0.7 * Math.min(1, e / 0.45)); bd.mat.emissive.copy(BLUE); bd.mat.emissiveIntensity = Math.min(0.25, e * 0.5);
     });
-    // contorno que se dibuja
-    const c = m.contour, n = Math.floor(c.total * c.v / 3) * 3;
-    c.tube.geometry.setDrawRange(0, n); c.halo.geometry.setDrawRange(0, n);
-    c.fill.material.opacity = 0.035 * core;
-    m.g.rotation.y = spin.a;
+    if (m.contour) { const c = m.contour; c.tube.geometry.setDrawRange(0, Math.floor(c.total * c.v / 3) * 3); }
   }
 
   M.onFrame(() => {
-    update(mA); update(mB);
     camera.position.set(cam.lx + Math.sin(cam.ang) * Math.cos(cam.el) * cam.rad, cam.ly + Math.sin(cam.el) * cam.rad, cam.lz + Math.cos(cam.ang) * Math.cos(cam.el) * cam.rad);
     camera.lookAt(cam.lx, cam.ly, cam.lz);
     camera.setViewOffset(1920, 1080, cam.shift, 0, 1920, 1080);
+    mA.g.rotation.y = spin.a; mA.g.updateMatrixWorld(true);
+    // encaje: homotecia centrada en la cámara (en coordenadas de la psilocina) que lleva cada punto 0,9 Å más atrás
+    // sobre su propio rayo de visión → la serotonina queda oculta justo detrás, salvo sus diferencias
+    mA.g.worldToLocal(camL.copy(camera.position));
+    const k = 1 + 0.9 / camL.z;
+    dock.copy(camL).multiplyScalar(1 - k);
+    mB.g.visible = sero.u > 0;
+    mB.g.position.lerpVectors(SERO0, dock, sero.u);
+    mB.g.scale.setScalar(1 + (k - 1) * sero.u);
+    update(mA); if (mB.g.visible) update(mB);
     S.render();
   });
 

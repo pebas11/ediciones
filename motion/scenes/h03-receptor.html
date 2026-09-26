@@ -8,7 +8,7 @@
 <script type="importmap">{ "imports": { "three": "../node_modules/three/build/three.module.js", "three/addons/": "../node_modules/three/examples/jsm/" } }</script>
 <style>
   /* Guion de color (v3): cálido terroso para lo orgánico (neurona, membrana, receptor en reposo);
-     UN acento frío, azul psilocibina, solo para la psilocina y la activación. */
+     UN acento frío, azul psilocibina, solo para la psilocina y lo activo. El caramelo es solo de la neurona. */
   :root { --bone: #F3EDE2; --caramel: #E3A560; --blue: #8FB0FF; --dim: rgba(243,237,226,0.66); }
   body { background: #060504; }
   #gl { position: absolute; inset: 0; }
@@ -16,14 +16,15 @@
   #vig { position: absolute; inset: 0; background: radial-gradient(115% 100% at 62% 42%, transparent 50%, rgba(4,3,2,0.6) 100%); }
   .t { position: absolute; left: 140px; font-family: var(--f-display); color: var(--bone); letter-spacing: -0.035em; line-height: 1.2; white-space: nowrap; }
   #title { top: 668px; }
-  #title .a { display: block; font-size: 128px; font-weight: 300; color: var(--caramel); letter-spacing: -0.02em; }
+  #title .a { display: block; font-size: 128px; font-weight: 300; color: var(--dim); letter-spacing: -0.02em; }
   #title .b { display: block; font-size: 200px; font-weight: 800; margin-top: -44px; }
   #title .sb { font-size: 0.56em; font-weight: 700; letter-spacing: -0.02em; margin-left: 0.03em; position: relative; top: 0.14em; }
   #l2 { top: 736px; font-size: 112px; font-weight: 700; }
   #l2 em { font-style: normal; color: var(--blue); }
-  #num { top: 240px; font-size: 330px; font-weight: 900; letter-spacing: -0.055em; line-height: 1.05; }
+  #num { top: 150px; font-size: 330px; font-weight: 900; letter-spacing: -0.055em; line-height: 1.05; }
+  #num .h { display: block; font-size: 110px; font-weight: 300; color: var(--dim); letter-spacing: -0.02em; line-height: 1.2; margin-bottom: -18px; }
   #num .p { color: var(--blue); font-weight: 600; margin-left: 0.12em; }
-  #numL { top: 640px; line-height: 1.3; font-family: var(--f-body); font-size: 48px; font-weight: 500; letter-spacing: -0.01em; color: var(--dim); }
+  #numL { top: 690px; line-height: 1.3; font-family: var(--f-body); font-size: 48px; font-weight: 500; letter-spacing: -0.01em; color: var(--dim); }
   #fade { position: absolute; inset: 0; background: #060504; opacity: 0; }
 </style>
 </head>
@@ -34,7 +35,7 @@
 
   <div class="t" id="title"><span class="a">Receptor</span><span class="b">5-HT<span class="sb">2A</span></span></div>
   <div class="t" id="l2">Encaja como<br>una <em>llave</em></div>
-  <div class="t" id="num"><span id="numV">4</span><span class="p">%</span></div>
+  <div class="t" id="num"><span class="h">hasta</span><span id="numV">4</span><span class="p">%</span></div>
   <div class="t" id="numL">de los receptores ocupados</div>
 
   <canvas id="grain" width="512" height="512" style="width:1960px;height:1120px"></canvas>
@@ -46,6 +47,7 @@
 <script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
 <script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
 <script src="../lib/stage.js"></script>
+<script src="../lib/audio.js"></script>
 <script type="module">
 import { createStage3D, THREE, fbm } from '../lib/three-stage.mjs';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -57,11 +59,12 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 
 // Dato verificado (FICHA-HONGOS.md §4): "La psilocina activa el receptor 5-HT2A: en PET, hasta un 72 % de ocupación,
 // que siguió la intensidad de la experiencia." — Madsen et al. 2019, Neuropsychopharmacology, PMID 30685771.
+// Es el máximo (dosis más altas): por eso "hasta" en pantalla.
 const OCC = 72;
 const N_REC = 25;                              // receptores en la muestra de membrana
 const N_OCC = Math.round(N_REC * OCC / 100);   // 18 ocupados → 18/25 = 72 %
 
-M.scene({ duration: 14.9, push: 0 }, async (tl, M) => {
+M.scene({ duration: 15, push: 0, audio: { key: 'D', mode: 'lydian', bed: { cycle: 9, bright: 0.9 } } }, async (tl, M) => {
   const $ = (s) => document.querySelector(s);
   const DEBUG = new URLSearchParams(location.search).has('debug');
   const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -75,44 +78,52 @@ M.scene({ duration: 14.9, push: 0 }, async (tl, M) => {
 
   /* ---------------- escenario (misma luz y atmósfera que h01) ---------------- */
   const S = createStage3D($('#gl'), { bgTop: '#130f0c', bgBottom: '#050403', bgGlow: '#2c2017', bloom: { strength: 0.25, radius: 0.45, threshold: 0.94 }, exposure: 1.0, env: 0.2 });
-  const { scene, camera, dome } = S;
+  const { scene, camera, dome, renderer } = S;
+  renderer.localClippingEnabled = true;
   // el entorno (reflejos suaves, igual que h01) solo en los protagonistas: en software, muestrearlo en cada píxel cuesta el doble
   const ENV = scene.environment; scene.environment = null;
   const withEnv = (m) => { m.envMap = ENV; m.envMapIntensity = 0.2; return m; };
   // niebla lineal relativa a la cámara: el protagonista queda limpio y las filas del fondo se pierden en lo oscuro
   scene.fog = new THREE.Fog('#090706', 10, 30);
-  const fogS = { span: 13 };
+  const fogS = { span: 8 };
   // clave cálida lateral, contraluz FRÍO, hemisférica tenue. Direcciones fijas respecto de la cámara
-  // (la cámara pasa de mirar la neurona desde arriba a mirar la membrana de frente).
+  // (la cámara pasa de mirar la neurona de frente a mirar la membrana de costado).
   const key = new THREE.DirectionalLight('#ffdcae', 2.1); key.castShadow = true; key.shadow.mapSize.set(2048, 2048); key.shadow.radius = 5; key.shadow.bias = -0.0004;
   const rim = new THREE.DirectionalLight('#7fa2ff', 1.5);
   const hemi = new THREE.HemisphereLight('#3a3440', '#140d08', 0.4);
   scene.add(key, key.target, rim, rim.target, hemi);
   const KEY_L = V(-4, 4.5, 4).normalize(), RIM_L = V(3.5, 3, -4).normalize();
-  const BLUE = new THREE.Color('#7fa2ff');
+  const BLUE = new THREE.Color('#7fa2ff');          // acento (luz, lo activo)
+  const CYAN = new THREE.Color('#86c0ff');          // emisión del pulso: sumada a la luz cálida tira a blanco frío, no a magenta
+  const COOL = new THREE.Color('#c9d0dc');          // paso intermedio hueso → azul (gris frío, sin pasar por malva)
+  const mix3 = (out, base, a) => (a < 0.5 ? out.copy(base).lerp(COOL, a * 2) : out.copy(COOL).lerp(BLUE, a * 2 - 1));
 
   /* ======================= MEMBRANA (unidades de mundo) ======================= */
-  const BW = 16, BD = 15, HXW = BW / 2, HZ = BD / 2;        // muestra de membrana: cara frontal en z = HZ
+  const BW = 16, BD = 16, HXW = BW / 2, HZ = BD / 2;        // muestra de membrana (bandeja)
   const HEAD = 0.17, SP = 0.36, YT = 0.78, YB = -0.78;       // cabezas lipídicas (dos capas)
   const YTOP = YT + HEAD;
-  const NR = 1.25;                                            // radio libre de lípidos alrededor de cada receptor
+  const NR = 1.25, NR_H = 1.1;                                // radio libre de lípidos (fondo / protagonista: los lípidos lo tocan)
+  const HERO_Z = HZ - 2.1;                                    // el protagonista vive DENTRO de la bicapa, en la primera fila
+  const CUT0 = HERO_Z + 0.12;                                 // corte de la muestra: pasa por el centro del protagonista
+  const cut = { z: CUT0 };
+  const cutPlane = new THREE.Plane(V(0, 0, -1), CUT0);        // conserva z ≤ cut (solo lípidos y núcleo; nunca el receptor)
 
-  // 25 receptores: el protagonista en una muesca de la cara frontal (se ve entero) + 24 en la membrana
+  // 25 receptores: el protagonista (fila de adelante, en el corte) + 24 en la membrana
   const rl = M.rng(7);
-  const RECS = [{ x: 0, z: HZ, hero: true, rot: 0, seed: 1, row: -1, col: 2 }];
-  const COLS = [-6.4, -3.2, 0, 3.2, 6.4], ROWS = [4.9, 2.2, -0.5, -3.2, -5.9];
+  const RECS = [{ x: 0, z: HERO_Z, hero: true, rot: 0, seed: 1, row: 0, col: 2, nr: NR_H }];
+  const COLS = [-6.2, -3.1, 0, 3.1, 6.2], ROWS = [4.6, 2.0, -0.6, -3.2, -5.8];
   ROWS.forEach((z, j) => COLS.forEach((x, i) => {
     if (j === 0 && i === 2) return;
-    RECS.push({ x: x + (rl() - 0.5) * 0.5, z: z + (rl() - 0.5) * 0.24, hero: false, rot: rl() * 6.283, seed: 10 + j * 5 + i, row: j, col: i });
+    RECS.push({ x: x + (rl() - 0.5) * 0.3, z: z + (rl() - 0.5) * 0.24, hero: false, rot: rl() * 6.283, seed: 10 + j * 5 + i, row: j, col: i, nr: NR });
   }));
   // 7 vacíos repartidos → 18 ocupados de 25 (72 %)
   const EMPTY = new Set(['0:3', '1:0', '1:3', '2:2', '3:1', '3:4', '4:1']);
   RECS.forEach((q) => (q.occ = q.hero || !EMPTY.has(q.row + ':' + q.col)));
   if (RECS.filter((q) => q.occ).length !== N_OCC) console.error('ocupación mal armada');
 
-  /* ---------------- receptor: 7 hélices transmembrana + asas ---------------- */
-  const HXR = 0.21, PITCH = 0.5, LOOP_R = 0.075;
-  const A0 = Math.PI / 2 - 5 * (2 * Math.PI / 7);            // TM6 (índice 5) mira hacia +z: hacia la muesca
+  /* ---------------- receptor: 7 hélices transmembrana (cilindros limpios) + asas ---------------- */
+  const HXR = 0.21, PITCH = 0.5;
+  const A0 = Math.PI / 2 - 5 * (2 * Math.PI / 7);            // TM6 (índice 5) mira hacia +z
   const Y_CUT = -0.72;                                        // receptores del fondo: terminan dentro de la bicapa (no se ve nada colgando)
   function recSpec(seed, full) {
     const rr = M.rng(seed * 97 + 3);
@@ -137,7 +148,7 @@ M.scene({ duration: 14.9, push: 0 }, async (tl, M) => {
     for (let i = 0; i < p.count; i++) {
       const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
       const w = 1 - sstep(L / 2 - 0.14, L / 2 + 0.02, Math.abs(y));
-      const k = 1 + 0.045 * w * Math.sin(Math.atan2(z, x) + 2 * Math.PI * y / PITCH);   // surco helicoidal apenas marcado
+      const k = 1 + 0.015 * w * Math.sin(Math.atan2(z, x) + 2 * Math.PI * y / PITCH);   // surco helicoidal apenas insinuado
       p.setXYZ(i, x * k, y, z * k);
     }
     g.computeVertexNormals();
@@ -154,12 +165,14 @@ M.scene({ duration: 14.9, push: 0 }, async (tl, M) => {
     return new THREE.CatmullRomCurve3([A.clone(), A.clone().addScaledVector(up, 0.3).addScaledVector(ro, 0.12), A.clone().addScaledVector(up, 0.46).addScaledVector(ro, 0.42).addScaledVector(tn, 0.12),
       A.clone().addScaledVector(up, 0.4).addScaledVector(ro, 0.72).addScaledVector(tn, 0.3)], false, 'centripetal');
   }
-  function taperTubeGeo(curve, r0, r1, segs, radial) {
+  // tubo con radio variable; flare > 0 ensancha la raíz (la rama nace como un cono que se funde con el soma)
+  function taperTubeGeo(curve, r0, r1, segs, radial, flare = 0, len = 1) {
     const geo = new THREE.TubeGeometry(curve, segs, 1, radial, false);
     const pos = geo.attributes.position, c = V(), v = V();
-    for (let i = 0; i <= segs; i++) { curve.getPointAt(i / segs, c); const rad = r0 + (r1 - r0) * Math.pow(i / segs, 0.85);
+    for (let i = 0; i <= segs; i++) { const u = i / segs; curve.getPointAt(u, c);
+      const rad = (r0 + (r1 - r0) * Math.pow(u, 0.85)) * (1 + flare * Math.exp(-u * len / 0.06));
       for (let j = 0; j <= radial; j++) { const k = i * (radial + 1) + j; v.fromBufferAttribute(pos, k).sub(c).multiplyScalar(rad).add(c); pos.setXYZ(k, v.x, v.y, v.z); } }
-    geo.deleteAttribute('uv');
+    geo.deleteAttribute('uv'); geo.computeVertexNormals();
     return geo;
   }
   const LOOPS_EC = [[1, 2], [3, 4], [5, 6]], LOOPS_IC = [[0, 1], [2, 3], [4, 5]];
@@ -169,31 +182,42 @@ M.scene({ duration: 14.9, push: 0 }, async (tl, M) => {
     if (full) LOOPS_IC.forEach(([i, j]) => L.push({ i, j, s: -1, h: i === 4 ? 0.55 : 0.34, out: 0.26 }));
     return L.map((d) => ({ ...d, curve: loopCurve(d.s > 0 ? H[d.i].top : H[d.i].bot, d.s > 0 ? H[d.j].top : H[d.j].bot, d.s, d.h, d.out) }));
   }
-  const termDefs = (H) => [{ curve: termCurve(H[6].bot, -1, H[6].rho, H[6].tan.clone().negate()), end: 0.035 }];   // extremo C (intracelular)
+  // extremos: C (intracelular, desde TM7) y N (extracelular, desde TM1) → topología 7TM completa
+  const termDefs = (H) => [{ curve: termCurve(H[6].bot, -1, H[6].rho, H[6].tan.clone().negate()), end: 0.035 },
+    { curve: termCurve(H[0].top, 1, H[0].rho, H[0].tan), end: 0.035 }];
+  const LOOP_R = 0.075, LOOP_R_BG = 0.045;                    // asas finas en el fondo: no forman un campo de grampas
   function receptorGeos(H, detail) {
-    const segR = detail ? 28 : 12, segH = detail ? 64 : 18, ts = detail ? 44 : 18, tr = detail ? 10 : 6;
+    const segR = detail ? 28 : 12, segH = detail ? 64 : 18, ts = detail ? 44 : 18, tr = detail ? 10 : 6, lr = detail ? LOOP_R : LOOP_R_BG;
     const hel = H.map((h) => helixGeo(h.L, segR, segH));
-    const loops = loopDefs(H, detail).map((d) => ({ ...d, geo: new THREE.TubeGeometry(d.curve, ts, LOOP_R, tr, false) }));
+    const loops = loopDefs(H, detail).map((d) => ({ ...d, geo: new THREE.TubeGeometry(d.curve, ts, lr, tr, false) }));
     loops.forEach((l) => l.geo.deleteAttribute('uv'));
     const terms = (detail ? termDefs(H) : []).map((d) => { const g = taperTubeGeo(d.curve, LOOP_R, d.end, ts, tr); const cap = new THREE.SphereGeometry(d.end, 8, 6); cap.deleteAttribute('uv'); cap.translate(...d.curve.getPointAt(1).toArray()); return [g, cap]; }).flat();
     return { hel, loops, terms };
   }
 
-  // reposo: cálido (hueso tostado el protagonista, más oscuro y apagado el resto). Activo: azul.
-  const recBase = { color: '#d8c2a2', roughness: 0.4, clearcoat: 0.35, clearcoatRoughness: 0.3, transparent: true };
-  const REC_BG = '#8a7159', ACT_TINT = new THREE.Color('#7fa2ff');
-  // protagonista: pulso azul que baja por las hélices al activarse (emisión según altura de mundo)
-  const heroMat = withEnv(new THREE.MeshPhysicalMaterial(recBase));
-  const U = { uPulse: { value: 3.0 }, uPA: { value: 0 }, uGlow: { value: 0 }, uAct: { value: 0 }, uBlue: { value: BLUE.clone() }, uTint: { value: ACT_TINT.clone() } };
-  heroMat.onBeforeCompile = (sh) => {
-    Object.assign(sh.uniforms, U);
-    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying float vWY;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWY = (modelMatrix * vec4(transformed, 1.0)).y;');
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vWY; uniform float uPulse; uniform float uPA; uniform float uGlow; uniform float uAct; uniform vec3 uBlue; uniform vec3 uTint;')
-      .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = mix(diffuseColor.rgb, uTint, uAct);')
-      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += uBlue * (uGlow + uPA * 1.8 * exp(-pow((vWY - uPulse) / 0.32, 2.0)));');
-  };
-  heroMat.customProgramCacheKey = () => 'h03-hero-pulse';
+  // protagonista: hueso (valor medio-alto) + filo frío propio (Fresnel) + pulso al activarse.
+  // Activación: hueso → gris frío → azul (nunca pasa por malva) y emisión cian.
+  const U = { uPulse: { value: 3.0 }, uPA: { value: 0 }, uGlow: { value: 0 }, uAct: { value: 0 }, uRim: { value: 0.32 },
+    uPulseC: { value: CYAN.clone() }, uGlowC: { value: BLUE.clone() }, uTint: { value: BLUE.clone() }, uCool: { value: COOL.clone() }, uRimC: { value: BLUE.clone() } };
+  function makeHeroMat(extra = {}) {
+    const m = withEnv(new THREE.MeshPhysicalMaterial({ color: '#d8c2a2', roughness: 0.42, clearcoat: 0.3, clearcoatRoughness: 0.35, ...extra }));
+    m.onBeforeCompile = (sh) => {
+      Object.assign(sh.uniforms, U);
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying float vWY;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWY = (modelMatrix * vec4(transformed, 1.0)).y;');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vWY; uniform float uPulse; uniform float uPA; uniform float uGlow; uniform float uAct; uniform float uRim; uniform vec3 uPulseC; uniform vec3 uGlowC; uniform vec3 uTint; uniform vec3 uCool; uniform vec3 uRimC;')
+        .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = uAct < 0.5 ? mix(diffuseColor.rgb, uCool, uAct * 2.0) : mix(uCool, uTint, uAct * 2.0 - 1.0);')
+        .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+          float frz = 1.0 - clamp(dot(normalize(normal), normalize(vViewPosition)), 0.0, 1.0);
+          totalEmissiveRadiance += uRimC * uRim * pow(frz, 2.6);
+          totalEmissiveRadiance += uGlowC * uGlow + uPulseC * uPA * 1.3 * exp(-pow((vWY - uPulse) / 0.32, 2.0));`);
+    };
+    m.customProgramCacheKey = () => 'h03-hero';
+    return m;
+  }
+  const heroMat = makeHeroMat();
+  const ghostMat = makeHeroMat({ transparent: true, opacity: 1, depthWrite: false });   // TM5/TM6 translúcidas: se ve la llave entrar
+  const REC_BG = new THREE.Color('#4e443c'), REC_EMPTY = new THREE.Color('#7a6e62');
 
   const MEM = new THREE.Group(); scene.add(MEM);
   const RECG = [];
@@ -208,7 +232,8 @@ M.scene({ duration: 14.9, push: 0 }, async (tl, M) => {
       o.loopMeshes = G.loops.map((l) => { const m = new THREE.Mesh(l.geo, heroMat); m.castShadow = true; m.receiveShadow = true; grp.add(m); return m; });
       G.terms.forEach((g) => { const m = new THREE.Mesh(g, heroMat); m.castShadow = true; grp.add(m); });
     } else {
-      o.mat = new THREE.MeshStandardMaterial({ color: REC_BG, roughness: 0.5, transparent: true, emissive: BLUE.clone(), emissiveIntensity: 0 });
+      o.mat = new THREE.MeshStandardMaterial({ color: REC_BG.clone(), roughness: 0.55, emissive: CYAN.clone(), emissiveIntensity: 0 });
+      o.lift = { v: 0 }; o.act = { v: 0 };
       const parts = H.map((h, i) => G.hel[i].applyMatrix4(new THREE.Matrix4().compose(h.c, qFromDir(h.dir), V(1, 1, 1))));
       const m = new THREE.Mesh(mergeGeometries([...parts, ...G.loops.map((l) => l.geo), ...G.terms]), o.mat);
       m.castShadow = true; m.receiveShadow = true; grp.add(m);
@@ -219,70 +244,72 @@ M.scene({ duration: 14.9, push: 0 }, async (tl, M) => {
 
   /* ---------------- bicapa lipídica ---------------- */
   const rh = M.rng(19);
-  const edgeDist = (x, z) => Math.min(HXW - Math.abs(x), HZ - Math.abs(z), Math.hypot(x, z - HZ) - NR);
-  const freeOf = (x, z) => !RECS.some((q) => Math.hypot(x - q.x, z - q.z) < NR);
+  const sideBack = (x, z) => Math.min(HXW - Math.abs(x), HZ + z) < 0.62;     // bordes laterales y de atrás (se ven siempre)
+  const freeOf = (x, z) => !RECS.some((q) => Math.hypot(x - q.x, z - q.z) < q.nr);
   const lipTop = [], lipBot = [];
-  const cA = new THREE.Color('#4a382b'), cB = new THREE.Color('#5c4636'), cC = new THREE.Color('#3a2c23');
-  for (const [arr, y, off, edgeOnly] of [[lipTop, YT, 0, false], [lipBot, YB, 0.5, true]]) {
+  // secundario: valores bajos y poco saturados
+  const cA = new THREE.Color('#3a322c'), cB = new THREE.Color('#453b33'), cC = new THREE.Color('#2e2823');
+  for (const [arr, y, off, bottom] of [[lipTop, YT, 0, false], [lipBot, YB, 0.5, true]]) {
     for (let j = 0; ; j++) {
       const z = -HZ + HEAD + j * SP * 0.866; if (z > HZ - HEAD + 1e-6) break;
       for (let i = 0; ; i++) {
         const x = -HXW + HEAD + (i + ((j + (off ? 1 : 0)) % 2) * 0.5) * SP; if (x > HXW - HEAD + 1e-6) break;
         const xx = x + (rh() - 0.5) * 0.025, zz = z + (rh() - 0.5) * 0.025;
         if (!freeOf(xx, zz)) continue;
-        const ed = edgeDist(xx, zz);
-        if (edgeOnly && ed > 0.62) continue;
+        const sb = sideBack(xx, zz), nearCut = zz > CUT0 - 0.8;      // la capa de abajo y las colas solo existen donde se pueden ver
+        if (bottom && !sb && !nearCut) continue;
         const c = cA.clone().lerp(cB, rh()).lerp(cC, rh() * 0.5);
-        arr.push({ x: xx, y: y + (rh() - 0.5) * 0.025, z: zz, s: 0.94 + rh() * 0.1, c, edge: ed < 0.62 });
+        arr.push({ x: xx, y: y + (rh() - 0.5) * 0.025, z: zz, s: 0.94 + rh() * 0.1, c, sb, tail: sb || nearCut });
       }
     }
   }
   const headGeo = new THREE.SphereGeometry(1, 10, 7);
-  const headMat = new THREE.MeshLambertMaterial({ color: '#ffffff', transparent: true });     // Lambert: secundario y barato de sombrear
+  const headMat = new THREE.MeshLambertMaterial({ color: '#ffffff' });     // Lambert: secundario y barato de sombrear
   const heads = new THREE.InstancedMesh(headGeo, headMat, lipTop.length); heads.receiveShadow = true; MEM.add(heads);
   const headsB = new THREE.InstancedMesh(headGeo, headMat, lipBot.length); headsB.receiveShadow = true; MEM.add(headsB);
   const m4 = new THREE.Matrix4(), q0 = new THREE.Quaternion(), vS = V(), vP = V();
-  lipBot.forEach((L, i) => { headsB.setMatrixAt(i, m4.compose(vP.set(L.x, L.y, L.z), q0, vS.setScalar(HEAD * L.s))); headsB.setColorAt(i, L.c); });
-  // colas (solo donde se ven: cerca de las caras del corte)
+  lipTop.forEach((L, i) => heads.setColorAt(i, L.c));
+  lipBot.forEach((L, i) => headsB.setColorAt(i, L.c));
+  // colas: en los bordes y en la franja del corte
   const tailDefs = [];
   const tailOf = (L, s, hi) => { for (let k = 0; k < 2; k++) { const dx = (k - 0.5) * 0.1 + (rh() - 0.5) * 0.05, dz = (rh() - 0.5) * 0.08;
-    tailDefs.push({ hi, a: V(L.x + dx * 0.5, L.y - s * 0.08, L.z + dz * 0.5), b: V(L.x + dx * 1.4 + (rh() - 0.5) * 0.06, s * 0.1, L.z + dz * 1.4) }); } };
-  lipTop.forEach((L, i) => L.edge && tailOf(L, 1, i));
-  lipBot.forEach((L) => tailOf(L, -1, -1));
+    tailDefs.push({ L, hi, a: V(L.x + dx * 0.5, L.y - s * 0.08, L.z + dz * 0.5), b: V(L.x + dx * 1.4 + (rh() - 0.5) * 0.06, s * 0.1, L.z + dz * 1.4) }); } };
+  lipTop.forEach((L, i) => L.tail && tailOf(L, 1, i));
+  lipBot.forEach((L) => L.tail && tailOf(L, -1, -1));
   const tailGeo = new THREE.CylinderGeometry(1, 1, 1, 6, 1, true);
-  const tailMat = new THREE.MeshLambertMaterial({ color: '#2e231c', transparent: true });
+  const tailMat = new THREE.MeshLambertMaterial({ color: '#2a221c' });
   const tails = new THREE.InstancedMesh(tailGeo, tailMat, tailDefs.length); MEM.add(tails);
-  const setTail = (i, dy) => { const d = tailDefs[i]; const a = d.a.clone(); a.y += dy; const dir = d.b.clone().sub(a); const len = dir.length();
-    tails.setMatrixAt(i, m4.compose(a.clone().addScaledVector(dir, 0.5), qFromDir(dir.normalize()), vS.set(0.03, len, 0.03))); };
-  tailDefs.forEach((_, i) => setTail(i, 0));
-  // núcleo oscuro entre capas (se ve entre las colas del corte y entre las cabezas)
+  const setTail = (i, dy, vis) => { const d = tailDefs[i]; const a = d.a.clone(); a.y += dy; const dir = d.b.clone().sub(a); const len = dir.length();
+    tails.setMatrixAt(i, m4.compose(a.clone().addScaledVector(dir, 0.5), qFromDir(dir.normalize()), vS.set(0.03 * vis + 1e-5, len * vis + 1e-5, 0.03 * vis + 1e-5))); };
+  // cabeza visible si su centro queda detrás del corte (entra suave cuando el corte avanza)
+  const shownAt = (z, c) => sstep(z - 0.15, z, c);
+  const tailVis = (L, c) => shownAt(L.z, c) * (L.sb || L.z > c - 0.75 ? 1 : 0);
+  // núcleo oscuro entre capas (hueco al cortarlo: DoubleSide lo lee como un bloque macizo)
   const INS = 0.45;
   const coreShape = new THREE.Shape();
-  { const hw = HXW - INS, hd = HZ - INS, nr = NR + INS, a0 = Math.asin(INS / nr);
-    coreShape.moveTo(-hw, -hd); coreShape.lineTo(nr * Math.cos(Math.PI - a0), -hd);
-    for (let k = 0; k <= 24; k++) { const a = Math.PI - a0 - (k / 24) * (Math.PI - 2 * a0); coreShape.lineTo(nr * Math.cos(a), -HZ + nr * Math.sin(a)); }
-    coreShape.lineTo(hw, -hd); coreShape.lineTo(hw, hd); coreShape.lineTo(-hw, hd); coreShape.closePath();
-    RECS.forEach((q) => { if (q.hero) return; const h = new THREE.Path(); h.absarc(q.x, -q.z, NR - 0.1, 0, Math.PI * 2, true); coreShape.holes.push(h); }); }
+  { const hw = HXW - INS, hd = HZ - INS;
+    coreShape.moveTo(-hw, -hd); coreShape.lineTo(hw, -hd); coreShape.lineTo(hw, hd); coreShape.lineTo(-hw, hd); coreShape.closePath();
+    RECS.forEach((q) => { const h = new THREE.Path(); h.absarc(q.x, -q.z, q.nr - 0.1, 0, Math.PI * 2, true); coreShape.holes.push(h); }); }
   const coreGeo = new THREE.ExtrudeGeometry(coreShape, { depth: 0.96, bevelEnabled: false, curveSegments: 20 });
   coreGeo.rotateX(-Math.PI / 2); coreGeo.translate(0, -0.48, 0);
-  const coreMat = new THREE.MeshLambertMaterial({ color: '#17110d', transparent: true });
+  const coreMat = new THREE.MeshLambertMaterial({ color: '#17110d', side: THREE.DoubleSide, clippingPlanes: [cutPlane] });
   MEM.add(new THREE.Mesh(coreGeo, coreMat));
-  // aristas finas de la muestra (estilo lámina, como el bloque de h01)
-  function outlineXZ(step) {
-    const pts = [], P2 = (x, z) => new THREE.Vector2(x, z);
-    const seg = (a, b) => { const n = Math.max(1, Math.ceil(a.distanceTo(b) / step)); for (let k = 0; k < n; k++) pts.push(a.clone().lerp(b, k / n)); };
-    seg(P2(-HXW, HZ), P2(-NR, HZ));
-    for (let k = 0; k < 24; k++) { const a = Math.PI + (k / 24) * Math.PI; pts.push(P2(NR * Math.cos(a), HZ + NR * Math.sin(a))); }
-    seg(P2(NR, HZ), P2(HXW, HZ)); seg(P2(HXW, HZ), P2(HXW, -HZ)); seg(P2(HXW, -HZ), P2(-HXW, -HZ)); seg(P2(-HXW, -HZ), P2(-HXW, HZ)); pts.push(P2(-HXW, HZ));
-    return pts;
-  }
+  // aristas finas de la muestra (estilo lámina, como el bloque de h01). El frente sigue al corte y se abre en el protagonista.
   const edgeMat = new LineMaterial({ color: '#f3ede2', linewidth: 1.4, transparent: true, opacity: 0.26, resolution: new THREE.Vector2(1920, 1080), depthWrite: false });
-  { const ol = outlineXZ(0.5), seg = [];
-    for (const y of [YTOP, -YTOP]) for (let k = 0; k < ol.length - 1; k++) seg.push(ol[k].x, y, ol[k].y, ol[k + 1].x, y, ol[k + 1].y);
-    for (const [x, z] of [[-HXW, HZ], [HXW, HZ], [HXW, -HZ], [-HXW, -HZ], [-NR, HZ], [NR, HZ]]) seg.push(x, YTOP, z, x, -YTOP, z);
-    const g = new LineSegmentsGeometry(); g.setPositions(seg); MEM.add(new LineSegments2(g, edgeMat)); }
+  const edgeLines = new LineSegments2(new LineSegmentsGeometry(), edgeMat); MEM.add(edgeLines);
+  let edgeC = null;
+  function buildEdges(c) {
+    const f = Math.min(c, HZ), dz = f - HERO_Z, g = Math.abs(dz) < NR_H ? Math.sqrt(NR_H * NR_H - dz * dz) : 0, seg = [];
+    for (const y of [YTOP, -YTOP]) {
+      seg.push(-HXW, y, -HZ, HXW, y, -HZ, -HXW, y, -HZ, -HXW, y, f, HXW, y, -HZ, HXW, y, f);
+      if (g > 0) seg.push(-HXW, y, f, -g, y, f, g, y, f, HXW, y, f); else seg.push(-HXW, y, f, HXW, y, f);
+    }
+    for (const [x, z] of [[-HXW, f], [HXW, f], [HXW, -HZ], [-HXW, -HZ]]) seg.push(x, YTOP, z, x, -YTOP, z);
+    if (g > 0) for (const x of [-g, g]) seg.push(x, YTOP, f, x, -YTOP, f);
+    const geo = new LineSegmentsGeometry(); geo.setPositions(seg); edgeLines.geometry.dispose(); edgeLines.geometry = geo;
+  }
 
-  /* ======================= PSILOCINA (versión compacta del modelo de h02) ======================= */
+  /* ======================= PSILOCINA (versión compacta del modelo de h02: mismos colores y proporciones) ======================= */
   const D2R = Math.PI / 180;
   function place(A, B, C, len, ang, dih) {
     const a = ang * D2R, d = dih * D2R, bc = C.clone().sub(B).normalize(), n = B.clone().sub(A).cross(bc).normalize(), m = n.clone().cross(bc);
@@ -296,13 +323,16 @@ M.scene({ duration: 14.9, push: 0 }, async (tl, M) => {
   AT.Cb = radial(AT.C3, PEN, 1.5); AT.Ca = place(AT.C3a, AT.C3, AT.Cb, 1.53, 113, 105); AT.Nam = place(AT.C3, AT.Cb, AT.Ca, 1.47, 111, 180);
   AT.Me0 = place(AT.Cb, AT.Ca, AT.Nam, 1.46, 110, 170); AT.Me1 = place(AT.Cb, AT.Ca, AT.Nam, 1.46, 110, -70);
   AT.O4 = radial(AT.C4, HEX, 1.37);                           // psilocina: OH en C4, N(CH3)2 en la cadena de C3
-  const BONDS = [['C3a', 'C7a'], ['C3a', 'C4'], ['C4', 'C5'], ['C5', 'C6'], ['C6', 'C7'], ['C7', 'C7a'], ['C7a', 'N1'], ['N1', 'C2'], ['C2', 'C3'], ['C3', 'C3a'],
-    ['C3', 'Cb'], ['Cb', 'Ca'], ['Ca', 'Nam'], ['Nam', 'Me0'], ['Nam', 'Me1'], ['C4', 'O4']];
+  // Kekulé como h02: C2=C3, C3a=C7a, C4=C5, C6=C7
+  const BONDS = [['C3a', 'C7a', 2], ['C3a', 'C4', 1], ['C4', 'C5', 2], ['C5', 'C6', 1], ['C6', 'C7', 2], ['C7', 'C7a', 1], ['C7a', 'N1', 1], ['N1', 'C2', 1], ['C2', 'C3', 2], ['C3', 'C3a', 1],
+    ['C3', 'Cb', 1], ['Cb', 'Ca', 1], ['Ca', 'Nam', 1], ['Nam', 'Me0', 1], ['Nam', 'Me1', 1], ['C4', 'O4', 1]];
   const MS = 0.17;                                            // unidades por Å
-  const EL = { C: { r: 0.52, c: '#8d8177' }, N: { r: 0.56, c: '#8fb0ff' }, O: { r: 0.54, c: '#E3A560' } };
+  const EL = { C: { r: 0.38, c: '#b3a79a' }, N: { r: 0.39, c: '#95a1b6' }, O: { r: 0.39, c: '#E3A560' } };   // = h02
+  const STICK = new THREE.Color('#d6ccbf').lerp(new THREE.Color('#7fa0ea'), 0.7);                           // varillas de la psilocina activa (h02)
   const elOf = (k) => k === 'N1' || k === 'Nam' ? 'N' : k === 'O4' ? 'O' : 'C';
   // orientación: el indol entra primero (abajo), la amina queda arriba
-  { const ring = ['C3a', 'C7a', 'C4', 'C5', 'C6', 'C7', 'C3', 'C2', 'N1'], ic = V(); ring.forEach((k) => ic.add(AT[k])); ic.divideScalar(ring.length);
+  const RINGK = ['C3a', 'C7a', 'C4', 'C5', 'C6', 'C7', 'C3', 'C2', 'N1'];
+  { const ic = V(); RINGK.forEach((k) => ic.add(AT[k])); ic.divideScalar(RINGK.length);
     const q = new THREE.Quaternion().setFromUnitVectors(AT.Nam.clone().sub(ic).normalize(), UP);
     Object.values(AT).forEach((p) => p.applyQuaternion(q).multiplyScalar(MS));
     const c = V(); Object.values(AT).forEach((p) => c.add(p)); c.divideScalar(Object.keys(AT).length); c.y = Math.min(...Object.entries(AT).map(([k, p]) => p.y - EL[elOf(k)].r * MS));
@@ -311,48 +341,62 @@ M.scene({ duration: 14.9, push: 0 }, async (tl, M) => {
   const molGeo = (() => {
     const parts = [];
     const colorize = (g, col) => { const c = new THREE.Color(col), n = g.attributes.position.count, a = new Float32Array(n * 3); for (let i = 0; i < n; i++) a.set([c.r, c.g, c.b], i * 3); g.setAttribute('color', new THREE.BufferAttribute(a, 3)); g.deleteAttribute('uv'); return g; };
-    Object.entries(AT).forEach(([k, p]) => { const e = EL[elOf(k)]; parts.push(colorize(new THREE.SphereGeometry(e.r * MS, 20, 14).translate(p.x, p.y, p.z), e.c)); });
-    BONDS.forEach(([a, b]) => { const A = AT[a], B = AT[b], d = B.clone().sub(A), len = d.length();
-      const g = new THREE.CylinderGeometry(0.17 * MS, 0.17 * MS, len, 10, 1, true); g.applyQuaternion(qFromDir(d.clone().normalize())); g.translate(...A.clone().addScaledVector(d, 0.5).toArray());
-      parts.push(colorize(g, '#b9ad9f')); });
+    Object.entries(AT).forEach(([k, p]) => { const e = EL[elOf(k)]; parts.push(colorize(new THREE.SphereGeometry(e.r * MS, 22, 16).translate(p.x, p.y, p.z), e.c)); });
+    const rn0 = AT.C4.clone().sub(AT.C3a).cross(AT.C7a.clone().sub(AT.C3a)).normalize();   // normal del plano del anillo
+    BONDS.forEach(([a, b, o]) => { const A = AT[a], B = AT[b], d = B.clone().sub(A), len = d.length(), dn = d.clone().normalize();
+      const side = dn.clone().cross(rn0).normalize(), r = (o === 2 ? 0.068 : 0.1) * MS;
+      (o === 2 ? [-0.12, 0.12] : [0]).forEach((off) => {
+        const g = new THREE.CylinderGeometry(r, r, len, 10, 1, true); g.applyQuaternion(qFromDir(dn)); g.translate(...A.clone().addScaledVector(d, 0.5).addScaledVector(side, off * MS).toArray());
+        parts.push(colorize(g, '#' + STICK.getHexString())); }); });
     return mergeGeometries(parts);
   })();
-  const molMat = withEnv(new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.3, clearcoat: 0.6, clearcoatRoughness: 0.2, emissive: BLUE.clone(), emissiveIntensity: 0.05 }));
+  // filo azul por Fresnel (como la psilocina activa de h02): se enciende sin teñir el color de los átomos
+  const molMat = withEnv(new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.34, clearcoat: 0.6, clearcoatRoughness: 0.25 }));
+  const MOL_RIM = { value: 1.2 };
+  molMat.onBeforeCompile = (sh) => {
+    sh.uniforms.uRim = MOL_RIM; sh.uniforms.uRimC = { value: BLUE.clone() };
+    sh.fragmentShader = 'uniform float uRim;\nuniform vec3 uRimC;\n' + sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+      float frz = 1.0 - clamp(dot(normalize(normal), normalize(vViewPosition)), 0.0, 1.0);
+      totalEmissiveRadiance += uRimC * uRim * pow(frz, 2.6);`);
+  };
+  molMat.customProgramCacheKey = () => 'h03-mol';
   const Y_DOCK = 0.5;                                        // base de la molécula dentro del bolsillo
   const heroMol = new THREE.Mesh(molGeo, molMat); heroMol.castShadow = true; heroMol.visible = false; scene.add(heroMol);
-  // halo azul (la forma activa)
-  const haloTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d'); const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
-    gr.addColorStop(0, 'rgba(127,162,255,0.55)'); gr.addColorStop(0.35, 'rgba(127,162,255,0.22)'); gr.addColorStop(1, 'rgba(127,162,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); return new THREE.CanvasTexture(c); })();
-  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex, color: '#ffffff', transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
-  scene.add(halo);
 
   /* ======================= NEURONA PIRAMIDAL (unidades propias; se escala al mundo) ======================= */
-  const Z = BW / 0.2;                                         // la muestra de 19 u mide 0,2 u sobre el soma
+  const Z = 100;                                              // la muestra de 16 u mide 0,16 u sobre una cara del soma
   const NEU = new THREE.Group(); scene.add(NEU);
-  const neuMat = withEnv(new THREE.MeshPhysicalMaterial({ color: '#c98c55', roughness: 0.5, clearcoat: 0.2, clearcoatRoughness: 0.5, sheen: 0.6, sheenRoughness: 0.5, sheenColor: new THREE.Color('#ffcf94'), transparent: true }));
-  // soma: perfil de torno que se continúa en el tronco apical (arriba) y en el cono axónico (abajo) → piezas unidas
-  const prof = new THREE.CatmullRomCurve3([[0.0265, -0.72], [0.0275, -0.62], [0.034, -0.54], [0.045, -0.46], [0.1, -0.34], [0.22, -0.27], [0.31, -0.17], [0.345, -0.03], [0.325, 0.1], [0.255, 0.25], [0.165, 0.38], [0.1, 0.5], [0.0715, 0.62], [0.0695, 0.68], [0.0668, 0.74]].map(([r, y]) => V(r, y, 0)), false, 'centripetal');
-  const profPts = prof.getSpacedPoints(110);
+  const neuMat = withEnv(new THREE.MeshPhysicalMaterial({ color: '#b98552', roughness: 0.65, clearcoat: 0, sheen: 0.25, sheenRoughness: 0.6, sheenColor: new THREE.Color('#e8b884') }));
+  // soma piramidal: base ancha, ápice que se afina en el tronco apical (arriba) y cono axónico (abajo) → piezas unidas
+  const prof = new THREE.CatmullRomCurve3([[0.0265, -0.74], [0.0275, -0.64], [0.034, -0.56], [0.05, -0.485], [0.12, -0.43], [0.21, -0.395], [0.28, -0.36], [0.322, -0.305], [0.336, -0.235],
+    [0.33, -0.16], [0.305, -0.06], [0.265, 0.06], [0.215, 0.19], [0.165, 0.32], [0.12, 0.44], [0.088, 0.55], [0.073, 0.63], [0.069, 0.69], [0.0668, 0.75]].map(([r, y]) => V(r, y, 0)), false, 'centripetal');
+  const profPts = prof.getSpacedPoints(130);
   const somaR = (y) => { let best = profPts[0]; for (const p of profPts) if (Math.abs(p.y - y) < Math.abs(best.y - y) && p.x > 0.05) best = p; return best.x; };
-  let somaGeo = new THREE.LatheGeometry(profPts.map((p) => new THREE.Vector2(p.x, p.y)), 72, Math.PI, Math.PI * 2);
+  const LOBE0 = 30 * D2R;                                     // tres lóbulos en la base (30°, 150°, 270°): ahí nacen las basales
+  let somaGeo = new THREE.LatheGeometry(profPts.map((p) => new THREE.Vector2(p.x, p.y)), 120, Math.PI, Math.PI * 2);
   { const p = somaGeo.attributes.position;
-    for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i), r = Math.hypot(x, z) || 1;
-      const w = sstep(-0.36, -0.22, y) * (1 - sstep(0.34, 0.5, y));
-      const k = 1 + 0.045 * w * fbm(x / r * 1.3 + 4, y * 2.4, z / r * 1.3);
-      p.setXYZ(i, x * k, y, z * k); }
+    for (let i = 0; i < p.count; i++) { let x = p.getX(i), y = p.getY(i), z = p.getZ(i); const r = Math.hypot(x, z) || 1, th = Math.atan2(z, x);
+      const wb = sstep(-0.47, -0.36, y) * (1 - sstep(-0.12, 0.1, y)), wn = sstep(-0.46, -0.3, y) * (1 - sstep(0.42, 0.58, y));
+      const k = 1 + 0.09 * wb * Math.cos(3 * (th - LOBE0)) + 0.06 * wn * fbm(x / r * 1.2 + 4, y * 2.2, z / r * 1.2);
+      x *= k; z *= k;
+      // asimetría no radial: el ápice se inclina apenas y la masa se corre (nada de torno perfecto)
+      x += wn * (0.03 * sstep(-0.1, 0.5, y) + 0.012 * fbm(y * 3, 1.7, 2.3)); z += wn * 0.012 * fbm(y * 3, 5.1, 7.9);
+      p.setXYZ(i, x, y, z); }
     somaGeo.deleteAttribute('uv'); somaGeo.deleteAttribute('normal'); somaGeo = mergeVertices(somaGeo); somaGeo.computeVertexNormals(); }
   const soma = new THREE.Mesh(somaGeo, neuMat); NEU.add(soma);
-  // punto de muestreo P: frente del soma, donde el radio es máximo (normal horizontal, +z)
+  // punto de muestreo P: cara frontal plana entre dos lóbulos, a la altura de radio máximo
   const probe = new THREE.Mesh(somaGeo, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide })); probe.updateMatrixWorld();
   const ray = new THREE.Raycaster();
   const hitFront = (x, y) => { ray.set(V(x, y, 0), V(0, 0, 1)); const h = ray.intersectObject(probe)[0]; return h ? h.point : null; };
-  const yP = -0.03, PL = hitFront(0, yP);
+  const hitOut = (ph, y) => { ray.set(V(0, y, 0), V(Math.cos(ph), 0, Math.sin(ph))); const h = ray.intersectObject(probe)[0]; return h ? h.distance : somaR(y); };
+  const yP = -0.235, PL = hitFront(0, yP);
+  const NL = (() => { const e = 0.012; const tx = hitFront(e, yP).sub(hitFront(-e, yP)), ty = hitFront(0, yP + e).sub(hitFront(0, yP - e)); return tx.cross(ty).normalize(); })();
 
   const tubes = [], rn = M.rng(11);
-  function tube(pts, r0, r1, radial, t0, dur) {
+  function tube(pts, r0, r1, radial, t0, dur, flare = 0) {
     const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
-    const len = curve.getLength(), segs = Math.max(10, Math.round(len * 48));
-    const geo = taperTubeGeo(curve, r0, r1, segs, radial);
+    const len = curve.getLength(), segs = Math.max(10, Math.round(len * (flare ? 110 : 48)));
+    const geo = taperTubeGeo(curve, r0, r1, segs, radial, flare, len);
     const mesh = new THREE.Mesh(geo, neuMat); NEU.add(mesh);
     const o = { curve, geo, mesh, segs, radial, r0, r1, prog: { v: 0 }, dur };
     geo.setDrawRange(0, 0); tubes.push(o);
@@ -364,12 +408,11 @@ M.scene({ duration: 14.9, push: 0 }, async (tl, M) => {
   const walk = (p0, dir, len, n, wig, zk = 0.6) => { const pts = [p0.clone()], d = dir.clone().normalize(); let p = p0.clone();
     for (let i = 0; i < n; i++) { d.x += (rn() - 0.5) * wig; d.y += (rn() - 0.5) * wig; d.z += (rn() - 0.5) * wig * zk; d.normalize(); p = p.clone().addScaledVector(d, len / n); pts.push(p); }
     return pts; };
-  function dend(p0, dir, len, r0, depth, maxD, t0, wig = 0.4) {
+  function dend(p0, dir, len, r0, depth, maxD, t0, wig = 0.4, flare = 0) {
     const tip = depth >= maxD;
-    const o = tube(walk(p0, dir, len, 6, wig), r0, tip ? 0.0035 : Math.max(0.007, r0 * 0.62), r0 > 0.04 ? 12 : r0 > 0.015 ? 8 : 6, t0, 0.16 + len * 0.42);
+    const o = tube(walk(p0, dir, len, 6, wig), r0, tip ? 0.0035 : Math.max(0.007, r0 * 0.62), r0 > 0.04 ? 14 : r0 > 0.015 ? 8 : 6, t0, 0.16 + len * 0.42, flare);
     if (!tip) {
-      const kids = 2;
-      for (let k = 0; k < kids; k++) {
+      for (let k = 0; k < 2; k++) {
         const u = k === 0 ? 1 : 0.42 + rn() * 0.36;
         const at = o.curve.getPointAt(u), tg = o.curve.getTangentAt(u);
         const side = V(rn() - 0.5, rn() - 0.5, (rn() - 0.5) * 0.5).cross(tg).normalize();
@@ -380,96 +423,134 @@ M.scene({ duration: 14.9, push: 0 }, async (tl, M) => {
     }
     return o;
   }
-  const T_GROW = 0.52;
-  // dendrita apical: tronco recto hacia arriba, oblicuas y penacho
+  const T_GROW = 0.4;
+  // dendrita apical: tronco recto hacia arriba (continúa el perfil del soma), oblicuas y penacho
   const apical = tube([V(0, 0.6, 0), V(0, 0.85, 0), V(0.02, 1.25, 0.01), V(-0.01, 1.7, 0.03), V(0.03, 2.1, 0.0), V(0.02, 2.45, 0.02)], 0.071, 0.03, 14, T_GROW, 0.85);
   [[0.2, 1], [0.34, -1], [0.5, 1], [0.64, -1], [0.78, 1]].forEach(([u, sd], k) => {
     const at = apical.curve.getPointAt(u);
     dend(at, V(sd * 0.95, 0.55 + rn() * 0.2, (rn() - 0.5) * 0.4), 0.42 + rn() * 0.28 - k * 0.03, rAt(apical, u) * 0.5, 1, 2, T_GROW + 0.85 * u * 0.8, 0.35);
   });
   [[-0.7, 1], [0.05, 1], [0.75, 1]].forEach(([sx], k) => dend(apical.curve.getPointAt(1), V(sx, 1, (rn() - 0.5) * 0.5), 0.62 + rn() * 0.15, 0.026, 1, 3, T_GROW + 0.8, 0.4));
-  // dendritas basales: nacen de la mitad inferior del soma, lejos del punto de muestreo
-  [-12, 32, 148, 192, 238, 302].forEach((deg, k) => {
-    const ph = (deg + (rn() - 0.5) * 12) * D2R, y = -0.25 + rn() * 0.07, R = somaR(y) * 0.72;
-    dend(V(R * Math.cos(ph), y, R * Math.sin(ph)), V(Math.cos(ph), -0.5 - rn() * 0.3, Math.sin(ph)), 0.95 + rn() * 0.3, 0.046, 0, 3, T_GROW + 0.05 + k * 0.04, 0.42);
+  // dendritas basales: nacen de los lóbulos de la base (lejos de la cara frontal), con raíz ensanchada
+  [-20, 30, 150, 200, 250, 290].forEach((deg, k) => {
+    const ph = (deg + (rn() - 0.5) * 10) * D2R, y = -0.31 + rn() * 0.06, R = hitOut(ph, y) * 0.86;
+    dend(V(R * Math.cos(ph), y, R * Math.sin(ph)), V(Math.cos(ph), -0.45 - rn() * 0.25, Math.sin(ph)), 0.95 + rn() * 0.3, 0.046, 0, 3, T_GROW + 0.05 + k * 0.04, 0.42, 1.3);
   });
   // axón: sale del cono axónico, fino y largo, con dos colaterales
-  const axon = tube([V(0, -0.58, 0), V(0, -0.8, 0), V(0.03, -1.2, 0.02), V(-0.02, -1.6, 0.05), V(0.04, -2.0, 0.02), V(0.02, -2.35, 0.04)], 0.0275, 0.016, 8, T_GROW, 0.8);
+  const axon = tube([V(0, -0.6, 0), V(0, -0.8, 0), V(0.03, -1.2, 0.02), V(-0.02, -1.6, 0.05), V(0.04, -2.0, 0.02), V(0.02, -2.35, 0.04)], 0.0275, 0.016, 8, T_GROW, 0.8);
   [[0.45, 1], [0.74, -1]].forEach(([u, sd]) => dend(axon.curve.getPointAt(u), V(sd, -0.55, 0.1), 0.45, 0.012, 1, 1, T_GROW + 0.8 * u * 0.8, 0.3));
-  // ubica la neurona: su P local cae en el centro de la cara superior de la muestra, con la normal del soma = +y del mundo
-  NEU.rotation.x = -Math.PI / 2; NEU.scale.setScalar(Z); NEU.position.set(-Z * PL.x, YTOP - Z * PL.z, Z * PL.y);
-  NEU.updateMatrixWorld(true);
+
+  // ubica la neurona: P cae en el centro de la cara superior de la muestra y la normal del soma en P = +y del mundo
+  // (el tronco apical queda hacia −z: arriba en pantalla mientras la cámara mira de frente a la neurona)
+  { const q1 = new THREE.Quaternion().setFromUnitVectors(NL, UP), u1 = V(0, 1, 0).applyQuaternion(q1).setY(0).normalize();
+    const q2 = new THREE.Quaternion().setFromUnitVectors(u1, V(0, 0, -1));
+    NEU.quaternion.multiplyQuaternions(q2, q1); NEU.scale.setScalar(Z); }
   const PW = V(0, YTOP, 0);
-  // encuadre inicial: neurona a ~60 % del alto (la caja toma solo los ejes de las ramas)
-  const bb = new THREE.Box3(); tubes.forEach((o) => o.curve.getPoints(12).forEach((p) => bb.expandByPoint(p))); bb.expandByPoint(V(0.35, -0.3, 0.35));
+  NEU.position.copy(PW).sub(PL.clone().applyQuaternion(NEU.quaternion).multiplyScalar(Z));
+  NEU.updateMatrixWorld(true);
+  const FRONT = V(0, 0, 1).applyQuaternion(NEU.quaternion);
+  const EL_N = Math.min(1.54, Math.atan2(FRONT.y, FRONT.z));
+  // encuadre: neurona completa a ~63 % del alto (la caja toma los ejes de las ramas y el soma)
+  const bb = new THREE.Box3(); tubes.forEach((o) => o.curve.getPoints(12).forEach((p) => bb.expandByPoint(p))); bb.expandByPoint(V(0.36, -0.45, 0.36)).expandByPoint(V(-0.36, 0.6, -0.36));
   const CL = bb.getCenter(V()); CL.z = 0; const T0 = NEU.localToWorld(CL.clone());
-  const D0 = (bb.max.y - bb.min.y) * Z / (0.54 * 2 * Math.tan(14 * D2R));
-  // contorno de la muestra dibujado sobre el soma (proyectado sobre la superficie)
+  const D0 = (bb.max.y - bb.min.y) * Z / (0.58 * 2 * Math.tan(14 * D2R));
+  // contorno de la muestra dibujado sobre la cara del soma (se convierte en las aristas de la bandeja)
   const outl = { v: 0 };
   const outlineMat = new LineMaterial({ color: '#f3ede2', linewidth: 2.2, transparent: true, opacity: 0, resolution: new THREE.Vector2(1920, 1080), depthWrite: false });
-  const outline = (() => { const pts = [];
-    outlineXZ(0.3).forEach((p) => { const h = hitFront(PL.x + p.x / Z, PL.y - p.y / Z) || V(PL.x + p.x / Z, PL.y - p.y / Z, PL.z); pts.push(h.x, h.y, h.z + 0.004); });
-    const g = new LineGeometry(); g.setPositions(pts); const l = new Line2(g, outlineMat); l.computeLineDistances(); NEU.add(l); return l; })();
+  const outline = (() => { const pts = [], W = V(), step = 0.4;
+    const corners = [[-HXW, HZ], [HXW, HZ], [HXW, -HZ], [-HXW, -HZ], [-HXW, HZ]];
+    for (let s = 0; s < 4; s++) { const [x0, z0] = corners[s], [x1, z1] = corners[s + 1], n = Math.ceil(Math.hypot(x1 - x0, z1 - z0) / step);
+      for (let k = 0; k <= n; k++) { if (s > 0 && k === 0) continue; W.set(x0 + (x1 - x0) * k / n, YTOP, z0 + (z1 - z0) * k / n);
+        const Lc = NEU.worldToLocal(W.clone()), h = hitFront(Lc.x, Lc.y) || Lc; pts.push(h.x, h.y, h.z + 0.002); } }
+    const g = new LineGeometry(); g.setPositions(pts); const l = new Line2(g, outlineMat); l.computeLineDistances(); l.renderOrder = 8; NEU.add(l); return l; })();
   const OUT_N = outline.geometry.instanceCount;
+  // fundido neurona → membrana sin ver interiores: la membrana se dibuja primero (opaca), se limpia la profundidad,
+  // y la neurona se dibuja encima con su propio prepass de profundidad (solo su superficie más cercana).
+  const preMat = new THREE.MeshBasicMaterial({ colorWrite: false, transparent: true }); preMat.depthWrite = true;
+  const PRE = [];
+  NEU.children.slice().forEach((m) => { if (!m.isMesh || m.material !== neuMat) return;
+    const p = new THREE.Mesh(m.geometry, preMat); p.position.copy(m.position); p.quaternion.copy(m.quaternion); p.renderOrder = 6; p.visible = false; NEU.add(p); PRE.push([m, p]); m.renderOrder = 7; });
+  const clearer = new THREE.Mesh(new THREE.PlaneGeometry(1e-3, 1e-3), new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false, depthTest: false, transparent: true }));
+  clearer.frustumCulled = false; clearer.renderOrder = 5; clearer.visible = false; clearer.onBeforeRender = (r) => r.clearDepth(); scene.add(clearer);
 
   /* ======================= LÍNEA DE TIEMPO ======================= */
-  // beat 1 — neurona que crece → zambullida hasta la membrana
+  // beat 1 — la neurona crece → zambullida (vista frontal, sin inclinar) → la cara del soma se vuelve la muestra → giro al corte
   const somaS = { v: 0.001 };
-  tl.to(somaS, { v: 1, duration: 0.45, ease: 'appleOut' }, 0.15);
-  tl.to(outl, { v: 1, duration: 0.55, ease: 'appleOut' }, 1.3);
-  const nc = { D: D0 * 1.05, el: 1.54, az: 0 };
-  tl.to(nc, { D: D0, duration: 1.85, ease: 'none' }, 0);
-  const mc = { D: 18, el: 0.34, az: 0.42, tx: 0.5, ty: 0.45, tz: 5.8, shift: -400 };
-  const dv = { p: 0 };
-  const T_DIVE = 1.85, T_DIVE_END = 4.45;
-  tl.to(dv, { p: 1, duration: T_DIVE_END - T_DIVE, ease: 'apple' }, T_DIVE);
-  tl.to(mc, { az: 0.36, duration: 2.15, ease: 'none' }, T_DIVE_END);
+  tl.to(somaS, { v: 1, duration: 0.3, ease: 'appleOut' }, 0.15);
+  tl.to(outl, { v: 1, duration: 0.5, ease: 'appleOut' }, 1.2);
+  const cz = { lD: Math.log(D0 * 0.8) };
+  const D_REF = D0 * 0.92, T_DIVE = 1.8, T_DIVE_END = 3.9;
+  tl.to(cz, { lD: Math.log(D_REF), duration: T_DIVE, ease: 'none' }, 0);
+  const mc = { D: 15, el: 0.34, az: 0.42, tx: 0.2, ty: 0.35, tz: HERO_Z - 0.4, shift: -400 };
+  tl.fromTo(cz, { lD: Math.log(D_REF) }, { lD: Math.log(mc.D), duration: T_DIVE_END - T_DIVE, ease: 'apple', immediateRender: false }, T_DIVE);
+  const tilt = { v: 0 }, T_TILT = 3.2;
+  tl.to(tilt, { v: 1, duration: 1.25, ease: 'apple' }, T_TILT);
+  tl.to(mc, { az: 0.38, duration: 1.4, ease: 'none' }, T_TILT + 1.25);
 
-  // beat 2 — la psilocina entra en el bolsillo y el receptor se activa
-  tl.to(mc, { D: 13.4, el: 0.16, az: 0.3, tx: 0, ty: 0.15, tz: HZ, shift: -380, duration: 1.3, ease: 'apple' }, 6.6);
-  tl.to(mc, { az: 0.22, duration: 2.35, ease: 'none' }, 7.9);
+  // beat 2 — la psilocina baja y entra en el bolsillo (cámara encima del bolsillo, TM5/TM6 translúcidas); el receptor se activa
+  const T_MOL = 5.9, T_INS = 7.15, T_ACT = 7.5;
   const mol = { p: 0, i: 0 };
-  tl.to(mol, { p: 1, duration: 1.4, ease: 'appleOut' }, 6.95);
-  tl.to(mol, { i: 1, duration: 0.3, ease: 'apple' }, 8.35);
-  const T_ACT = 8.65;
+  tl.to(mol, { p: 1, duration: T_INS - T_MOL, ease: 'appleOut' }, T_MOL);
+  tl.to(mc, { D: 7.5, el: 0.3, az: 0.3, tx: 0, ty: 0.8, tz: HERO_Z, shift: -380, duration: 1.15, ease: 'apple' }, 6.0);
+  const ghost = { v: 1 };
+  tl.to(ghost, { v: 0.3, duration: 0.5, ease: 'apple' }, 6.3);
+  tl.to(mol, { i: 1, duration: 0.3, ease: 'apple' }, T_INS);
+  tl.to(ghost, { v: 1, duration: 0.5, ease: 'apple' }, 8.0);
+  tl.fromTo(U.uAct, { value: 0 }, { value: 0.9, duration: 0.85, ease: 'appleOut', immediateRender: false }, T_ACT - 0.15);
   tl.fromTo(U.uPA, { value: 0 }, { value: 1, duration: 0.12, ease: 'none', immediateRender: false }, T_ACT);
   tl.fromTo(U.uPulse, { value: 2.6 }, { value: -2.4, duration: 1.0, ease: 'apple', immediateRender: false }, T_ACT);
   tl.to(U.uPA, { value: 0, duration: 0.25, ease: 'none' }, T_ACT + 0.85);
-  tl.to(U.uGlow, { value: 0.2, duration: 0.8, ease: 'appleOut' }, T_ACT + 0.1);
-  tl.to(U.uAct, { value: 0.9, duration: 0.8, ease: 'appleOut' }, T_ACT + 0.1);
+  tl.to(U.uGlow, { value: 0.18, duration: 0.8, ease: 'appleOut' }, T_ACT + 0.1);
   const sw = { v: 0 }; tl.to(sw, { v: 1, duration: 0.8, ease: 'apple' }, T_ACT + 0.15);
-  const hl = { a: 0 };
-  tl.to(hl, { a: 0.55, duration: 0.6, ease: 'appleOut' }, 6.95);
-  tl.to(hl, { a: 1.4, duration: 0.12, ease: 'none' }, T_ACT);
-  tl.to(hl, { a: 0.3, duration: 0.9, ease: 'appleOut' }, T_ACT + 0.12);
-  const ripples = [{ x: 0, z: HZ, t0: T_ACT + 0.02, v: 4.2, w: 0.5, a: 0.12, g: 0.9, life: 2.3 }, { x: 0, z: HZ, t0: T_ACT + 0.34, v: 4.2, w: 0.45, a: 0.07, g: 0.55, life: 2.0 }];
+  tl.to(mc, { D: 12, el: 0.2, az: 0.26, ty: 0.3, shift: -390, duration: 0.9, ease: 'apple' }, 7.95);
+  tl.to(mc, { az: 0.2, duration: 1.5, ease: 'none' }, 8.85);
+  const ripples = [{ x: 0, z: HERO_Z, t0: T_ACT + 0.02, v: 4.2, w: 0.5, a: 0.12, g: 0.9, life: 2.3 }, { x: 0, z: HERO_Z, t0: T_ACT + 0.34, v: 4.2, w: 0.45, a: 0.07, g: 0.55, life: 2.0 }];
 
-  // beat 3 — 18 de 25 ocupados (72 %)
-  tl.to(mc, { D: 47, el: 0.8, az: 0.12, tx: 0.3, ty: -0.7, tz: 1.0, shift: -400, duration: 1.5, ease: 'apple' }, 10.25);
-  tl.to(fogS, { span: 30, duration: 1.5, ease: 'apple' }, 10.25);
-  tl.to(mc, { az: 0.04, duration: 3.15, ease: 'none' }, 11.75);
+  // beat 3 — el corte se cierra (bandeja limpia, el protagonista es uno más) y 18 de 25 quedan ocupados (72 %)
+  const T_B3 = 10.35;
+  tl.to(mc, { D: 47, el: 0.8, az: 0.12, tx: 0, ty: -0.7, tz: 0.3, shift: -400, duration: 1.5, ease: 'apple' }, T_B3);
+  tl.to(cut, { z: HZ + 0.1, duration: 1.2, ease: 'apple' }, T_B3 + 0.05);
+  tl.to(fogS, { span: 30, duration: 1.5, ease: 'apple' }, T_B3);
+  tl.to(mc, { az: 0.04, duration: 15 - T_B3 - 1.5, ease: 'none' }, T_B3 + 1.5);
   const occBg = RECG.filter((o) => !o.q.hero && o.q.occ);
   { const ro = M.rng(5); for (let i = occBg.length - 1; i > 0; i--) { const j = Math.floor(ro() * (i + 1)); [occBg[i], occBg[j]] = [occBg[j], occBg[i]]; } }
+  RECG.forEach((o) => { if (o.lift) tl.to(o.lift, { v: 1, duration: 0.6, ease: 'apple' }, T_B3 + 0.1); });   // todos legibles: vacío = hueso apagado
   const bgMols = new THREE.InstancedMesh(molGeo, molMat, occBg.length); bgMols.castShadow = true; scene.add(bgMols);
+  let T_LAST = 0;
   occBg.forEach((o, k) => {
-    o.dock = { v: 0 }; const t0 = 10.6 + k * 0.06;
+    o.dock = { v: 0 }; const t0 = T_B3 + 0.05 + k * 0.035;
     tl.to(o.dock, { v: 1, duration: 0.75, ease: 'appleOut' }, t0);
-    tl.to(o.mat, { emissiveIntensity: 0.9, duration: 0.1, ease: 'none' }, t0 + 0.7);
-    tl.to(o.mat, { emissiveIntensity: 0.3, duration: 0.7, ease: 'appleOut' }, t0 + 0.8);
-    tl.to(o.mat.color, { r: ACT_TINT.r, g: ACT_TINT.g, b: ACT_TINT.b, duration: 0.35, ease: 'apple' }, t0 + 0.7);
+    tl.to(o.act, { v: 0.9, duration: 0.45, ease: 'appleOut' }, t0 + 0.62);
+    tl.to(o.mat, { emissiveIntensity: 0.55, duration: 0.08, ease: 'none' }, t0 + 0.7);
+    tl.to(o.mat, { emissiveIntensity: 0.1, duration: 0.45, ease: 'appleOut' }, t0 + 0.78);
     ripples.push({ x: o.q.x, z: o.q.z, t0: t0 + 0.72, v: 3.0, w: 0.35, a: 0.05, g: 0.45, life: 1.1 });
+    T_LAST = Math.max(T_LAST, t0 + 0.75);
   });
 
-  /* ---------------- texto (skill motion-copy): 11 palabras en toda la escena ---------------- */
-  const tA = M.textIn($('#title .a'), 3.95, { dur: 1.0, stagger: 0.04, ease: 'appleOut' });
-  const tB = M.textIn($('#title .b'), 4.12, { dur: 1.0, stagger: 0.04, ease: 'appleOut' });
-  M.textOut(tA, 6.6, { stagger: 0.015 }); M.textOut(tB, 6.65, { stagger: 0.015 });
-  const l2 = M.textIn($('#l2'), 7.4, { type: 'words', dur: 0.8, stagger: 0.06, ease: 'appleOut' });
-  M.textOut(l2, 10.2, { type: 'words', stagger: 0.02 });
-  tl.from('#num', { yPercent: 18, opacity: 0, duration: 0.9, ease: 'appleOut' }, 10.85);
-  const nl = M.textIn($('#numL'), 11.3, { type: 'words', dur: 0.7, stagger: 0.05, ease: 'appleOut' });
-  tl.to(['#num', '#numL'], { opacity: 0, y: -14, duration: 0.5, ease: 'appleIn' }, 13.85);
-  tl.to('#fade', { opacity: 1, duration: 0.5, ease: 'appleIn' }, 14.1);
+  /* ---------------- texto (skill motion-copy): 12 palabras en toda la escena ---------------- */
+  const tA = M.textIn($('#title .a'), 3.75, { dur: 1.0, stagger: 0.04, ease: 'appleOut' });
+  const tB = M.textIn($('#title .b'), 3.9, { dur: 1.0, stagger: 0.04, ease: 'appleOut' });
+  M.textOut(tA, 5.85, { stagger: 0.015 }); M.textOut(tB, 5.9, { stagger: 0.015 });
+  const l2 = M.textIn($('#l2'), 6.25, { type: 'words', dur: 0.8, stagger: 0.06, ease: 'appleOut' });
+  M.textOut(l2, 10.15, { type: 'words', stagger: 0.02 });
+  tl.from('#num', { yPercent: 12, opacity: 0, duration: 0.9, ease: 'appleOut' }, 10.7);
+  const nl = M.textIn($('#numL'), 11.15, { type: 'words', dur: 0.7, stagger: 0.05, ease: 'appleOut' });
+  tl.to(['#num', '#numL'], { opacity: 0, y: -14, duration: 0.5, ease: 'appleIn' }, 14.1);
+  tl.to('#fade', { opacity: 1, duration: 0.45, ease: 'appleIn' }, 14.3);
+
+  /* ---------------- sonido (docs/AUDIO.md): pocos efectos, cada uno con motivo ---------------- */
+  M.sfx(0.15, 'tap', { deg: 0, oct: 4, bright: 0.7, gain: -4 });                 // aparece el soma
+  M.sfx(0.4, 'grow', { dur: 1.5, density: 90 });                                 // crecen las ramas
+  M.sfx(T_DIVE, 'whoosh', { dur: T_DIVE_END - T_DIVE, peak: 0.5, dir: 1, gain: -1 });   // zambullida
+  M.sfx(3.77, 'tick');                                                           // "Receptor 5-HT2A"
+  M.sfx(T_MOL, 'whoosh', { dur: 1.1, peak: 0.3, dir: -1, gain: -7 });            // baja la psilocina
+  M.sfx(6.27, 'tick', { tone: 'glass', gain: -2 });                              // "Encaja como una llave"
+  M.sfx(T_INS + 0.28, 'tick', { gain: 1 });                                      // encaje
+  M.sfx(T_ACT, 'swell', { dur: 1.0 }).sfx(T_ACT, 'impact', { weight: 0.8 });     // activación
+  M.sfx(T_B3, 'whoosh', { dur: 1.5, peak: 0.45, dir: -1, gain: -4 });            // plano general
+  [0, 5, 10, 16].forEach((k, i) => M.sfx(T_B3 + 0.05 + k * 0.035 + 0.72, 'tap', { deg: [0, 2, 4, 7][i], oct: 5, bright: 0.7, gain: -7 }));
+  M.sfx(10.72, 'tick', { gain: -2 });                                            // aparece el número
+  M.sfx(T_LAST, 'shimmer', { degs: [2, 4, 7], gain: -3 });                       // queda en 72 %
 
   /* ======================= verificación de modelado (?debug) ======================= */
   function segDist(p1, q1, p2, q2) {   // distancia mínima entre segmentos
@@ -484,21 +565,25 @@ M.scene({ duration: 14.9, push: 0 }, async (tl, M) => {
     const rep = {};
     const mn = (k, v) => (rep[k] = Math.min(rep[k] ?? 1e9, v));
     RECG.forEach((o) => {
-      const H = o.H;
-      for (let i = 0; i < 7; i++) for (let j = i + 1; j < 7; j++) mn('hélice↔hélice', segDist(H[i].top, H[i].bot, H[j].top, H[j].bot) - 2 * HXR * 1.1);
+      const H = o.H, tag = o.q.hero ? 'H:' : '';
+      for (let i = 0; i < 7; i++) for (let j = i + 1; j < 7; j++) mn(tag + 'hélice↔hélice', segDist(H[i].top, H[i].bot, H[j].top, H[j].bot) - 2 * HXR * 1.1);
       Object.entries(AT).forEach(([k, p]) => { const r = EL[elOf(k)].r * MS, P = p.clone().add(V(0, Y_DOCK, 0));
-        H.forEach((h) => mn('molécula↔hélice', ptSeg(P, h.top, h.bot) - HXR * 1.1 - r));
-        o.loops.forEach((l) => l.curve.getPoints(60).forEach((c) => mn('molécula↔asa', c.distanceTo(P) - LOOP_R - r))); });
+        H.forEach((h) => mn(tag + 'molécula↔hélice', ptSeg(P, h.top, h.bot) - HXR * 1.1 - r));
+        o.loops.forEach((l) => l.curve.getPoints(60).forEach((c) => mn(tag + 'molécula↔asa', c.distanceTo(P) - LOOP_R - r))); });
       const inv = new THREE.Matrix4().makeRotationY(-o.q.rot);
       lipTop.concat(lipBot).forEach((L) => { if (Math.hypot(L.x - o.q.x, L.z - o.q.z) > 2.2) return; const P = V(L.x - o.q.x, L.y, L.z - o.q.z).applyMatrix4(inv);
-        H.forEach((h) => mn('lípido↔hélice', ptSeg(P, h.top, h.bot) - HXR * 1.1 - HEAD * 1.04)); });
-      // núcleo: radio de las hélices a la altura del núcleo
-      H.forEach((h) => { for (let y = -0.48; y <= 0.48; y += 0.08) { const u = (y - h.c.y) / h.dir.y; const p = h.c.clone().addScaledVector(h.dir, u); mn('núcleo↔hélice', (o.q.hero ? NR + INS : NR - 0.1) - Math.hypot(p.x, p.z) - HXR * 1.1); } });
+        H.forEach((h) => mn(tag + 'lípido↔hélice', ptSeg(P, h.top, h.bot) - HXR * 1.02 - HEAD * 1.0)); });
+      H.forEach((h) => { for (let y = -0.48; y <= 0.48; y += 0.08) { const u = (y - h.c.y) / h.dir.y; const p = h.c.clone().addScaledVector(h.dir, u); mn(tag + 'núcleo↔hélice', (o.q.nr - 0.1) - Math.hypot(p.x, p.z) - HXR * 1.02); } });
     });
-    console.log('CLEARANCE', JSON.stringify(rep), 'P', PL.toArray().map((x) => x.toFixed(3)).join(','), 'D0', D0.toFixed(1), 'lip', lipTop.length, lipBot.length, tailDefs.length, 'molH', MOL_H.toFixed(3));
+    // separación entre huecos del núcleo (si se tocan, el triangulado del núcleo falla)
+    for (let i = 0; i < RECS.length; i++) for (let j = i + 1; j < RECS.length; j++) mn('hueco↔hueco', Math.hypot(RECS[i].x - RECS[j].x, RECS[i].z - RECS[j].z) - (RECS[i].nr + RECS[j].nr - 0.2));
+    RECS.forEach((q) => mn('hueco↔borde', Math.min(HXW - INS - Math.abs(q.x), HZ - INS - Math.abs(q.z)) - (q.nr - 0.1)));
+    RECS.forEach((q) => { if (!q.hero) mn('fondo↔corte', CUT0 - (q.z + 1.02)); });
+    console.log('CLEARANCE', JSON.stringify(rep, (k, v) => (typeof v === 'number' ? +v.toFixed(3) : v)), 'P', PL.toArray().map((x) => x.toFixed(3)).join(','), 'N', NL.toArray().map((x) => x.toFixed(3)).join(','),
+      'D0', D0.toFixed(1), 'EL_N', EL_N.toFixed(3), 'lip', lipTop.length, lipBot.length, tailDefs.length, 'molH', MOL_H.toFixed(3), 'T_LAST', T_LAST.toFixed(2));
   }
 
-  if (DEBUG) window.__dbg = { S, key, heads, headsB, tails, MEM, RECG, heroMat, neuMat, THREE, bgMols, heroMol, coreMat,
+  if (DEBUG) window.__dbg = { S, key, heads, headsB, tails, MEM, RECG, heroMat, neuMat, THREE, bgMols, heroMol, coreMat, NEU,
     // recorrido de la psilocina del protagonista: holgura mínima contra hélices (con TM6 en su pose actual) y asas
     checkPath(t0, t1, dt) { let worst = 1e9, wt = 0; const g = HERO.grp;
       for (let t = t0; t <= t1 + 1e-6; t += dt) { M.seek(t); heroMol.updateMatrixWorld(true); g.updateMatrixWorld(true);
@@ -507,6 +592,7 @@ M.scene({ duration: 14.9, push: 0 }, async (tl, M) => {
             const v = ptSeg(P, g.localToWorld(a), g.localToWorld(b)) - HXR * 1.05 - r; if (v < worst) { worst = v; wt = t; } });
           HERO.loops.forEach((l) => l.curve.getPoints(40).forEach((c) => { const v = g.localToWorld(c.clone()).distanceTo(P) - LOOP_R - r; if (v < worst) { worst = v; wt = t; } })); }); }
       return { worst, wt }; } };
+
   /* ======================= POR CUADRO ======================= */
   const bx = V(), by = V(), bz = V(), T = V(), tmp = V(), qT = new THREE.Quaternion(), eul = new THREE.Euler();
   const mcT = V();
@@ -514,21 +600,20 @@ M.scene({ duration: 14.9, push: 0 }, async (tl, M) => {
   // TM6 del protagonista: gira sobre su extremo superior; el extremo intracelular se abre hacia afuera
   const tm6 = HERO.H[5], tm6q0 = qFromDir(tm6.dir), tm6Axis = UP.clone().cross(tm6.rho).normalize().negate();
   const icl3 = HERO.loops.findIndex((l) => l.s < 0 && l.i === 4);
-  let swCache = -1;
-  const rampIn = (t0, t1, t) => clamp01((t - t0) / (t1 - t0));
+  const GHOST = [4, 5];                                        // TM5 y TM6: las que tapan el bolsillo desde esta cámara
+  let swCache = -1, ghostOn = false;
+  const neuMode = { overlay: null };
+  const setNeuMode = (overlay) => { if (neuMode.overlay === overlay) return; neuMode.overlay = overlay;
+    neuMat.transparent = overlay; neuMat.depthWrite = !overlay; neuMat.needsUpdate = true; };
 
   M.onFrame((t) => {
-    /* cámara: zambullida en escala logarítmica (neurona → membrana) y luego órbita de la membrana */
-    const p = dv.p; let D, el, az;
-    mcT.set(mc.tx, mc.ty, mc.tz);
-    if (p <= 0) { D = nc.D; el = nc.el; az = nc.az; T.copy(T0); }
-    else if (p >= 1) { D = mc.D; el = mc.el; az = mc.az; T.copy(mcT); }
-    else {
-      D = Math.exp(Math.log(nc.D) + (Math.log(mc.D) - Math.log(nc.D)) * p);
-      const q = sstep(0.3, 1, p); el = nc.el + (mc.el - nc.el) * q; az = nc.az + (mc.az - nc.az) * q;
-      T.copy(PW).addScaledVector(tmp.copy(T0).sub(PW), D / nc.D).lerp(mcT, sstep(0.5, 1, p));
-    }
-    const sk = Math.max(1, D / 21), sf = Math.max(1, D / 40);
+    /* cámara: zambullida en escala logarítmica hacia P (P queda fijo en pantalla), luego giro al corte y órbita */
+    const D = t < T_DIVE_END ? Math.exp(cz.lD) : mc.D;
+    const k = tilt.v;
+    const el = EL_N + (mc.el - EL_N) * k, az = mc.az * k;
+    if (t < T_DIVE) T.copy(T0); else T.copy(PW).addScaledVector(tmp.copy(T0).sub(PW), Math.min(1, D / D_REF));
+    mcT.set(mc.tx, mc.ty, mc.tz); T.lerp(mcT, sstep(0, 1, k));
+    const sk = Math.max(1, D / 21);
     camera.near = Math.max(0.05, D * 0.01); camera.far = Math.max(250, D * 3);
     camera.position.set(T.x + D * Math.sin(az) * Math.cos(el), T.y + D * Math.sin(el), T.z + D * Math.cos(az) * Math.cos(el));
     camera.up.set(0, 1, 0); camera.lookAt(T);
@@ -542,33 +627,40 @@ M.scene({ duration: 14.9, push: 0 }, async (tl, M) => {
     hemi.position.copy(by);
     { const E = 14 * sk, sc = key.shadow.camera; sc.left = -E; sc.right = E; sc.top = E; sc.bottom = -E; sc.near = 0.5 * sk; sc.far = 90 * sk; sc.updateProjectionMatrix(); key.shadow.normalBias = 0.02 * sk; }
 
-    /* neurona: crecimiento y fundido al acercarse */
+    /* neurona: crecimiento y fundido (la cara del soma se disuelve en la muestra, vista de frente) */
     soma.scale.setScalar(Math.max(0.001, somaS.v));
     tubes.forEach((o) => { o.geo.setDrawRange(0, Math.floor(o.segs * o.prog.v) * o.radial * 6); if (o.cap) o.cap.visible = o.prog.v > 0.999; });
-    const neuOp = p >= 1 ? 0 : clamp01((D - 42) / (85 - 42));
-    neuMat.opacity = neuOp; neuMat.depthWrite = neuOp > 0.99; NEU.visible = neuOp > 0.002;
-    outlineMat.opacity = 0.9 * outl.v * clamp01((D - 105) / (190 - 105));
+    const neuOp = t >= T_DIVE_END ? 0 : sstep(26, 52, D);
+    const memOn = t >= T_DIVE_END || D < 80;
+    NEU.visible = neuOp > 0.002; MEM.visible = memOn;
+    const overlay = NEU.visible && memOn;
+    setNeuMode(overlay);
+    neuMat.opacity = overlay ? neuOp : 1;
+    clearer.visible = overlay;
+    PRE.forEach(([m, p]) => { p.visible = overlay && m.visible; p.scale.copy(m.scale); });
+    outlineMat.opacity = 0.9 * outl.v * neuOp;
     outline.geometry.instanceCount = Math.max(0, Math.round(OUT_N * outl.v)); outline.visible = outlineMat.opacity > 0.002;
 
-    /* membrana: aparece como una lámina sobre el soma y queda sola */
-    const blk = clamp01((150 - D) / (150 - 75));
-    // opacos cuando terminó el fundido (en software, la mezcla alfa cuesta ~1 s por cuadro)
-    [headMat, tailMat, coreMat, heroMat, ...RECG.slice(1).map((o) => o.mat)].forEach((m) => { m.opacity = blk; m.depthWrite = blk > 0.99; const tr = blk < 0.999; if (m.transparent !== tr) { m.transparent = tr; m.needsUpdate = true; } });
-    edgeMat.opacity = 0.26 * blk; MEM.visible = blk > 0.002;
+    /* corte de la muestra */
+    const c = cut.z;
+    cutPlane.constant = c;
+    if (edgeC !== c) { edgeC = c; buildEdges(c); }
 
-    /* ondas en la membrana (cabezas que suben y se tiñen de azul) */
+    /* ondas en la membrana (cabezas que suben, se aclaran y se enfrían apenas) */
     const topDy = new Float32Array(lipTop.length);
     for (let i = 0; i < lipTop.length; i++) {
       const L = lipTop[i]; let dy = 0, gl = 0;
       for (const rp of ripples) { const age = t - rp.t0; if (age <= 0 || age > rp.life) continue;
         const d = Math.hypot(L.x - rp.x, L.z - rp.z), g = Math.exp(-(((d - NR - rp.v * age) / rp.w) ** 2)) * (1 - age / rp.life) * Math.min(1, age * 8);
         dy += rp.a * g; gl += rp.g * g; }
-      topDy[i] = dy;
-      heads.setMatrixAt(i, m4.compose(vP.set(L.x, L.y + dy, L.z), q0, vS.setScalar(HEAD * L.s)));
-      heads.setColorAt(i, hc.copy(L.c).lerp(BLUE, Math.min(0.85, gl)));
+      topDy[i] = dy; gl = Math.min(0.4, gl);
+      heads.setMatrixAt(i, m4.compose(vP.set(L.x, L.y + dy, L.z), q0, vS.setScalar(Math.max(1e-5, HEAD * L.s * shownAt(L.z, c)))));
+      heads.setColorAt(i, hc.copy(L.c).lerp(BLUE, gl * 0.8).multiplyScalar(1 + 1.6 * gl));
     }
     heads.instanceMatrix.needsUpdate = true; heads.instanceColor.needsUpdate = true;
-    tailDefs.forEach((d, i) => { if (d.hi >= 0) setTail(i, topDy[d.hi]); }); tails.instanceMatrix.needsUpdate = true;
+    lipBot.forEach((L, i) => headsB.setMatrixAt(i, m4.compose(vP.set(L.x, L.y, L.z), q0, vS.setScalar(Math.max(1e-5, HEAD * L.s * tailVis(L, c))))));
+    headsB.instanceMatrix.needsUpdate = true;
+    tailDefs.forEach((d, i) => setTail(i, d.hi >= 0 ? topDy[d.hi] : 0, tailVis(d.L, c))); tails.instanceMatrix.needsUpdate = true;
 
     /* TM6 del protagonista y su asa intracelular */
     if (Math.abs(sw.v - swCache) > 1e-4) {
@@ -577,32 +669,34 @@ M.scene({ duration: 14.9, push: 0 }, async (tl, M) => {
       const dir = UP.clone().applyQuaternion(q);
       HERO.hel[5].quaternion.copy(q); HERO.hel[5].position.copy(tm6.top).addScaledVector(dir, -tm6.L / 2);
       const bot = tm6.top.clone().addScaledVector(dir, -tm6.L);
-      const L = HERO.loops[icl3]; const c = loopCurve(HERO.H[4].bot, bot, -1, L.h, L.out);
-      HERO.loopMeshes[icl3].geometry.dispose(); HERO.loopMeshes[icl3].geometry = new THREE.TubeGeometry(c, 44, LOOP_R, 10, false);
+      const L = HERO.loops[icl3]; const cv = loopCurve(HERO.H[4].bot, bot, -1, L.h, L.out);
+      HERO.loopMeshes[icl3].geometry.dispose(); HERO.loopMeshes[icl3].geometry = new THREE.TubeGeometry(cv, 44, LOOP_R, 10, false);
     }
+    /* TM5/TM6 translúcidas mientras entra la llave */
+    const gOn = ghost.v < 0.999;
+    if (gOn !== ghostOn) { ghostOn = gOn; GHOST.forEach((i) => (HERO.hel[i].material = gOn ? ghostMat : heroMat)); }
+    ghostMat.opacity = ghost.v;
 
-    /* psilocina del protagonista: baja girando, se alinea y entra */
-    heroMol.visible = t > 6.9;
+    /* psilocina del protagonista: baja girando desde arriba a la derecha, se alinea y entra */
+    heroMol.visible = t > T_MOL - 0.05;
     if (heroMol.visible) {
-      const s0 = V(-1.1, 6.6, HZ + 0.7), c1 = V(-0.35, 3.4, HZ + 0.35), hov = V(0, Y_DOCK + 0.3, HZ), u = mol.p;
+      const s0 = V(1.5, 6.2, HERO_Z + 0.5), c1 = V(0.55, 3.0, HERO_Z + 0.25), hov = V(0, Y_DOCK + 0.32, HERO_Z), u = mol.p;
       tmp.copy(s0).multiplyScalar((1 - u) * (1 - u)).addScaledVector(c1, 2 * (1 - u) * u).addScaledVector(hov, u * u);
-      tmp.y -= 0.3 * mol.i;
+      tmp.y -= 0.32 * mol.i;
       heroMol.position.copy(tmp);
       heroMol.rotation.set(0.5 * (1 - u), 2.6 * (1 - u) * (1 - u), 0.25 * (1 - u));
-      halo.position.copy(tmp).y += MOL_H * 0.5; halo.scale.setScalar(1.35 + 0.8 * Math.max(0, hl.a - 0.55));
-      halo.material.opacity = Math.min(1, hl.a) * blk;
-    } else halo.material.opacity = 0;
-    halo.visible = halo.material.opacity > 0.002;
+    }
 
-    /* beat 3: las demás psilocinas llegan a sus receptores */
+    /* beat 3: las demás psilocinas llegan a sus receptores; vacíos en hueso apagado, ocupados en azul */
     let docked = 1;
+    RECG.forEach((o) => { if (!o.lift) return; mix3(o.mat.color, hc.copy(REC_BG).lerp(REC_EMPTY, o.lift.v), o.act.v); });
     occBg.forEach((o, k) => {
       const v = o.dock.v; if (v >= 0.985) docked++;
       const sc = v <= 0 ? 0.0001 : Math.min(1, v * 3.5);
       eul.set(0.4 * (1 - v), o.q.rot + 2.4 * (1 - v), 0); qT.setFromEuler(eul);
       bgMols.setMatrixAt(k, m4.compose(vP.set(o.q.x, Y_DOCK + 4.2 * (1 - v), o.q.z), qT, vS.setScalar(sc)));
     });
-    bgMols.instanceMatrix.needsUpdate = true; bgMols.visible = t > 10.5;
+    bgMols.instanceMatrix.needsUpdate = true; bgMols.visible = t > T_B3;
     $('#numV').textContent = M.fmt(docked * 4);
 
     S.render();
