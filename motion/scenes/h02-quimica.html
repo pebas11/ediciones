@@ -40,6 +40,7 @@
 <script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
 <script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
 <script src="../lib/stage.js"></script>
+<script src="../lib/audio.js"></script>
 <script type="module">
 import { createStage3D, THREE } from '../lib/three-stage.mjs';
 
@@ -49,7 +50,7 @@ import { createStage3D, THREE } from '../lib/three-stage.mjs';
    Estructuras: indol (benceno + pirrol) · psilocina 4-OH + CH2CH2N(CH3)2 en C3 · psilocibina 4-O-PO3H2 · serotonina 5-OH + CH2CH2NH2 en C3.
    Hidrógenos implícitos (modelo de bolas y varillas de átomos pesados). */
 
-M.scene({ duration: 14, push: 0 }, async (tl, M) => {
+M.scene({ duration: 14, push: 0, audio: { key: 'D', mode: 'lydian', bed: { cycle: 9, bright: 0.9 } } }, async (tl, M) => {
   const $ = (s) => document.querySelector(s);
 
   { const g = $('#grain').getContext('2d'); const im = g.createImageData(512, 512); const rn = M.rng(3);
@@ -275,6 +276,17 @@ M.scene({ duration: 14, push: 0 }, async (tl, M) => {
   const pB = M.textIn($('#prima .b'), T3 + 1.2, { dur: 0.9, stagger: 0.03, ease: 'appleOut' });
   M.textOut(pA, 13.05, { type: 'words', stagger: 0.02 }); M.textOut(pB, 13.1, { stagger: 0.012 });
   tl.to('#fade', { opacity: 1, duration: 0.55, ease: 'appleIn' }, 13.3);
+
+  /* ---------------- sonido (docs/AUDIO.md): misma clave que la serie, pocos efectos ---------------- */
+  M.sfx(0.22, 'grow', { dur: 1.1, density: 90, gain: -5 });                    // los átomos se arman uno por uno
+  M.sfx(0.92, 'tick');                                                        // entra "Psilocibina"
+  M.sfx(T_CUT, 'swell', { dur: 1.0 }).sfx(T_CUT, 'impact', { weight: 0.8 });  // se corta el fosfato: nace la psilocina activa
+  M.sfx(T_CUT + 0.05, 'whoosh', { dur: 1.3, peak: 0.35, dir: -1, gain: -3 }); // el fosfato se aleja hacia el fondo
+  M.sfx(T3, 'whoosh', { dur: 1.4, peak: 0.3, dir: -1, gain: -5 });            // la cámara se aleja un poco; llega la serotonina
+  M.sfx(T3 + 0.95, 'tick', { tone: 'glass', gain: -2 });                     // entra "Prima de la"
+  M.sfx(T_DOCK, 'tap', { deg: 4, oct: 5, bright: 0.7, gain: -6 });            // la serotonina encaja detrás
+  M.sfx(T_CORE, 'grow', { dur: 1.0, density: 70, gain: -6 });                 // se dibuja el contorno del indol común
+  M.sfx(T_CORE + 0.15, 'shimmer', { degs: [2, 4, 7], gain: -3 });             // el núcleo coincide: comparten estructura
 
   /* ---------------- por cuadro ---------------- */
   const qP = new THREE.Quaternion(), dv = V(), side = V(), tmp = V(), e0 = V(), e1 = V(), camL = V(), dock = V();
