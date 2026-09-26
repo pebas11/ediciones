@@ -183,11 +183,14 @@
   function buildBackground(opts) {
     const bg = document.getElementById('bg');
     if (!bg) return;
-    const lights = [
+    // Temas: opts.lights (luces que derivan) y opts.particles ({ rgb, n }) permiten otros estilos de fondo
+    const lights = opts.lights || [
       { x: 0.22, y: 0.28, r: 900, c: 'rgba(8,126,255,0.16)', ax: 60, ay: 40, sp: 0.11 },
       { x: 0.80, y: 0.62, r: 1000, c: 'rgba(32,196,239,0.10)', ax: 70, ay: 50, sp: 0.08 },
       { x: 0.55, y: 0.10, r: 800, c: 'rgba(115,189,242,0.08)', ax: 90, ay: 30, sp: 0.06 },
     ];
+    const pcfg = opts.particles || {};
+    const prgb = pcfg.rgb || ['140,210,255'];
     const els = lights.map((L) => {
       const d = document.createElement('div');
       d.className = 'light';
@@ -197,16 +200,16 @@
       return d;
     });
     if (opts.grid !== false) {
-      const g = document.createElement('div'); g.className = 'grid'; bg.appendChild(g);
+      const g = document.createElement('div'); g.className = 'grid' + (opts.grid === 'dots' ? ' dots' : ''); bg.appendChild(g);
       const h = document.createElement('div'); h.className = 'horizon'; bg.appendChild(h);
     }
     // partículas (polvo luminoso con profundidad)
     const cv = document.createElement('canvas'); cv.width = 1920; cv.height = 1080; bg.appendChild(cv);
     const ctx = cv.getContext('2d');
     const r = rng(7);
-    const P = Array.from({ length: 90 }, () => {
+    const P = Array.from({ length: pcfg.n ?? 90 }, (_, i) => {
       const z = r();
-      return { x: r() * 1920, y: r() * 1080, z, s: 0.8 + z * 2.4, v: 6 + z * 22, a: 0.10 + z * 0.35, ph: r() * 6.28 };
+      return { x: r() * 1920, y: r() * 1080, z, s: 0.8 + z * 2.4, v: 6 + z * 22, a: 0.10 + z * 0.35, ph: r() * 6.28, c: prgb[i % prgb.length] };
     });
     const vg = document.createElement('div'); vg.className = 'vignette'; bg.appendChild(vg);
     // ruido fino (evita el "banding" del degradé al comprimir)
@@ -229,7 +232,7 @@
         const x = p.x + Math.sin(t * 0.4 + p.ph) * 12 * p.z;
         const tw = 0.75 + 0.25 * Math.sin(t * 1.3 + p.ph * 3);
         ctx.beginPath(); ctx.arc(x, y, p.s, 0, 6.2832);
-        ctx.fillStyle = `rgba(140,210,255,${(p.a * tw).toFixed(3)})`; ctx.fill();
+        ctx.fillStyle = `rgba(${p.c},${(p.a * tw).toFixed(3)})`; ctx.fill();
       }
     });
   }

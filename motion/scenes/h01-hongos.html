@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>H01 · Hongos mágicos: fruto y micelio</title>
+<link rel="stylesheet" href="../lib/theme.css">
+<link rel="stylesheet" href="../lib/theme-myco.css">
+<style>
+  #cam { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; }
+  #scene { position: absolute; left: 0; top: 0; overflow: visible; }
+
+  #kicker1 { left: 150px; top: 300px; }
+  #title { left: 150px; top: 338px; }
+  #title .display { font-size: 148px; line-height: 1.22; display: block; }
+  #sub1 { left: 154px; top: 720px; font-size: 40px; font-weight: 500; color: var(--sky); }
+  #sub1 b { color: var(--white); font-weight: 700; }
+
+  .lbl { position: absolute; width: 560px; padding: 30px 34px 32px; }
+  .lbl .tag { margin-bottom: 18px; }
+  .lbl .t { font-family: "Unbounded", sans-serif; font-weight: 800; font-size: 40px; line-height: 1.15; letter-spacing: -0.01em; }
+  .lbl .d { margin-top: 12px; font-size: 30px; line-height: 1.3; color: var(--text-dim); }
+  #lblUp { left: 150px; top: 150px; }
+  #lblDown { left: 150px; top: 610px; }
+
+  #stat { left: 150px; top: 250px; width: 760px; padding: 44px 48px 46px; }
+  #stat .k { font-family: "JetBrains Mono", monospace; font-weight: 700; font-size: 24px; letter-spacing: 0.24em; color: var(--sky); }
+  #stat .big { font-family: "Unbounded", sans-serif; font-weight: 900; font-size: 200px; line-height: 1.12; letter-spacing: -0.04em; margin-top: 6px; }
+  #stat .d { font-size: 40px; line-height: 1.25; font-weight: 500; margin-top: 4px; }
+  #stat .d b { color: var(--lime); font-weight: 700; }
+  #stat .src { margin-top: 22px; font-family: "JetBrains Mono", monospace; font-size: 20px; color: var(--text-dim); letter-spacing: 0.04em; }
+</style>
+</head>
+<body>
+<div id="bg"></div>
+<div id="world">
+
+  <!-- Mundo con cámara: hongo, suelo, micelio -->
+  <div id="cam">
+    <svg id="scene" viewBox="0 0 1920 1600" width="1920" height="1600">
+      <defs>
+        <linearGradient id="gSoil" gradientUnits="userSpaceOnUse" x1="0" y1="720" x2="0" y2="1500">
+          <stop offset="0%" stop-color="#1D0C2E"/><stop offset="35%" stop-color="#130822"/><stop offset="100%" stop-color="#07030F"/>
+        </linearGradient>
+        <linearGradient id="gHolo" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="1920" y2="0">
+          <stop offset="0%" stop-color="#FF3DCB"/><stop offset="35%" stop-color="#8B5CFF"/><stop offset="65%" stop-color="#22E4FF"/><stop offset="100%" stop-color="#B6FF3B"/>
+        </linearGradient>
+        <linearGradient id="gCap" gradientUnits="userSpaceOnUse" x1="1180" y1="180" x2="1500" y2="420">
+          <stop offset="0%" stop-color="#FFB23F"/><stop offset="45%" stop-color="#FF3DCB"/><stop offset="100%" stop-color="#8B5CFF"/>
+        </linearGradient>
+        <radialGradient id="gCapFill" gradientUnits="userSpaceOnUse" cx="1340" cy="260" r="220">
+          <stop offset="0%" stop-color="#FFB23F" stop-opacity="0.45"/><stop offset="60%" stop-color="#FF3DCB" stop-opacity="0.22"/><stop offset="100%" stop-color="#8B5CFF" stop-opacity="0.08"/>
+        </radialGradient>
+        <linearGradient id="gStem" gradientUnits="userSpaceOnUse" x1="0" y1="420" x2="0" y2="720">
+          <stop offset="0%" stop-color="#F7F3FF"/><stop offset="100%" stop-color="#22E4FF"/>
+        </linearGradient>
+        <radialGradient id="gGlowRoot" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#B6FF3B" stop-opacity="0.45"/><stop offset="100%" stop-color="#B6FF3B" stop-opacity="0"/>
+        </radialGradient>
+      </defs>
+
+      <!-- suelo -->
+      <g id="soil">
+        <rect x="-400" y="720" width="2720" height="900" fill="url(#gSoil)"/>
+        <g id="strata"></g>
+        <g id="pebbles"></g>
+        <line id="ground" x1="-200" y1="720" x2="2120" y2="720" stroke="url(#gHolo)" stroke-width="3" class="glow"/>
+      </g>
+
+      <!-- micelio (se genera por código) -->
+      <ellipse id="rootGlow" cx="1340" cy="730" rx="220" ry="90" fill="url(#gGlowRoot)"/>
+      <g id="myc" class="glow-lime"></g>
+      <g id="pulses"></g>
+      <g id="tips"></g>
+
+      <!-- hongo (Psilocybe: sombrero campanulado, anillo en el pie) -->
+      <g id="shroom" class="glow-mag">
+        <path id="capFill" d="M1178,402 C1190,300 1250,188 1340,180 C1430,188 1490,300 1502,402 C1440,424 1240,424 1178,402 Z" fill="url(#gCapFill)"/>
+        <path id="cap" d="M1178,402 C1190,300 1250,188 1340,180 C1430,188 1490,300 1502,402" fill="none" stroke="url(#gCap)" stroke-width="6" stroke-linecap="round"/>
+        <path id="capUnder" d="M1178,402 C1240,426 1440,426 1502,402" fill="none" stroke="#FF3DCB" stroke-width="4" stroke-linecap="round"/>
+        <g id="gills"></g>
+        <path id="stemL" d="M1322,418 C1318,520 1312,620 1304,720" fill="none" stroke="url(#gStem)" stroke-width="5" stroke-linecap="round"/>
+        <path id="stemR" d="M1358,418 C1362,520 1368,620 1376,720" fill="none" stroke="url(#gStem)" stroke-width="5" stroke-linecap="round"/>
+        <path id="ring" d="M1318,462 C1330,478 1350,478 1362,462" fill="none" stroke="#22E4FF" stroke-width="4" stroke-linecap="round"/>
+        <g id="bruise">
+          <path d="M1250,320 C1262,300 1276,292 1290,290" fill="none" stroke="#22E4FF" stroke-width="3" stroke-linecap="round"/>
+          <path d="M1398,258 C1410,268 1418,282 1422,300" fill="none" stroke="#22E4FF" stroke-width="3" stroke-linecap="round"/>
+        </g>
+      </g>
+      <g id="spores"></g>
+    </svg>
+  </div>
+
+  <!-- Beat 1: título (pantalla) -->
+  <div id="kicker1" class="abs kicker"><span class="dot"></span><span class="txt">Ciencia · hongos psilocibios</span></div>
+  <div id="title" class="abs">
+    <div class="display" id="t1">HONGOS</div>
+    <div class="display glowtext" id="t2">MÁGICOS</div>
+  </div>
+  <div id="sub1" class="abs">Lo que vemos es <b>solo la punta</b></div>
+
+  <!-- Beat 2: arriba / abajo de la tierra -->
+  <div class="card lbl" id="lblUp"><div class="accent"></div>
+    <span class="tag amber">Lo que ves</span>
+    <div class="t">El hongo</div>
+    <div class="d">Es el <b style="color:var(--white)">fruto</b>: aparece unos días para soltar esporas.</div>
+  </div>
+  <div class="card lbl" id="lblDown"><div class="accent"></div>
+    <span class="tag lime">Lo que no ves</span>
+    <div class="t">El micelio</div>
+    <div class="d">Una red de hilos finísimos que vive <b style="color:var(--white)">bajo tierra</b>.</div>
+  </div>
+
+  <!-- Beat 3: dato -->
+  <div class="card abs" id="stat"><div class="accent"></div>
+    <div class="k">HONGOS CON PSILOCIBINA</div>
+    <div class="big hl" id="statNum">+0</div>
+    <div class="d" id="statTxt">especies en el mundo</div>
+    <div class="src" id="statSrc">Fuente</div>
+  </div>
+
+</div>
+
+<script src="../node_modules/gsap/dist/gsap.min.js"></script>
+<script src="../node_modules/gsap/dist/SplitText.min.js"></script>
+<script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
+<script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
+<script src="../lib/stage.js"></script>
+<script>
+// Datos verificados (se completan con la ficha de PubMed)
+const STAT = { value: 200, prefix: '+', text: 'especies de hongos <b>producen psilocibina</b>', src: 'Guzmán et al., 1998 · Van Court et al., 2022' };
+
+M.scene({
+  duration: 14,
+  grid: 'dots',
+  push: 0.02,
+  lights: [
+    { x: 0.18, y: 0.30, r: 1000, c: 'rgba(255,61,203,0.14)', ax: 80, ay: 40, sp: 0.07 },
+    { x: 0.78, y: 0.35, r: 1100, c: 'rgba(139,92,255,0.18)', ax: 60, ay: 60, sp: 0.05 },
+    { x: 0.62, y: 0.90, r: 900, c: 'rgba(182,255,59,0.07)', ax: 90, ay: 30, sp: 0.06 },
+    { x: 0.40, y: 0.05, r: 800, c: 'rgba(34,228,255,0.08)', ax: 70, ay: 30, sp: 0.09 },
+  ],
+  particles: { rgb: ['255,61,203', '34,228,255', '182,255,59', '201,184,255'], n: 70 },
+}, (tl, M) => {
+  const $ = (s) => document.querySelector(s);
+  const NS = 'http://www.w3.org/2000/svg';
+  const mk = (tag, attrs, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); parent.appendChild(e); return e; };
+  const r = M.rng(11);
+  const G = 720;               // línea de tierra (coordenadas del mundo)
+  const ROOT = { x: 1340, y: G };
+
+  /* ---------- suelo: estratos y piedritas ---------- */
+  const strata = $('#strata');
+  const sCols = ['#FFB23F', '#FF3DCB', '#8B5CFF', '#22E4FF'];
+  for (let i = 0; i < 6; i++) {
+    const y = G + 90 + i * 110 + r() * 30;
+    let d = `M-200,${y}`;
+    for (let x = -200; x <= 2120; x += 160) d += ` Q${x + 80},${y + (r() - 0.5) * 40} ${x + 160},${y + (r() - 0.5) * 16}`;
+    mk('path', { d, fill: 'none', stroke: sCols[i % 4], 'stroke-width': 1.5, opacity: 0.16 - i * 0.018, class: 'stratum' }, strata);
+  }
+  const peb = $('#pebbles');
+  for (let i = 0; i < 26; i++) {
+    const x = r() * 1920, y = G + 60 + r() * 700, rx = 6 + r() * 16;
+    mk('ellipse', { cx: x, cy: y, rx, ry: rx * (0.5 + r() * 0.3), fill: 'none', stroke: '#C9B8FF', 'stroke-width': 1.2, opacity: 0.18 }, peb);
+  }
+
+  /* ---------- laminillas del sombrero ---------- */
+  const gills = $('#gills');
+  for (let i = 0; i <= 12; i++) {
+    const u = i / 12, x = 1190 + u * 300, y = 404 + Math.sin(u * Math.PI) * 14;
+    mk('line', { x1: x, y1: y, x2: 1340 + (x - 1340) * 0.12, y2: 424, stroke: '#FF9BE8', 'stroke-width': 1.6, opacity: 0.8, class: 'gill' }, gills);
+  }
+
+  /* ---------- micelio: ramificación determinista ---------- */
+  const COLS = ['#FFB23F', '#FF3DCB', '#8B5CFF', '#22E4FF', '#B6FF3B', '#B6FF3B', '#E2FF9E'];
+  const branches = [];
+  function grow(x, y, a, len, depth, t0) {
+    if (depth > 6 || len < 22) return;
+    const ex = x + Math.cos(a) * len, ey = y + Math.sin(a) * len;
+    if (ey < G + 8 || ey > G + 640 || ex < 700 || ex > 1860) return;
+    const bend = (r() - 0.5) * len * 0.5;
+    const cx = (x + ex) / 2 + Math.cos(a + Math.PI / 2) * bend, cy = (y + ey) / 2 + Math.sin(a + Math.PI / 2) * bend;
+    const p = mk('path', { d: `M${x.toFixed(1)},${y.toFixed(1)} Q${cx.toFixed(1)},${cy.toFixed(1)} ${ex.toFixed(1)},${ey.toFixed(1)}`, fill: 'none', stroke: COLS[depth], 'stroke-width': Math.max(1.2, 4.2 - depth * 0.55), 'stroke-linecap': 'round' }, $('#myc'));
+    const dur = 0.38 + len / 700;
+    branches.push({ p, t0, dur, depth, ex, ey });
+    const kids = depth < 2 ? 3 : (r() < 0.75 ? 2 : 1);
+    for (let k = 0; k < kids; k++) {
+      const na = a + (k - (kids - 1) / 2) * (0.55 + r() * 0.35) + (r() - 0.5) * 0.3;
+      grow(ex, ey, na, len * (0.68 + r() * 0.12), depth + 1, t0 + dur * 0.8);
+    }
+    if (depth >= 4 && r() < 0.6) branches[branches.length - 1].tip = true;
+  }
+  const T_MYC = 5.05;
+  [Math.PI * 0.5, Math.PI * 0.2, Math.PI * 0.8, Math.PI * 0.08, Math.PI * 0.92].forEach((a, i) => grow(ROOT.x + (i - 2) * 10, ROOT.y + 4, a, 150 + r() * 40, 0, T_MYC + i * 0.08));
+  branches.forEach((b) => M.draw(b.p, b.t0, { dur: b.dur, ease: 'appleOut' }));
+  // nodos en las puntas
+  const tips = $('#tips');
+  branches.filter((b) => b.tip).forEach((b) => {
+    const c = mk('circle', { cx: b.ex, cy: b.ey, r: 4.5, fill: '#E2FF9E' }, tips);
+    gsap.set(c, { svgOrigin: `${b.ex} ${b.ey}` });
+    tl.from(c, { scale: 0, duration: 0.4, ease: M.spring(0.15) }, b.t0 + b.dur);
+  });
+  // pulsos de señal que viajan por la red (beat 3)
+  const pulses = $('#pulses');
+  const main = branches.filter((b) => b.depth <= 2);
+  main.forEach((b, i) => {
+    const q = b.p.cloneNode(); q.setAttribute('stroke', '#FFFFFF'); q.setAttribute('stroke-width', 3.2); pulses.appendChild(q);
+    const L = b.p.getTotalLength();
+    gsap.set(q, { attr: { 'stroke-dasharray': `26 ${L + 40}`, 'stroke-dashoffset': 26 }, opacity: 0 });
+    const st = 9.4 + b.depth * 0.45 + (i % 5) * 0.12;
+    tl.set(q, { opacity: 0.95 }, st);
+    tl.to(q, { attr: { 'stroke-dashoffset': -L }, duration: 0.55 + L / 900, ease: 'none' }, st);
+    tl.set(q, { opacity: 0 }, st + 0.55 + L / 900);
+  });
+
+  /* ---------- esporas (procedural) ---------- */
+  const sp = $('#spores');
+  const S = Array.from({ length: 34 }, (_, i) => ({ x0: 1200 + r() * 280, ph: r() * 6.28, v: 26 + r() * 40, t0: 1.6 + r() * 3.2, s: 1.6 + r() * 2.4, c: ['#FF9BE8', '#FFD48A', '#E2FF9E', '#9EF3FF'][i % 4] }));
+  const sEls = S.map((s) => mk('circle', { r: s.s, fill: s.c, opacity: 0 }, sp));
+
+  /* ---------- Beat 1 · título + hongo (0 – 4.6 s) ---------- */
+  gsap.set('#cam', { x: 0, y: 0, scale: 1 });
+  M.draw($('#ground'), 0.2, { dur: 1.1, ease: 'apple', from: '50% 50%' });
+  const k1 = M.textIn($('#kicker1 .txt'), 0.2, { type: 'words', dur: 0.8 });
+  M.zoomIn($('#kicker1 .dot'), 0.2, { ease: M.spring(0.15) });
+  const t1 = M.textIn($('#t1'), 0.35, { dur: M.D.reveal, stagger: 0.04, ease: 'appleOut' });
+  const t2 = M.textIn($('#t2'), 0.6, { dur: M.D.reveal, stagger: 0.045, ease: 'appleOut', cls: 'hl' });
+  M.draw($('#stemL'), 0.55, { dur: 0.8, ease: 'appleOut', from: '100% 100%' });
+  M.draw($('#stemR'), 0.55, { dur: 0.8, ease: 'appleOut', from: '100% 100%' });
+  M.draw($('#cap'), 1.05, { dur: 1.0, ease: 'apple', from: '50% 50%' });
+  M.draw($('#capUnder'), 1.35, { dur: 0.7, ease: 'apple', from: '50% 50%' });
+  tl.from('#capFill', { opacity: 0, duration: 0.9, ease: 'appleOut' }, 1.6);
+  tl.from('.gill', { opacity: 0, duration: 0.3, stagger: 0.03, ease: 'appleOut' }, 1.6);
+  M.draw($('#ring'), 1.7, { dur: 0.5, ease: 'appleOut' });
+  tl.from('#bruise path', { drawSVG: '0%', duration: 0.6, stagger: 0.15, ease: 'appleOut' }, 2.0);
+  const sub = M.textIn($('#sub1'), 1.7, { type: 'words', dur: 0.7, stagger: 0.05, ease: 'appleOut' });
+  tl.from('#rootGlow', { opacity: 0, duration: 1.0 }, 4.6);
+
+  // salida del título
+  M.textOut(k1, 4.2, { type: 'words' });
+  M.zoomOut($('#kicker1 .dot'), 4.2);
+  M.textOut(t1, 4.25, { stagger: 0.02 });
+  M.textOut(t2, 4.32, { stagger: 0.02 });
+  M.textOut(sub, 4.2, { type: 'words', stagger: 0.02 });
+
+  /* ---------- Beat 2 · cámara baja a la tierra (4.6 – 9.4 s) ---------- */
+  // pie del hongo (1340,720) → pantalla (1180,470) con escala 0.72
+  tl.to('#cam', { x: 1180 - 1340 * 0.72, y: 470 - 720 * 0.72, scale: 0.72, duration: 1.3, ease: 'apple' }, 4.45);
+  gsap.set(['#lblUp', '#lblDown'], { transformPerspective: 1400, rotationY: 8 });
+  M.popIn($('#lblUp'), 5.6, { dur: M.D.reveal, rotX: 10, ease: 'appleOut' });
+  M.popIn($('#lblDown'), 6.6, { dur: M.D.reveal, rotX: 10, ease: 'appleOut' });
+  M.popOut($('#lblUp'), 9.1, { dur: 0.45 });
+  M.popOut($('#lblDown'), 9.18, { dur: 0.45 });
+
+  /* ---------- Beat 3 · red viva + dato (9.4 – 14 s) ---------- */
+  tl.to('#cam', { x: 1370 - 1340 * 0.72, y: 480 - 720 * 0.72, scale: 0.72, duration: 1.4, ease: 'apple' }, 9.25);
+  $('#statTxt').innerHTML = STAT.text; $('#statSrc').textContent = STAT.src;
+  gsap.set('#stat', { transformPerspective: 1400, rotationY: 8 });
+  M.popIn($('#stat'), 9.7, { dur: M.D.reveal, rotX: 10, ease: 'appleOut' });
+  M.counter($('#statNum'), { from: 0, to: STAT.value, prefix: STAT.prefix, at: 9.95, dur: 1.4, ease: 'expo.out' });
+
+  // salida final
+  M.popOut($('#stat'), 12.95, { dur: 0.5 });
+  tl.to('#cam', { y: '+=60', scale: 0.76, duration: 0.9, ease: 'appleIn' }, 13.0);
+  tl.to(['#myc', '#tips', '#shroom', '#soil', '#rootGlow'], { opacity: 0, duration: 0.55, ease: 'appleIn' }, 13.15);
+
+  /* ---------- por frame: esporas ---------- */
+  M.onFrame((t) => {
+    S.forEach((s, i) => {
+      const u = t - s.t0;
+      const on = u > 0 && t < 13.3;
+      const y = 410 - u * s.v, x = s.x0 + Math.sin(u * 1.4 + s.ph) * 18;
+      const a = on ? Math.min(1, u * 1.5) * Math.max(0, 1 - u / 5) : 0;
+      sEls[i].setAttribute('cx', x.toFixed(1)); sEls[i].setAttribute('cy', y.toFixed(1)); sEls[i].setAttribute('opacity', a.toFixed(3));
+    });
+  });
+});
+</script>
+</body>
+</html>

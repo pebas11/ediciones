@@ -1,0 +1,82 @@
+/* ==========================================================================
+   Tema "MYCO": tecno-psicodélico y bioluminiscente, para la serie de hongos.
+   Se carga DESPUÉS de theme.css y pisa sus tokens. Solo modo fondo (sin chroma).
+   Paleta: violeta profundo + neones (magenta, violeta, cian, lima, ámbar),
+   con un degradé holográfico como acento.
+   ========================================================================== */
+@font-face { font-family: "Unbounded"; font-weight: 400; src: url(../node_modules/@fontsource/unbounded/files/unbounded-latin-400-normal.woff2) format("woff2"); }
+@font-face { font-family: "Unbounded"; font-weight: 600; src: url(../node_modules/@fontsource/unbounded/files/unbounded-latin-600-normal.woff2) format("woff2"); }
+@font-face { font-family: "Unbounded"; font-weight: 800; src: url(../node_modules/@fontsource/unbounded/files/unbounded-latin-800-normal.woff2) format("woff2"); }
+@font-face { font-family: "Unbounded"; font-weight: 900; src: url(../node_modules/@fontsource/unbounded/files/unbounded-latin-900-normal.woff2) format("woff2"); }
+@font-face { font-family: "Space Grotesk"; font-weight: 400; src: url(../node_modules/@fontsource/space-grotesk/files/space-grotesk-latin-400-normal.woff2) format("woff2"); }
+@font-face { font-family: "Space Grotesk"; font-weight: 500; src: url(../node_modules/@fontsource/space-grotesk/files/space-grotesk-latin-500-normal.woff2) format("woff2"); }
+@font-face { font-family: "Space Grotesk"; font-weight: 700; src: url(../node_modules/@fontsource/space-grotesk/files/space-grotesk-latin-700-normal.woff2) format("woff2"); }
+
+:root {
+  --night:   #07030F;
+  --deep:    #140A2A;
+  --magenta: #FF3DCB;
+  --violet:  #8B5CFF;
+  --cyan:    #22E4FF;
+  --lime:    #B6FF3B;
+  --amber:   #FFB23F;
+  --white:   #F7F3FF;
+  --sky:     #C9B8FF;   /* lila claro: rótulos y secundarios */
+  --electric: var(--violet);
+  --holo: linear-gradient(90deg, #FF3DCB 0%, #8B5CFF 30%, #22E4FF 62%, #B6FF3B 100%);
+  --holo-v: linear-gradient(180deg, #FF6BE0 0%, #A57BFF 35%, #22E4FF 70%, #B6FF3B 100%);
+
+  --card-fill: linear-gradient(160deg, rgba(40,20,80,0.72) 0%, rgba(20,10,42,0.78) 60%, rgba(12,6,26,0.86) 100%);
+  --card-bg: var(--card-fill);
+  --card-border: rgba(201,184,255,0.30);
+  --card-shadow: 0 40px 90px -30px rgba(0,0,0,0.8), 0 0 60px -20px rgba(139,92,255,0.45), inset 0 1px 0 rgba(255,255,255,0.12);
+  --line-soft: rgba(201,184,255,0.55);
+  --line-faint: rgba(201,184,255,0.20);
+  --text-dim: rgba(247,243,255,0.66);
+  --glow-cyan: drop-shadow(0 0 14px rgba(34,228,255,0.55)) drop-shadow(0 0 42px rgba(139,92,255,0.40));
+  --glow-mag: drop-shadow(0 0 14px rgba(255,61,203,0.55)) drop-shadow(0 0 42px rgba(139,92,255,0.40));
+  --glow-lime: drop-shadow(0 0 12px rgba(182,255,59,0.55)) drop-shadow(0 0 36px rgba(34,228,255,0.30));
+  --glow-soft: drop-shadow(0 0 10px rgba(201,184,255,0.35));
+  --text-glow: 0 0 30px rgba(255,61,203,0.30), 0 0 90px rgba(139,92,255,0.30);
+  --reflect: below 6px linear-gradient(to bottom, transparent 0%, transparent 86%, rgba(255,255,255,0.10) 100%);
+}
+
+body { font-family: "Space Grotesk", "Inter", sans-serif; background: var(--night); }
+
+/* Fondo violeta profundo */
+#bg { background:
+  radial-gradient(110% 90% at 50% 40%, #1E0E3F 0%, #140A2A 40%, #0B0519 72%, var(--night) 100%); }
+#bg .grid.dots {
+  background-image: radial-gradient(circle, rgba(201,184,255,0.22) 1.6px, transparent 2.2px);
+  background-size: 64px 64px; opacity: 0.6;
+}
+#bg .horizon { background: linear-gradient(90deg, transparent, rgba(255,61,203,0.22) 25%, rgba(139,92,255,0.30) 50%, rgba(34,228,255,0.22) 75%, transparent); }
+#bg .vignette { background: radial-gradient(120% 100% at 50% 45%, transparent 55%, rgba(7,3,15,0.6) 85%, rgba(7,3,15,0.9) 100%); }
+
+/* Tipografía */
+.display, .title, .myco-display { font-family: "Unbounded", sans-serif; }
+.display { font-weight: 900; letter-spacing: -0.02em; }
+.display .hl, .hl { background: var(--holo); -webkit-background-clip: text; background-clip: text; color: transparent; text-shadow: none; }
+.hl-v { background: var(--holo-v); -webkit-background-clip: text; background-clip: text; color: transparent; text-shadow: none; }
+.kicker { color: var(--sky); }
+.kicker .dot { background: var(--magenta); box-shadow: 0 0 14px var(--magenta); }
+.unit { color: var(--sky); }
+.num { font-family: "Unbounded", sans-serif; font-weight: 800; letter-spacing: -0.03em; }
+.magenta { color: var(--magenta); } .lime { color: var(--lime); } .amber { color: var(--amber); } .violet { color: var(--violet); }
+.glow-mag { filter: var(--glow-mag); } .glow-lime { filter: var(--glow-lime); }
+
+/* Tarjeta con borde holográfico */
+.card, .pill {
+  background: var(--card-fill) padding-box, var(--holo) border-box;
+  border: 1.5px solid transparent;
+}
+.card .accent { background: var(--holo); height: 3px; left: 28px; right: 28px; }
+.card::before { background: linear-gradient(180deg, rgba(255,255,255,0.09) 0%, transparent 30%); }
+
+/* Chip de color sólido (etiquetas) */
+.tag { display: inline-flex; align-items: center; gap: 10px; padding: 8px 18px; border-radius: 999px;
+  font-family: "JetBrains Mono", monospace; font-weight: 700; font-size: 22px; letter-spacing: 0.16em; text-transform: uppercase; color: #0B0519; }
+.tag.mag { background: var(--magenta); } .tag.lime { background: var(--lime); } .tag.cyan { background: var(--cyan); } .tag.amber { background: var(--amber); } .tag.violet { background: var(--violet); color: var(--white); }
+
+.ico { color: var(--cyan); }
+.ico-badge { background: radial-gradient(circle at 30% 25%, rgba(255,61,203,0.30), rgba(139,92,255,0.14) 60%, rgba(139,92,255,0.05)); border-color: rgba(201,184,255,0.45); }
