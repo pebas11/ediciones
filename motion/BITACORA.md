@@ -29,6 +29,8 @@
 - Tiene permiso para decidir sin preguntar. Pidió **cuidar créditos**.
 
 ## Estado
+- Workflow serie 3 lanzado el 26/09 (`psicodelicos-sin-texto`, run wf_4c877fcd-bab). Si la sesión se corta, revisar `scenes/p0*.html`: pueden existir en borrador.
+
 ### Serie 1: Calorías (estilo azul noche). TERMINADA
 `scenes/01..05`. Renders FONDO y VERDE en `renders/`, sin sonido.
 
