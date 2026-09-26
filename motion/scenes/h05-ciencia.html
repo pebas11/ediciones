@@ -7,16 +7,17 @@
 <link rel="stylesheet" href="../lib/fonts-spartan.css">
 <script type="importmap">{ "imports": { "three": "../node_modules/three/build/three.module.js", "three/addons/": "../node_modules/three/examples/jsm/" } }</script>
 <style>
-  /* Guion de color (v3): base cálida terrosa; el azul psilocibina SOLO para lo activo:
-     la señal que recorre la línea de tiempo y enciende cada hito, y la cifra clave (%). */
+  /* Guion de color (v3): base cálida terrosa; el azul psilocibina SOLO para lo activo
+     (la señal que recorre la línea de tiempo, el contraluz) y la cifra clave. */
   :root { --bone: #F3EDE2; --caramel: #E3A560; --blue: #8FB0FF; --dim: rgba(243,237,226,0.66); }
   body { background: #060504; }
   #gl { position: absolute; inset: 0; }
   #grain { position: absolute; inset: -20px; opacity: 0.06; mix-blend-mode: overlay; pointer-events: none; }
   #vig { position: absolute; inset: 0; background: radial-gradient(115% 100% at 62% 42%, transparent 50%, rgba(4,3,2,0.6) 100%); }
   .t { position: absolute; left: 140px; font-family: var(--f-display); color: var(--bone); letter-spacing: -0.035em; line-height: 1.2; white-space: nowrap; }
-  #num { top: 250px; font-size: 320px; font-weight: 900; letter-spacing: -0.055em; line-height: 1.05; }
-  #num .p { color: var(--blue); font-weight: 600; margin-left: 0.12em; }
+  /* tracking casi neutro: con −0,055em la diagonal del 7 pisaba la bandera del 1 */
+  #num { top: 250px; font-size: 320px; font-weight: 900; letter-spacing: -0.01em; line-height: 1.05; }
+  #num .p { color: var(--blue); font-weight: 600; margin-left: 0.1em; letter-spacing: -0.03em; }
   #numL { top: 612px; line-height: 1.3; font-family: var(--f-body); font-size: 50px; font-weight: 500; letter-spacing: -0.01em; color: var(--dim); }
   #c1 { top: 300px; font-size: 116px; line-height: 1.2; }
   #c1 .a { display: block; font-weight: 800; }
@@ -32,7 +33,7 @@
 
   <!-- beat 1: los años y su palabra van impresos en los planos 3D (ver hitos) -->
   <div class="t" id="num"><span id="numV">0</span><span class="p">%</span></div>
-  <div class="t" id="numL">de respuesta en depresión</div>
+  <div class="t" id="numL">respuesta en depresión</div>
   <div class="t" id="c1"><span class="a">Investigación clínica</span><span class="b">controlada.</span></div>
   <div class="t" id="c2">No es una recomendación.</div>
 
@@ -45,26 +46,30 @@
 <script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
 <script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
 <script src="../lib/stage.js"></script>
+<script src="../lib/audio.js"></script>
 <script type="module">
 import { createStage3D, THREE, fbm } from '../lib/three-stage.mjs';
 import { buildMushroom, buildGrass } from '../lib/mushroom3d.mjs';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
 /* Datos (FICHA-HONGOS.md, única fuente):
    1958 — Hofmann aísla la psilocibina (Hofmann et al. 1958, PMID 13537892).
-   2018 — FDA: designación de "terapia innovadora" (comunicado de Compass, 5-ago-2026).
+   2018 — FDA: designación de "terapia innovadora" (sin aprobación; comunicado de Compass, 5-ago-2026).
    2023 — Australia, desde julio de 2023: psiquiatras autorizados, depresión resistente (TGA).
-   71 % — respuesta en depresión mayor, 24 pacientes, 4 semanas (Davis 2021, PMID 33146667).
-   Cierre responsable: encuadre de la ficha ("investigación en entornos clínicos controlados… no es una recomendación"). */
+   71 % — respuesta (no remisión) en depresión mayor, 24 pacientes, 4 semanas (Davis 2021, PMID 33146667).
+   Cierre responsable: encuadre de la ficha ("investigación en entornos clínicos controlados… no es una recomendación").
+   Texto en pantalla (skill motion-copy): 14 palabras + 4 cifras = 18. */
 const MILESTONES = [
   { year: 1958, word: ['Aislada'] },
-  { year: 2018, word: ['Terapia', 'innovadora'] },
+  { year: 2018, word: ['Designación', 'FDA'] },   // "designación", no "aprobación": la FDA no la aprobó
   { year: 2023, word: ['Australia'] },
 ];
 const RESPONSE = 71;
 
-M.scene({ duration: 15.0, push: 0 }, async (tl, M) => {
+M.scene({ duration: 15.0, push: 0, audio: { key: 'D', mode: 'lydian', bed: { cycle: 9, bright: 0.9 } } }, async (tl, M) => {
   const $ = (s) => document.querySelector(s);
   const r = M.rng(55);
+  const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
   { const g = $('#grain').getContext('2d'); const im = g.createImageData(512, 512); const rn = M.rng(3);
     for (let i = 0; i < im.data.length; i += 4) { const v = 128 + (rn() - 0.5) * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
@@ -78,21 +83,44 @@ M.scene({ duration: 15.0, push: 0 }, async (tl, M) => {
   scene.fog = new THREE.FogExp2('#090706', 0.035);
   const maxAniso = renderer.capabilities.getMaxAnisotropy();
 
-  // escala de la línea de tiempo: distancia proporcional a los años (60 años de hueco se sienten)
-  const K = 0.5;                                  // unidades por año
+  /* ---------------- trazado ---------------- */
+  // distancia proporcional a los años: el hueco de 60 años se recorre, el de 5 años es un paso
+  const K = 0.55;
   const X = (y) => (y - 1958) * K;
-  const RAIL_Z = 0.5, PLATE_Z = -0.5;
-  const MX = 39.2, MZ = -1.0;                     // grupo de hongos: "hoy", al final de la línea
-  const RAIL_X0 = -14, RAIL_X1 = MX - 1.75;
+  const LZ = -0.5;                                   // eje de la línea de tiempo
+  const L0 = -14, L1 = X(2023) + 1.6;                // la viga termina poco después de 2023 ("hoy")
+  // cámara del beat 1: una parada frente a cada hito, de costado (el plano se lee con volumen)
+  const CAM_Y = 1.3, CAM_Z = 6.8, DRIFT = 0.2;
+  const stop = (px) => ({ x: px - 2.5, y: CAM_Y, z: CAM_Z, lx: px + 0.35, ly: 1.22, lz: LZ });
 
-  // suelo plano, cálido y oscuro (secundario: valor bajo, poco saturado)
+  // Trío de hongos de h01. La cámara llega a él SIEMPRE de frente (ángulo local ≈ −14°, como h01):
+  // el grupo se gira para que su frente mire a la última parada, y el viaje es una recta sobre ese eje.
+  const C_L = { x: 0.16, z: 0.65 };                                            // centro del trío (local)
+  const CB_L = { ang: -0.2, rad: 6.7, y: 1.0, lx: 0.3, ly: 1.45, lz: 0.6, shift: -440 };   // encuadre final de h01
+  const aL = Math.atan2(Math.sin(CB_L.ang) * CB_L.rad - C_L.x, Math.cos(CB_L.ang) * CB_L.rad - C_L.z);
+  const BETA = 57 * Math.PI / 180, DS = 13;            // el trío queda a 57° a la derecha de la última parada, fuera de cuadro
+  const Sx = X(2023) - 2.5 + DRIFT, Sz = CAM_Z;
+  const Cw = { x: Sx + DS * Math.sin(BETA), z: Sz - DS * Math.cos(BETA) };
+  const RHO = -BETA - aL;
+  const trio = new THREE.Group(); trio.rotation.y = RHO;
+  trio.position.set(Cw.x - (C_L.x * Math.cos(RHO) + C_L.z * Math.sin(RHO)), 0, Cw.z - (-C_L.x * Math.sin(RHO) + C_L.z * Math.cos(RHO)));
+  scene.add(trio); trio.updateMatrixWorld(true);
+
+  /* ---------------- suelo: cálido, oscuro, sin horizonte duro ---------------- */
   {
-    const g = new THREE.PlaneGeometry(150, 44, 300, 88); g.rotateX(-Math.PI / 2); g.translate(18, 0, -8);
+    const g = new THREE.PlaneGeometry(170, 70, 340, 140); g.rotateX(-Math.PI / 2); g.translate(18, 0, -14);
     const p = g.attributes.position, col = new Float32Array(p.count * 3);
-    const a = new THREE.Color('#110c08'), b = new THREE.Color('#1c140e'), c2 = new THREE.Color('#080605');
+    const a = new THREE.Color('#0f0b07'), b = new THREE.Color('#1a130d'), c2 = new THREE.Color('#080605');
+    const fogC = new THREE.Color('#090706'), moss = new THREE.Color('#1b190f');
     for (let i = 0; i < p.count; i++) { const x = p.getX(i), z = p.getZ(i);
       const n = fbm(x * 0.9, 1.7, z * 0.9), n2 = fbm(x * 5, 3.1, z * 5), n3 = fbm(x * 0.25, 7.3, z * 0.25);
       const c = a.clone().lerp(b, 0.5 + 0.5 * n2).lerp(c2, Math.min(1, Math.max(0, n) * 0.9 + Math.max(0, n3) * 0.8));
+      // mancha de tierra con musgo bajo el trío (el pasto nace de algo, no está pegado)
+      const dT = Math.hypot(x - Cw.x, z - Cw.z) + 0.7 * fbm(x * 1.3, 4.4, z * 1.3);
+      c.lerp(moss, (1 - sstep(1.4, 3.8, dT)) * 0.6);
+      // fuera del escenario el suelo se funde con la niebla (sin borde de plano)
+      const dx = Math.max(-18 - x, 0, x - (Cw.x + 7)), dz = Math.max(-9 - z, 0, z - 10);
+      c.lerp(fogC, sstep(2, 16, Math.hypot(dx, dz)) * 0.92);
       col.set([c.r, c.g, c.b], i * 3); }
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
     const gm = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.97 });
@@ -103,192 +131,246 @@ M.scene({ duration: 15.0, push: 0 }, async (tl, M) => {
     ground.receiveShadow = true; scene.add(ground);
   }
 
-  // piedritas apoyadas (medio enterradas) para dar escala y textura
+  // piedritas apoyadas (medio enterradas): escala y textura
   {
     const pebGeo = new THREE.IcosahedronGeometry(1, 1);
-    const peb = new THREE.InstancedMesh(pebGeo, new THREE.MeshStandardMaterial({ color: '#3f322a', roughness: 0.92, flatShading: true }), 260);
+    const N = 320;
+    const peb = new THREE.InstancedMesh(pebGeo, new THREE.MeshStandardMaterial({ color: '#3f322a', roughness: 0.92, flatShading: true }), N);
     const mm = new THREE.Matrix4(), q = new THREE.Quaternion(); let n = 0;
-    while (n < 260) {
-      const x = RAIL_X0 + r() * (MX + 6 - RAIL_X0), z = -4 + r() * 9, s = 0.015 + Math.pow(r(), 2.5) * 0.06;
-      if (Math.abs(z - RAIL_Z) < 0.2) continue;                                            // no sobre el riel
-      if (MILESTONES.some((m) => Math.abs(x - X(m.year)) < 1.5 && z > PLATE_Z - 0.45 && z < RAIL_Z + 0.1)) continue; // ni en las bases
-      if (Math.hypot(x - MX, z - MZ) < 2.2) continue;                                      // ni entre los hongos
+    while (n < N) {
+      const x = L0 + r() * (Cw.x + 8 - L0), z = -7 + r() * 12, s = 0.015 + Math.pow(r(), 2.5) * 0.06;
+      if (x < L1 + 0.3 && Math.abs(z - LZ) < 0.32) continue;           // ni sobre la viga
+      if (Math.hypot(x - Cw.x, z - Cw.z) < 2.3) continue;              // ni entre los hongos
       q.setFromEuler(new THREE.Euler(r() * 3, r() * 3, r() * 3));
       mm.compose(new THREE.Vector3(x, s * 0.25, z), q, new THREE.Vector3(s, s * 0.6, s * 0.85)); peb.setMatrixAt(n++, mm);
     }
     peb.castShadow = true; peb.receiveShadow = true; scene.add(peb);
   }
 
-  /* ---------------- línea de tiempo: riel + marcas por década + señal azul ---------------- */
-  const bronze = new THREE.MeshStandardMaterial({ color: '#4a3726', metalness: 0.3, roughness: 0.6 });
-  const RAIL_H = 0.05, RAIL_D = 0.09;
-  const rail = new THREE.Mesh(new THREE.BoxGeometry(RAIL_X1 - RAIL_X0, RAIL_H, RAIL_D), bronze);
-  rail.position.set((RAIL_X0 + RAIL_X1) / 2, RAIL_H / 2, RAIL_Z); rail.castShadow = true; rail.receiveShadow = true; scene.add(rail);
-  const cap = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.075, 0.16), bronze);         // tope del riel
-  cap.position.set(RAIL_X1, 0.0375, RAIL_Z); cap.castShadow = true; scene.add(cap);
-  // marcas por década (1960…2020), delante del riel, al ras del suelo
-  const tickMat = new THREE.MeshStandardMaterial({ color: '#6a5847', roughness: 0.7, metalness: 0.2 });
+  /* ---------------- línea de tiempo: una viga baja con los hitos encastrados ---------------- */
+  const BEAM_H = 0.12, BEAM_D = 0.34;
+  const beamMat = new THREE.MeshStandardMaterial({ color: '#2c2219', roughness: 0.6, metalness: 0.25 });
+  const beam = new THREE.Mesh(new RoundedBoxGeometry(L1 - L0, BEAM_H, BEAM_D, 3, 0.025), beamMat);
+  beam.position.set((L0 + L1) / 2, BEAM_H / 2, LZ); beam.castShadow = true; beam.receiveShadow = true; scene.add(beam);
+  // marcas por década (1960…2020) grabadas en la cara frontal de la viga
+  const tickMat = new THREE.MeshStandardMaterial({ color: '#7a6450', roughness: 0.5, metalness: 0.4 });
   for (let y = 1960; y <= 2020; y += 10) {
-    const t = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.014, 0.34), tickMat);
-    t.position.set(X(y), 0.007, RAIL_Z + RAIL_D / 2 + 0.17 - 0.01); t.receiveShadow = true; scene.add(t);
+    const t = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.05, 0.004), tickMat);
+    t.position.set(X(y), BEAM_H / 2, LZ + BEAM_D / 2 + 0.001); scene.add(t);
   }
-  // señal: filete azul encastrado en la cara superior del riel (crece con la cabeza)
-  const sigMat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#7fa2ff').multiplyScalar(1.5) });
-  const sigGeo = new THREE.BoxGeometry(1, 0.012, 0.032); sigGeo.translate(0.5, 0, 0);
-  const sig = new THREE.Mesh(sigGeo, sigMat); sig.position.set(RAIL_X0, RAIL_H + 0.002, RAIL_Z); scene.add(sig);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.03, 16, 12), new THREE.MeshBasicMaterial({ color: new THREE.Color('#dfe8ff').multiplyScalar(2.2) }));
-  head.position.set(0, RAIL_H + 0.012, RAIL_Z); scene.add(head);
+  // señal: filete azul incrustado en la cara superior. Brilla solo cerca de la cabeza; lo recorrido queda tenue.
+  const SIG_Z = LZ + 0.11, SIG_Y = BEAM_H + 0.003, HOT = 2.2;
+  const BLUE = new THREE.Color('#7fa2ff').multiplyScalar(0.62);          // ≈ #7fa2ff en pantalla después de ACES
+  const sigGeo = new THREE.BoxGeometry(1, 0.006, 0.018); sigGeo.translate(0.5, 0, 0);
+  const sigDim = new THREE.Mesh(sigGeo, new THREE.MeshBasicMaterial({ color: BLUE.clone().multiplyScalar(0.3) }));
+  const sigHot = new THREE.Mesh(sigGeo, new THREE.MeshBasicMaterial({ color: BLUE }));
+  sigDim.position.set(L0, SIG_Y, SIG_Z); sigHot.position.set(L0, SIG_Y + 0.0005, SIG_Z); scene.add(sigDim, sigHot);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.02, 16, 12), new THREE.MeshBasicMaterial({ color: new THREE.Color('#dfe8ff').multiplyScalar(1.5) }));
+  head.position.set(0, SIG_Y + 0.004, SIG_Z); scene.add(head);
   const signal = { x: -6 };
 
-  /* ---------------- hitos: base + plano fino encastrado + brazo al riel ---------------- */
-  const PW = 2.3, PH = 2.6, PD = 0.05, BH = 0.16, BD = 0.44, EMB = 0.08;   // el plano entra 8 cm en la ranura de la base
-  const PPU = 520;                                                          // px de textura por unidad
-  function textCanvas(wU, hU, draw) {
-    const c = document.createElement('canvas'); c.width = Math.round(wU * PPU); c.height = Math.round(hU * PPU);
+  /* ---------------- hitos: plano fino con bisel, encastrado en la viga ---------------- */
+  const PW = 2.0, PH = 2.3, PD = 0.08, EMB = 0.06, PPU = 520, MARG = 0.17, DOWN = -(PH + 0.2);
+  function textCanvas(draw) {
+    const c = document.createElement('canvas'); c.width = Math.round(PW * PPU); c.height = Math.round(PH * PPU);
     const g = c.getContext('2d'); draw(g, c); const tx = new THREE.CanvasTexture(c);
     tx.colorSpace = THREE.SRGBColorSpace; tx.anisotropy = maxAniso; return tx;
   }
-  // cara: laca cálida con un degradé de luz horneado (valor medio arriba, oscuro abajo) + cepillado fino
-  const faceTx = textCanvas(PW, PH, (c, cv) => {
-    const gr = c.createLinearGradient(0, 0, cv.width * 0.55, cv.height);
-    gr.addColorStop(0, '#684b37'); gr.addColorStop(0.45, '#3a2b20'); gr.addColorStop(1, '#17110d');
+  // cara: laca cálida en valor medio (el protagonista se separa del suelo) + grano fino
+  const faceTx = textCanvas((c, cv) => {
+    const gr = c.createLinearGradient(0, 0, cv.width * 0.5, cv.height);
+    gr.addColorStop(0, '#6f6053'); gr.addColorStop(0.5, '#5d5046'); gr.addColorStop(1, '#40362f');
     c.fillStyle = gr; c.fillRect(0, 0, cv.width, cv.height);
-    const rn = M.rng(9); c.globalAlpha = 0.018;
-    for (let i = 0; i < 500; i++) { c.fillStyle = rn() < 0.5 ? '#000' : '#fff'; c.fillRect(0, rn() * cv.height, cv.width, 1); }
-    c.globalAlpha = 1; });
-  // tamaño del año: el más ancho ocupa el plano de margen a margen (mismo cuerpo para los tres)
-  const YEAR_F = (() => { const c = document.createElement('canvas').getContext('2d'); c.font = '800 100px "League Spartan"'; c.letterSpacing = '-4.5px';
-    const w = Math.max(...MILESTONES.map((m) => c.measureText(String(m.year)).width)) / 100; return (PW - 0.34) / w; })();
-  const faceMat = new THREE.MeshPhysicalMaterial({ map: faceTx, roughness: 0.38, clearcoat: 0.55, clearcoatRoughness: 0.3 });
-  const edgeMat = new THREE.MeshStandardMaterial({ color: '#9a7250', metalness: 0.6, roughness: 0.34 });
-  const baseMat = new THREE.MeshStandardMaterial({ color: '#35281e', roughness: 0.78 });
-  const plates = MILESTONES.map((m, i) => {
+    const rn = M.rng(9);
+    for (let i = 0; i < 9000; i++) { c.fillStyle = rn() < 0.5 ? 'rgba(0,0,0,0.05)' : 'rgba(255,240,220,0.035)'; c.fillRect(rn() * cv.width, rn() * cv.height, 1 + rn() * 2, 1 + rn() * 2); } });
+  // tipografía: el año más ancho ocupa el plano de margen a margen; la palabra alineada al borde de tinta del año
+  const meas = document.createElement('canvas').getContext('2d');
+  const ink = (font, ls, s) => { meas.font = font; meas.letterSpacing = ls + 'px'; const m = meas.measureText(s); return { w: m.actualBoundingBoxLeft + m.actualBoundingBoxRight, l: m.actualBoundingBoxLeft, asc: m.actualBoundingBoxAscent }; };
+  const yF = (px) => `800 ${px}px "League Spartan"`, wF = (px) => `300 ${px}px "League Spartan"`;
+  const YEAR_PX = (() => { const w = Math.max(...MILESTONES.map((m) => ink(yF(100), -4.5, String(m.year)).w)) / 100; return Math.floor((PW - 2 * MARG) * PPU / w); })();
+  const WORD_PX = Math.round(0.24 * PPU);
+  const edgeMat = new THREE.MeshStandardMaterial({ color: '#8a6a4e', metalness: 0.35, roughness: 0.4 });
+  const slotMat = new THREE.MeshBasicMaterial({ color: '#070504' });
+  const plateGeo = new RoundedBoxGeometry(PW, PH, PD, 4, 0.036);
+  const plates = MILESTONES.map((m) => {
     const px = X(m.year);
-    const g = new THREE.Group(); g.position.set(px, 0, PLATE_Z); scene.add(g);
-    // base apoyada en el suelo (y 0 → BH) con ranura: el plano queda encastrado, nada flota
-    const base = new THREE.Mesh(new THREE.BoxGeometry(PW + 0.2, BH, BD), baseMat);
-    base.position.y = BH / 2; base.castShadow = true; base.receiveShadow = true; g.add(base);
-    // filete frontal de la base: se enciende en azul cuando la señal llega al hito
-    const liteMat = new THREE.MeshBasicMaterial({ color: '#2a2019' });
-    const lite = new THREE.Mesh(new THREE.BoxGeometry(PW - 0.1, 0.014, 0.01), liteMat);
-    lite.position.set(0, BH - 0.035, BD / 2 + 0.004); g.add(lite);
-    // plano fino: caras laterales en bronce (capturan la clave cálida y el contraluz frío)
-    const plate = new THREE.Mesh(new THREE.BoxGeometry(PW, PH, PD), [edgeMat, edgeMat, edgeMat, edgeMat, faceMat, faceMat]);
-    plate.position.y = BH - EMB + PH / 2; plate.castShadow = true; plate.receiveShadow = true; g.add(plate);
-    // brazo: une la base con el riel (una sola pieza visual con ambos)
-    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.022, RAIL_Z - PLATE_Z - BD / 2 - RAIL_D / 2 + 0.04), new THREE.MeshBasicMaterial({ color: '#3a2c20' }));
-    arm.position.set(0, 0.011, (BD / 2 + (RAIL_Z - PLATE_Z - RAIL_D / 2)) / 2); g.add(arm);
-    // texto impreso en la cara (luminoso: se lee bajo cualquier luz)
-    const yearTx = textCanvas(PW, 1.2, (c) => {
-      c.font = '800 ' + Math.round(YEAR_F * PPU) + 'px "League Spartan"'; c.letterSpacing = Math.round(-0.045 * YEAR_F * PPU) + 'px';
-      c.fillStyle = '#F3EDE2'; c.textBaseline = 'alphabetic'; c.fillText(String(m.year), 0.17 * PPU, 1.02 * PPU); });
-    const wordTx = textCanvas(PW, 0.8, (c) => {
-      c.font = '300 ' + Math.round(0.29 * PPU) + 'px "League Spartan"'; c.letterSpacing = Math.round(-0.02 * 0.29 * PPU) + 'px';
-      c.fillStyle = '#E3A560'; m.word.forEach((w, k) => c.fillText(w, 0.2 * PPU, (0.3 + k * 0.34) * PPU)); });
-    const mk = (tx, h, y) => { const mat = new THREE.MeshBasicMaterial({ map: tx, transparent: true, opacity: 0, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
-      const me = new THREE.Mesh(new THREE.PlaneGeometry(PW, h), mat); me.position.set(0, plate.position.y + y, PD / 2 + 0.0015); g.add(me); return me; };
-    const year = mk(yearTx, 1.2, 0.7), word = mk(wordTx, 0.8, -0.2);
-    return { px, g, lite, liteMat, arm, year, word, on: { v: 0 } };
+    const g = new THREE.Group(); g.position.set(px, 0, LZ); scene.add(g);
+    const faceMat = new THREE.MeshPhysicalMaterial({ map: faceTx, roughness: 0.5, clearcoat: 0.3, clearcoatRoughness: 0.35, envMapIntensity: 0.5 });
+    const plate = new THREE.Mesh(plateGeo, [edgeMat, edgeMat, edgeMat, edgeMat, faceMat, edgeMat]);
+    plate.position.y = BEAM_H - EMB + PH / 2; plate.castShadow = true; plate.receiveShadow = true; g.add(plate);
+    // ranura en la viga: el plano sale de ahí y vuelve a entrar (nunca se apoya ni flota)
+    const slot = new THREE.Mesh(new THREE.BoxGeometry(PW + 0.05, 0.003, PD + 0.05), slotMat); slot.position.set(px, BEAM_H + 0.0015, LZ); scene.add(slot);
+    // año y palabra impresos en la cara
+    const yi = ink(yF(YEAR_PX), -0.045 * YEAR_PX, String(m.year));
+    // palabra arriba, año abajo: el año se apoya sobre el eje del tiempo (la viga y la señal)
+    const yBase = (PH - MARG - 0.02) * PPU;
+    const yearTx = textCanvas((c) => { c.font = yF(YEAR_PX); c.letterSpacing = (-0.045 * YEAR_PX) + 'px'; c.fillStyle = '#F3EDE2'; c.fillText(String(m.year), MARG * PPU + yi.l, yBase); });
+    const wordTx = textCanvas((c) => { c.font = wF(WORD_PX); c.letterSpacing = (-0.01 * WORD_PX) + 'px'; c.fillStyle = '#F3EDE2';
+      m.word.forEach((w, k) => { const wi = ink(wF(WORD_PX), -0.01 * WORD_PX, w); c.fillText(w, MARG * PPU + wi.l + 0.012 * PPU, MARG * PPU + wi.asc + k * 1.18 * WORD_PX); }); });
+    // tinta sobre la cara: toma la luz del foco (se integra al material) con un piso emisivo que garantiza la lectura
+    const mk = (tx) => { const mat = new THREE.MeshStandardMaterial({ map: tx, emissive: '#F3EDE2', emissiveMap: tx, emissiveIntensity: 0.4, roughness: 0.55, transparent: true, opacity: 0, depthWrite: false });
+      const me = new THREE.Mesh(new THREE.PlaneGeometry(PW, PH), mat); me.position.set(0, plate.position.y, PD / 2 + 0.002); g.add(me); return me; };
+    return { px, g, faceMat, year: mk(yearTx), word: mk(wordTx), on: { face: 0.4 }, lift: { y: DOWN } };
   });
 
-  /* ---------------- hongos de h01 ("hoy", al final de la línea) ---------------- */
+  /* ---------------- trío de h01 ("hoy") ---------------- */
   const m1 = buildMushroom({ seed: 1, age: 0.85 });
   const m2 = buildMushroom({ seed: 2, stemH: 1.3, capScale: 0.8, age: 0.45 });
   const m3 = buildMushroom({ seed: 3, stemH: 0.78, capScale: 0.62, age: 0.0 });
-  m1.group.position.set(MX + 0.15, 0, MZ + 0.75);
-  m2.group.position.set(MX + 0.95, 0, MZ + 0.05); m2.group.rotation.set(0, 1.9, 0.1);
-  m3.group.position.set(MX - 0.62, 0, MZ + 1.15); m3.group.rotation.set(0, -0.8, -0.14);
-  [m1, m2, m3].forEach((m) => { m.wires.forEach((w) => (w.visible = false)); scene.add(m.group); });
-  const grass = buildGrass({ count: 700, w: 3.6, d: 2.6, avoid: [[0.15, 0.75, 0.32], [0.95, 0.05, 0.28], [-0.62, 1.15, 0.26]] });
-  grass.position.set(MX, 0, MZ); scene.add(grass);
-  // borde ralo alrededor del mechón denso: el pasto se desvanece en vez de cortar en rectángulo
-  const grass2 = buildGrass({ count: 260, w: 7.5, d: 5.2, seed: 11, avoid: [[-0.3, 0.4, 1.25], [-3.6, 1.9, 0.35], [-3.0, 1.9, 0.35], [-2.4, 1.9, 0.35], [-1.9, 1.9, 0.3]] });
-  grass2.position.set(MX + 0.3, 0, MZ - 0.4); scene.add(grass2);
+  m1.group.position.set(0.15, 0, 0.75);
+  m2.group.position.set(0.95, 0, 0.05); m2.group.rotation.set(0, 1.9, 0.1);
+  m3.group.position.set(-0.62, 0, 1.15); m3.group.rotation.set(0, -0.8, -0.14);
+  const shrooms = [m1, m2, m3];
+  shrooms.forEach((m) => { m.wires.forEach((w) => (w.visible = false)); trio.add(m.group); });
+  // pasto en dos coronas (densa + media): se desvanece hacia afuera, sin mechones sueltos
+  const STEMS = [[0.15, 0.75, 0.32], [0.95, 0.05, 0.28], [-0.62, 1.15, 0.26]];
+  [[1100, 4.4, 3.2, 4], [650, 6.4, 4.8, 11]].forEach(([count, w, d, seed]) => {
+    const gr = buildGrass({ count, w, d, seed, avoid: STEMS.map(([x, z, rr]) => [x - C_L.x, z - C_L.z, rr]) });
+    gr.position.set(C_L.x, 0, C_L.z); trio.add(gr); });
+  // piedritas entre el pasto (como en h01)
+  {
+    const peb = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshStandardMaterial({ color: '#46382f', roughness: 0.9, flatShading: true }), 50);
+    const mm = new THREE.Matrix4(), q = new THREE.Quaternion(); let n = 0;
+    while (n < 50) { const x = C_L.x + (r() - 0.5) * 4.6, z = C_L.z + (r() - 0.5) * 3.4, s = 0.015 + r() * 0.04;
+      if (STEMS.some(([sx, sz, sr]) => Math.hypot(x - sx, z - sz) < sr + 0.05)) continue;
+      q.setFromEuler(new THREE.Euler(r() * 3, r() * 3, r() * 3));
+      mm.compose(new THREE.Vector3(x, s * 0.2, z), q, new THREE.Vector3(s, s * 0.6, s * 0.9)); peb.setMatrixAt(n++, mm); }
+    peb.castShadow = true; peb.receiveShadow = true; trio.add(peb);
+  }
 
   /* ---------------- luces (h01): clave cálida lateral, contraluz frío, hemisférica tenue ---------------- */
+  // beat 1: foco cálido que sigue al hito activo (charco de luz; lo anterior cae a oscuro, no queda como pared clara)
+  const spot = new THREE.SpotLight('#ffdcae', 0, 0, 0.3, 0.7, 2); spot.castShadow = true; spot.shadow.mapSize.set(2048, 2048); spot.shadow.radius = 5;
+  spot.shadow.bias = -0.0004; spot.shadow.camera.near = 1; spot.shadow.camera.far = 30; scene.add(spot, spot.target);
   const key = new THREE.DirectionalLight('#ffdcae', 2.1); key.castShadow = true; key.shadow.mapSize.set(2048, 2048); key.shadow.radius = 5;
   Object.assign(key.shadow.camera, { left: -6, right: 6, top: 6, bottom: -6, near: 0.5, far: 30 }); key.shadow.camera.updateProjectionMatrix();
   key.shadow.bias = -0.0004; scene.add(key, key.target);
   const rim = new THREE.DirectionalLight('#7fa2ff', 1.5); scene.add(rim, rim.target);
-  const hemi = new THREE.HemisphereLight('#3a3440', '#140d08', 0.4); scene.add(hemi);
-  const lights = { fx: 0, key: 2.1, rimY: 0.9 };   // contraluz bajo en el beat 1 (no baña el suelo de azul), alto en los hongos como en h01
+  scene.add(new THREE.HemisphereLight('#3a3440', '#140d08', 0.4));
+  // dos equipos de luz: el de la línea (sigue al hito activo; contraluz alto y por detrás → filo frío en el borde superior)
+  // y el de h01 alrededor del trío. `m` mezcla uno con otro.
+  const L = { fx: 0, m: 0, key: 2.1, spot: 150, rim: 2.6 };
+  const tKey = new THREE.Vector3(-4, 4.5, 4), tKeyT = new THREE.Vector3(0, 0, 0), tRim = new THREE.Vector3(3.5, 3, -4);
+  trio.localToWorld(tKey); trio.localToWorld(tKeyT); trio.localToWorld(tRim);
+  const v1 = new THREE.Vector3(), v2 = new THREE.Vector3();
 
-  /* ---------------- cámara: dolly lateral por la línea de tiempo ---------------- */
-  const stop = (px) => ({ x: px - 2.7, y: 1.66, z: 7.0, lx: px + 0.3, ly: 1.34, lz: PLATE_Z });
-  const cam = { x: -4.1, y: 1.45, z: 9.2, lx: 0.2, ly: 1.35, lz: PLATE_Z, shift: 0 };
+  /* ---------------- cámara ---------------- */
+  // beat 1 (mundo): paradas frente a cada hito
   const P = plates.map((p) => stop(p.px));
-  // hito 1 (1958): la cámara se acerca
-  tl.to(cam, { ...P[0], duration: 2.4, ease: 'apple' }, 0);
-  // 60 años de hueco: viaje largo, con un arco suave de altura
-  tl.to(cam, { x: P[1].x, lx: P[1].lx, duration: 1.2, ease: 'apple' }, 2.2);
-  tl.to(cam, { z: 9.0, y: 2.05, duration: 0.6, ease: 'sine.inOut', yoyo: true, repeat: 1 }, 2.2);
-  tl.to(lights, { fx: plates[1].px, duration: 1.2, ease: 'apple' }, 2.2);
-  tl.to(cam, { x: '+=0.25', lx: '+=0.12', duration: 2.05, ease: 'none' }, 3.4);
-  // 5 años: salto corto
-  tl.to(cam, { x: P[2].x, lx: P[2].lx, duration: 0.7, ease: 'apple' }, 5.45);
-  tl.to(lights, { fx: plates[2].px, duration: 0.7, ease: 'apple' }, 5.45);
-  tl.to(cam, { x: '+=0.22', lx: '+=0.1', duration: 1.3, ease: 'none' }, 6.15);
-  // beat 2: llega a los hongos (encuadre de h01) y deja espacio al número a la izquierda
-  const CB = { x: MX - 1.33, y: 1.0, z: MZ + 6.57, lx: MX + 0.3, ly: 1.45, lz: MZ + 0.6, shift: -440 };
-  // primero gira hacia los hongos (el hito 2023 sale por la izquierda), después se acerca
-  tl.to(cam, { lx: CB.lx, ly: CB.ly, lz: CB.lz, duration: 0.9, ease: 'apple' }, 7.45);
-  tl.to(cam, { x: CB.x, y: CB.y, duration: 1.4, ease: 'apple' }, 7.6);
-  tl.to(cam, { z: CB.z, duration: 1.2, ease: 'apple' }, 7.8);
-  tl.to(cam, { shift: CB.shift, duration: 0.9, ease: 'apple' }, 8.1);
-  tl.to(lights, { fx: MX, rimY: 2.6, duration: 1.4, ease: 'apple' }, 7.5);
-  tl.to(cam, { x: '+=0.18', z: '-=0.2', duration: 1.8, ease: 'none' }, 9.0);
-  // beat 3: se aleja y se atenúa
-  tl.to(cam, { x: MX - 1.9, y: 1.55, z: MZ + 8.6, ly: 1.2, shift: -560, duration: 3.6, ease: 'apple' }, 10.8);
-  tl.to(lights, { key: 1.25, duration: 3.0, ease: 'apple' }, 10.95);
+  const cam = { ...P[0], x: P[0].x - 0.5, z: P[0].z + 0.9, y: P[0].y + 0.1, shift: -150 };
+  tl.to(cam, { x: P[0].x, y: P[0].y, z: P[0].z, duration: 1.3, ease: 'appleOut' }, 0);
+  tl.to(cam, { x: '+=0.12', lx: '+=0.06', duration: 1.12, ease: 'none' }, 1.3);
+  // 60 años: viaje largo, con un arco que se aleja (se siente el tiempo, sin barrido violento)
+  const TA = 2.42, TB = 5.34, T2 = 8.05;
+  tl.to(cam, { x: P[1].x, lx: P[1].lx, duration: 1.0, ease: 'apple' }, TA);
+  tl.to(cam, { z: CAM_Z + 3.2, y: CAM_Y + 0.9, duration: 0.5, ease: 'sine.inOut', yoyo: true, repeat: 1 }, TA);
+  tl.to(L, { fx: plates[1].px, duration: 1.0, ease: 'apple' }, TA);
+  tl.to(cam, { x: '+=' + DRIFT, lx: '+=0.1', duration: TB - TA - 1.0, ease: 'none' }, TA + 1.0);
+  // 5 años: un paso corto
+  tl.to(cam, { x: P[2].x, lx: P[2].lx, duration: 0.66, ease: 'apple' }, TB);
+  tl.to(L, { fx: plates[2].px, duration: 0.66, ease: 'apple' }, TB);
+  tl.to(cam, { x: '+=' + DRIFT, lx: '+=0.1', duration: T2 - TB - 0.66, ease: 'none' }, TB + 0.66);
+  // beat 2 (local del trío, encuadre de h01). La mezcla recorre la recta parada→trío: siempre de frente.
+  const camL = { ...CB_L };
+  const blend = { w: 0 };
+  tl.to(blend, { w: 1, duration: 1.5, ease: 'apple' }, T2);
+  tl.to(L, { m: 1, duration: 1.4, ease: 'apple' }, T2);
+  tl.to(scene.fog, { density: 0.05, duration: 1.5, ease: 'apple' }, T2 + 0.2);
+  tl.to(camL, { ang: -0.19, rad: 6.62, duration: 1.7, ease: 'none' }, T2 + 1.5);        // deriva mínima: el dato queda quieto
+  // beat 3: se aleja y se atenúa mientras se arma el cierre; después, casi quieta
+  tl.to(camL, { ang: -0.07, rad: 8.3, y: 1.5, ly: 1.2, shift: -560, duration: 1.6, ease: 'apple' }, 11.25);
+  tl.to(camL, { rad: '+=0.12', duration: 1.8, ease: 'none' }, 12.85);
+  tl.to(L, { key: 1.25, duration: 1.6, ease: 'apple' }, 11.3);
 
   /* ---------------- señal azul y encendido de cada hito ---------------- */
-  tl.to(signal, { x: plates[0].px, duration: 0.7, ease: 'appleOut' }, 0.15);
-  tl.to(signal, { x: plates[1].px, duration: 1.15, ease: 'apple' }, 2.2);
-  tl.to(signal, { x: plates[2].px, duration: 0.65, ease: 'apple' }, 5.45);
-  tl.to(signal, { x: RAIL_X1, duration: 1.3, ease: 'apple' }, 7.55);
-  const BLUE = new THREE.Color('#8fb0ff').multiplyScalar(1.4), DARK = new THREE.Color('#2a2019'), ARM = new THREE.Color('#3a2c20');
-  const tIn = [0.7, 3.25, 5.95], tOut = [2.2, 5.45, 7.45];
+  tl.to(signal, { x: plates[0].px, duration: 0.7, ease: 'appleOut' }, 0.1);
+  tl.to(signal, { x: plates[1].px, duration: 0.95, ease: 'apple' }, TA);
+  tl.to(signal, { x: plates[2].px, duration: 0.62, ease: 'apple' }, TB);
+  tl.to(signal, { x: L1 - 0.03, duration: 0.88, ease: 'apple' }, T2);        // llega a "hoy"
+  const tIn = [0.2, 3.12, 5.8], tOut = [TA + 0.2, TB + 0.15, T2 - 0.05];   // 2023 baja antes de que entre el número
+  const tUp = [null, TA + 0.45, TB + 0.1];
   plates.forEach((p, i) => {
+    // mecanismo: el hito sube de la ranura cuando llega la señal y vuelve a entrar cuando se va
+    if (i === 0) p.lift.y = 0; else tl.to(p.lift, { y: 0, duration: 0.6, ease: 'appleOut' }, tUp[i]);
+    tl.to(p.lift, { y: DOWN, duration: 0.55, ease: 'appleIn' }, tOut[i]);
     // (los colores se aplican en onFrame: M.seek suprime los onUpdate)
-    tl.to(p.on, { v: 1, duration: 0.35, ease: 'appleOut' }, tIn[i] - 0.15);
-    // el año sube y aparece; la palabra lo sigue (0,15 s)
-    const yy = p.year.position.y, wy = p.word.position.y;
-    tl.fromTo(p.year.position, { y: yy - 0.12 }, { y: yy, duration: 0.8, ease: 'appleOut' }, tIn[i]);
-    tl.to(p.year.material, { opacity: 1, duration: 0.6, ease: 'appleOut' }, tIn[i]);
-    tl.fromTo(p.word.position, { y: wy - 0.1 }, { y: wy, duration: 0.8, ease: 'appleOut' }, tIn[i] + 0.15);
-    tl.to(p.word.material, { opacity: 1, duration: 0.6, ease: 'appleOut' }, tIn[i] + 0.15);
-    // al pasar al siguiente hito, el anterior queda en segundo plano (texto casi apagado)
-    tl.to([p.year.material, p.word.material], { opacity: 0, duration: 0.45, ease: 'appleIn' }, tOut[i]);
+    tl.to(p.on, { face: 1, duration: 0.5, ease: 'appleOut' }, tIn[i] - 0.2);
+    // el año sube y aparece; la palabra lo sigue (0,1 s)
+    const yy = p.year.position.y;
+    tl.fromTo(p.year.position, { y: yy - 0.1 }, { y: yy, duration: 0.6, ease: 'appleOut' }, tIn[i]);
+    tl.to(p.year.material, { opacity: 1, duration: 0.5, ease: 'appleOut' }, tIn[i]);
+    tl.fromTo(p.word.position, { y: yy - 0.08 }, { y: yy, duration: 0.6, ease: 'appleOut' }, tIn[i] + 0.1);
+    tl.to(p.word.material, { opacity: 0.88, duration: 0.5, ease: 'appleOut' }, tIn[i] + 0.1);
+    // al pasar al siguiente, se apaga mientras baja
+    tl.to([p.year.material, p.word.material], { opacity: 0, duration: 0.4, ease: 'appleIn' }, tOut[i] + 0.05);
+    tl.to(p.on, { face: 0.4, duration: 0.4, ease: 'appleIn' }, tOut[i]);
   });
 
-  /* ---------------- desenfoque de fondo para el dato (beat 2) ---------------- */
-  tl.fromTo('#gl', { filter: 'blur(0px) brightness(1)' }, { filter: 'blur(5px) brightness(0.9)', duration: 1.2, ease: 'apple' }, 8.1);
-  tl.to('#gl', { filter: 'blur(8px) brightness(0.72)', duration: 2.2, ease: 'apple' }, 10.85);
+  /* ---------------- desenfoque de fondo para el dato ---------------- */
+  tl.fromTo('#gl', { filter: 'blur(0px) brightness(1)' }, { filter: 'blur(4px) brightness(0.9)', duration: 0.9, ease: 'apple' }, 8.85);
+  tl.to('#gl', { filter: 'blur(7px) brightness(0.74)', duration: 1.5, ease: 'apple' }, 11.3);
 
   /* ---------------- texto HTML (skill motion-copy) ---------------- */
-  tl.to('#fade', { opacity: 0, duration: 0.7, ease: 'appleOut' }, 0.12);
+  tl.to('#fade', { opacity: 0, duration: 0.6, ease: 'appleOut' }, 0.1);
 
-  tl.from('#num', { yPercent: 18, opacity: 0, duration: 0.9, ease: 'appleOut' }, 8.15);
-  M.counter($('#numV'), { from: 0, to: RESPONSE, at: 8.2, dur: 1.4, ease: 'expo.out' });
-  M.textIn($('#numL'), 8.65, { type: 'words', dur: 0.7, stagger: 0.05, ease: 'appleOut' });
-  tl.to(['#num', '#numL'], { opacity: 0, y: -14, duration: 0.5, ease: 'appleIn' }, 10.85);
+  tl.from('#num', { yPercent: 18, opacity: 0, duration: 0.9, ease: 'appleOut' }, 8.55);
+  M.counter($('#numV'), { from: 0, to: RESPONSE, at: 8.6, dur: 1.1, ease: 'expo.out' });
+  M.textIn($('#numL'), 8.95, { type: 'words', dur: 0.7, stagger: 0.05, ease: 'appleOut' });
+  tl.to(['#num', '#numL'], { opacity: 0, y: -14, duration: 0.35, ease: 'appleIn' }, 11.25);
 
-  const cA = M.textIn($('#c1 .a'), 11.2, { dur: 1.0, stagger: 0.03, ease: 'appleOut' });
-  const cB = M.textIn($('#c1 .b'), 11.5, { dur: 1.0, stagger: 0.03, ease: 'appleOut' });
-  M.textIn($('#c2'), 12.1, { type: 'words', dur: 0.8, stagger: 0.06, ease: 'appleOut' });
-  tl.to(['#c1', '#c2'], { opacity: 0, y: -14, duration: 0.5, ease: 'appleIn' }, 14.1);
-  tl.to('#fade', { opacity: 1, duration: 0.5, ease: 'appleIn' }, 14.2);
+  M.textIn($('#c1 .a'), 11.6, { dur: 0.8, stagger: 0.012, ease: 'appleOut' });
+  M.textIn($('#c1 .b'), 11.78, { dur: 0.8, stagger: 0.012, ease: 'appleOut' });
+  M.textIn($('#c2'), 12.0, { type: 'words', dur: 0.72, stagger: 0.05, ease: 'appleOut' });
+  tl.to(['#c1', '#c2'], { opacity: 0, y: -14, duration: 0.3, ease: 'appleIn' }, 14.4);
+  tl.to('#fade', { opacity: 1, duration: 0.3, ease: 'appleIn' }, 14.42);
+
+  /* ---------------- sonido (docs/AUDIO.md): pocos efectos, cada uno con motivo ---------------- */
+  M.sfx(0.22, 'tap', { deg: 0, oct: 5, bright: 0.7, gain: -3 });             // 1958
+  M.sfx(TA, 'whoosh', { dur: 1.0, peak: 0.45, dir: 1, gain: -2 });           // 60 años
+  M.sfx(3.14, 'tap', { deg: 2, oct: 5, bright: 0.7, gain: -3 });             // 2018
+  M.sfx(TB, 'whoosh', { dur: 0.66, peak: 0.45, dir: 1, gain: -6 });          // 5 años
+  M.sfx(5.82, 'tap', { deg: 4, oct: 5, bright: 0.7, gain: -3 });             // 2023
+  M.sfx(T2, 'whoosh', { dur: 1.5, peak: 0.45, dir: 1, gain: -1 });           // giro hacia los hongos
+  M.sfx(8.6, 'swell', { dur: 1.0 }).sfx(8.6, 'impact', { weight: 0.8 });     // 71 %
+  M.sfx(8.97, 'shimmer', { degs: [2, 4, 7], gain: -3 });
+  M.sfx(11.62, 'tick');                                                      // cierre
+
+  /* ---------------- depuración (node): ángulo cámara–trío y caja en pantalla ---------------- */
+  const probeBox = new THREE.Box3(), probeV = new THREE.Vector3();
+  window.__h05probe = () => {
+    const pl = trio.worldToLocal(camera.position.clone());
+    const ang = Math.atan2(pl.x - C_L.x, pl.z - C_L.z) * 180 / Math.PI;
+    let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+    shrooms.forEach((m) => { probeBox.setFromObject(m.group);
+      for (let k = 0; k < 8; k++) { probeV.set(k & 1 ? probeBox.max.x : probeBox.min.x, k & 2 ? probeBox.max.y : probeBox.min.y, k & 4 ? probeBox.max.z : probeBox.min.z);
+        const s = S.project(probeV.clone()); x0 = Math.min(x0, s.x); x1 = Math.max(x1, s.x); y0 = Math.min(y0, s.y); y1 = Math.max(y1, s.y); } });
+    return { ang: +ang.toFixed(1), x0: Math.round(x0), x1: Math.round(x1), y0: Math.round(y0), y1: Math.round(y1), h: +((y1 - y0) / 1080).toFixed(2) };
+  };
 
   /* ---------------- por cuadro ---------------- */
+  const pA = new THREE.Vector3(), pB = new THREE.Vector3(), lA = new THREE.Vector3(), lB = new THREE.Vector3();
   M.onFrame(() => {
-    const fx = lights.fx;
-    key.position.set(fx - 4, 4.5, 4); key.target.position.set(fx, 0.8, -0.3); key.intensity = lights.key;
-    rim.position.set(fx + 3.5, lights.rimY, -4.5); rim.target.position.set(fx, 0.9, 0);
-    plates.forEach((p) => { p.liteMat.color.copy(DARK).lerp(BLUE, p.on.v); p.arm.material.color.copy(ARM).lerp(BLUE, p.on.v * 0.85); });
-    sig.scale.x = Math.max(0.001, signal.x - RAIL_X0); head.position.x = signal.x; head.visible = signal.x < RAIL_X1 - 0.02;
-    camera.position.set(cam.x, cam.y, cam.z);
-    camera.lookAt(cam.lx, cam.ly, cam.lz);
-    camera.setViewOffset(1920, 1080, cam.shift, 0, 1920, 1080);
+    // luces: equipo de la línea (en fx) ↔ equipo del trío
+    const fx = L.fx, lm = L.m;
+    spot.position.set(fx + 2.2, 6.2, 5.2); spot.target.position.set(fx - 0.2, 0.9, LZ); spot.intensity = L.spot * (1 - lm);
+    key.position.copy(tKey); key.target.position.copy(tKeyT); key.intensity = L.key * lm;
+    // contraluz: en la línea viene de la izquierda y apenas de atrás (filo frío en el canto que ve la cámara); en el trío, el de h01
+    rim.position.copy(v1.set(fx - 5, 2.6, LZ - 2.2)).lerp(tRim, lm); rim.target.position.copy(v2.set(fx, 1.2, LZ)).lerp(tKeyT, lm);
+    rim.intensity = L.rim + (1.5 - L.rim) * lm;
+    spot.target.updateMatrixWorld(); key.target.updateMatrixWorld(); rim.target.updateMatrixWorld();
+    plates.forEach((p) => { p.faceMat.color.setScalar(p.on.face); p.faceMat.clearcoat = 0.3 * p.on.face * p.on.face;
+      p.g.position.y = p.lift.y; p.g.visible = p.lift.y > DOWN + 0.05; });
+    sigDim.scale.x = Math.max(0.001, signal.x - L0);
+    const hs = Math.max(L0, signal.x - HOT); sigHot.position.x = hs; sigHot.scale.x = Math.max(0.001, signal.x - hs);
+    head.position.x = signal.x; head.visible = signal.x < L1 - 0.05;
+    // cámara: mundo (beat 1) ↔ local del trío (beats 2 y 3)
+    pA.set(cam.x, cam.y, cam.z); lA.set(cam.lx, cam.ly, cam.lz);
+    pB.set(Math.sin(camL.ang) * camL.rad, camL.y, Math.cos(camL.ang) * camL.rad); trio.localToWorld(pB);
+    lB.set(camL.lx, camL.ly, camL.lz); trio.localToWorld(lB);
+    const w = blend.w;
+    camera.position.copy(pA).lerp(pB, w);
+    camera.lookAt(lA.lerp(lB, w));
+    camera.setViewOffset(1920, 1080, cam.shift + (camL.shift - cam.shift) * w, 0, 1920, 1080);
     S.render();
   });
 });

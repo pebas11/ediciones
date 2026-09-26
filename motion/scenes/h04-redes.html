@@ -7,8 +7,8 @@
 <link rel="stylesheet" href="../lib/fonts-spartan.css">
 <script type="importmap">{ "imports": { "three": "../node_modules/three/build/three.module.js", "three/addons/": "../node_modules/three/examples/jsm/" } }</script>
 <style>
-  /* Guion de color (v3): red en tonos cálidos terrosos por módulo; el azul psilocibina SOLO para lo activo:
-     las conexiones entre módulos, los pulsos y la cifra clave (374). */
+  /* Guion de color (v3): módulos en 3 tonos cálidos escalonados en valor (caramelo, hueso atenuado, tierra clara);
+     el azul psilocibina SOLO para lo activo: los haces entre módulos, la señal y la cifra clave (374). */
   :root { --bone: #F3EDE2; --caramel: #E3A560; --blue: #8FB0FF; --dim: rgba(243,237,226,0.66); }
   body { background: #060504; }
   #gl { position: absolute; inset: 0; }
@@ -20,10 +20,10 @@
   /* rótulos: contraste de peso 300 (línea de base) contra 800 (la condición que importa) */
   #lA { top: 770px; font-size: 128px; font-weight: 300; }
   #lB { top: 770px; font-size: 128px; font-weight: 800; }
-  /* cifras */
-  #nums .n { position: absolute; top: 648px; font-size: 272px; font-weight: 900; letter-spacing: -0.055em; line-height: 1.05; }
-  #nA { color: rgba(243,237,226,0.62); left: 169px; }
-  #nB { left: 935px; color: var(--blue); }
+  /* cifras: la misma codificación de peso que los rótulos */
+  #nums .n { position: absolute; top: 648px; font-size: 272px; letter-spacing: -0.055em; line-height: 1.05; }
+  #nA { left: 169px; font-weight: 300; color: rgba(243,237,226,0.62); }
+  #nB { left: 935px; font-weight: 800; color: var(--blue); }
   #cap { top: 894px; left: 550px; width: 820px; font-family: var(--f-body); font-size: 56px; font-weight: 500; letter-spacing: -0.01em; line-height: 1.25; color: var(--dim); }
   #fade { position: absolute; inset: 0; background: #060504; opacity: 0; }
 </style>
@@ -47,6 +47,7 @@
 <script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
 <script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
 <script src="../lib/stage.js"></script>
+<script src="../lib/audio.js"></script>
 <script type="module">
 import { createStage3D, THREE } from '../lib/three-stage.mjs';
 
@@ -56,7 +57,7 @@ const N_PSI = 374, N_PLA = 165, N_SHARED = 29;
 // El dibujo respeta las proporciones de Petri: 80 tubos (placebo) → 181 (psilocibina), 14 compartidos.
 const E_PLA = 80, E_PSI = Math.round(E_PLA * N_PSI / N_PLA), E_SH = Math.round(E_PLA * N_SHARED / N_PLA);
 
-M.scene({ duration: 14, push: 0 }, async (tl, M) => {
+M.scene({ duration: 14, push: 0, audio: { key: 'D', mode: 'lydian', bed: { cycle: 9, bright: 0.9 } } }, async (tl, M) => {
   const $ = (s) => document.querySelector(s);
 
   { const g = $('#grain').getContext('2d'); const im = g.createImageData(512, 512); const rn = M.rng(3);
@@ -70,215 +71,306 @@ M.scene({ duration: 14, push: 0 }, async (tl, M) => {
 
   const key = new THREE.DirectionalLight('#ffdcae', 2.1); key.position.set(-4, 4.5, 4); key.castShadow = true; key.shadow.mapSize.set(2048, 2048); key.shadow.radius = 4; key.shadow.bias = -0.0004;
   Object.assign(key.shadow.camera, { left: -5, right: 5, top: 4, bottom: -4 }); key.shadow.camera.updateProjectionMatrix(); scene.add(key);
-  const rim = new THREE.DirectionalLight('#7fa2ff', 1.5); rim.position.set(3.5, 3, -4); scene.add(rim);
+  // contraluz frío más lateral que en h01: las esferas son chicas y necesitan una media luna azul del lado derecho
+  const rim = new THREE.DirectionalLight('#7fa2ff', 3.0); rim.position.set(5, 2.5, -1.5); scene.add(rim);
   scene.add(new THREE.HemisphereLight('#3a3440', '#140d08', 0.4));
 
-  /* ---------------- disposición de nodos (la misma en las dos redes: mismas regiones, otro cableado) ---------------- */
+  /* ---------------- disposición: anillo partido en 6 módulos (arcos-isla separados por aire) ----------------
+     Como el esquema circular de Petri: los nodos viven sobre un anillo casi frontal, agrupados en arcos por módulo.
+     Los extremos de las conexiones quedan repartidos a lo largo de cada arco, así los haces no dibujan una estrella. */
   const r = M.rng(404);
-  const MODS = 6, PER = 14;
-  // tonos cálidos bien distintos por módulo (tono y valor): caramelo, hueso, terracota, mostaza, arena, tierra
-  const MOD_COL = ['#E3A560', '#EFE4D2', '#C4613D', '#D2A73A', '#BFA88A', '#9A6343'];
-  const modDir = [[0.95, 0.35, 0.25], [-0.9, 0.3, 0.35], [0.15, 0.95, -0.35], [-0.25, -0.75, 0.6], [0.55, -0.55, -0.7], [-0.6, 0.05, -0.85]]
-    .map((d) => new THREE.Vector3(...d).normalize());
+  const MODS = 6, PER = 14, RING = 1.3, MAX_IN = 0.35;
+  // 3 tonos cálidos escalonados en valor, alternados alrededor del anillo (vecinos siempre distintos)
+  const TONES = ['#E3A560', '#D6C9B4', '#B8845A'];   // caramelo · hueso atenuado · tierra clara
+  const tone = (m) => m % 3;
+  const D2R = Math.PI / 180;
+  const MANG = [90, 148, 211, 270, 328, 28], MSPAN = [40, 38, 42, 40, 36, 42];   // centro y abertura de cada arco (°), irregulares
+  const centers = MANG.map((a) => new THREE.Vector3(Math.cos(a * D2R) * RING, Math.sin(a * D2R) * RING, 0));
   const nodes = [];
-  modDir.forEach((d, m) => {
-    const c = d.clone().multiplyScalar(0.86);
+  centers.forEach((c, m) => {
     const mine = [];
-    nodes.push({ p: c.clone(), m, rad: 0.082, hub: true }); mine.push(nodes[nodes.length - 1]);
+    nodes.push({ p: c.clone(), m, rad: 0.052, hub: true }); mine.push(nodes[nodes.length - 1]);
     let guard = 0;
-    while (mine.length < PER && guard++ < 5000) {
-      const q = new THREE.Vector3(r() * 2 - 1, r() * 2 - 1, r() * 2 - 1);
-      if (q.length() > 1) continue;
-      const p = c.clone().addScaledVector(q, 0.52);
-      const rad = 0.032 + r() * 0.024;
-      if (mine.some((o) => o.p.distanceTo(p) < o.rad + rad + 0.085)) continue;
-      if (nodes.some((o) => o.m !== m && o.p.distanceTo(p) < o.rad + rad + 0.16)) continue;
+    while (mine.length < PER && guard++ < 8000) {
+      const a = (MANG[m] + (r() - 0.5) * MSPAN[m]) * D2R, rho = RING + (r() - 0.5) * 0.28;
+      const p = new THREE.Vector3(Math.cos(a) * rho, Math.sin(a) * rho, (r() - 0.5) * 0.32);
+      const rad = 0.032 + r() * 0.013;
+      if (mine.some((o) => o.p.distanceTo(p) < o.rad + rad + 0.06)) continue;
       const n = { p, m, rad, hub: false }; nodes.push(n); mine.push(n);
     }
   });
   nodes.forEach((n, i) => (n.i = i));
+  const modNodes = (m) => nodes.filter((n) => n.m === m);
 
   /* ---------------- aristas ---------------- */
   const key2 = (a, b) => (a < b ? a + '-' + b : b + '-' + a);
+  const dist = (a, b) => nodes[a].p.distanceTo(nodes[b].p);
   // árbol generador mínimo por módulo: conexiones cortas, sin nodos sueltos
   function mstModule(m) {
-    const ids = nodes.filter((n) => n.m === m).map((n) => n.i);
+    const ids = modNodes(m).map((n) => n.i);
     const inT = new Set([ids[0]]); const out = [];
     while (inT.size < ids.length) {
       let best = null;
-      for (const a of inT) for (const b of ids) if (!inT.has(b)) { const d = nodes[a].p.distanceTo(nodes[b].p); if (!best || d < best[2]) best = [a, b, d]; }
+      for (const a of inT) for (const b of ids) if (!inT.has(b)) { const d = dist(a, b); if (!best || d < best[2]) best = [a, b, d]; }
       inT.add(best[1]); out.push([best[0], best[1]]);
     }
     return out;
   }
   // una curva "libre": no pasa por dentro de ningún otro nodo
-  function clearCurve(curve, a, b, tubeR) {
-    for (let k = 1; k < 20; k++) {
-      const p = curve.getPoint(k / 20);
-      for (const n of nodes) { if (n.i === a || n.i === b) continue; if (p.distanceTo(n.p) < n.rad + tubeR + 0.035) return false; }
+  function clearCurve(curve, a, b, tubeR, steps = 24) {
+    for (let k = 1; k < steps; k++) {
+      const p = curve.getPoint(k / steps);
+      for (const n of nodes) { if (n.i === a || n.i === b) continue; if (p.distanceTo(n.p) < n.rad + tubeR + 0.02) return false; }
     }
     return true;
   }
-  function makeCurve(a, b, kind, tubeR) {
-    const A = nodes[a].p, B = nodes[b].p;
-    if (kind === 'intra') {
-      const c = new THREE.LineCurve3(A.clone(), B.clone());
-      if (clearCurve(c, a, b, tubeR)) return c;
-      const mid = A.clone().add(B).multiplyScalar(0.5); const off = mid.clone().normalize().multiplyScalar(0.09);
-      for (const s of [1, -1]) { const q = new THREE.QuadraticBezierCurve3(A.clone(), mid.clone().addScaledVector(off, s), B.clone()); if (clearCurve(q, a, b, tubeR)) return q; }
-      return null;
-    }
-    // arcos que se abren hacia afuera: no se amontonan todos en el centro de la nube
+  // fibra interna: leve curvatura (no varilla rígida)
+  const rf = M.rng(5);
+  function fiberCurve(a, b, tubeR) {
+    const A = nodes[a].p, B = nodes[b].p, ab = B.clone().sub(A), len = ab.length();
+    const w = new THREE.Vector3(rf() - 0.5, rf() - 0.5, rf() - 0.5);
+    const perp = new THREE.Vector3().crossVectors(ab, w).normalize();
     const mid = A.clone().add(B).multiplyScalar(0.5);
-    const side = new THREE.Vector3().crossVectors(B.clone().sub(A), mid.lengthSq() > 1e-4 ? mid : new THREE.Vector3(0, 1, 0)).normalize();
-    const outv = mid.length() > 0.3 ? mid.clone().normalize() : side.clone();
-    // el vértice del arco se acerca a una esfera de radio ~1,2: la red queda redonda (sin puntas)
-    const len = A.distanceTo(B), jit = (rx() - 0.5) * 0.2, ml = mid.length();
-    for (const [f, sd] of [[0.38, jit], [0.22, jit], [0.55, -jit], [0.1, jit * 2], [0.38, 0.2], [0.38, -0.2]]) {
-      const apex = outv.clone().multiplyScalar(ml + (1.18 - ml) * f).addScaledVector(side, sd * len * 0.5);
-      const ctrl = apex.multiplyScalar(2).sub(mid);
-      const q = new THREE.QuadraticBezierCurve3(A.clone(), ctrl, B.clone());
+    const bend = (0.1 + rf() * 0.08) * len;
+    for (const s of [1, -1, 0.5, -0.5]) {
+      const q = new THREE.QuadraticBezierCurve3(A.clone(), mid.clone().addScaledVector(perp, bend * s * 2), B.clone());
       if (clearCurve(q, a, b, tubeR)) return q;
     }
-    return null;
+    const l = new THREE.LineCurve3(A.clone(), B.clone());
+    return clearCurve(l, a, b, tubeR) ? l : null;
   }
 
-  // PLACEBO: solo dentro de cada módulo
-  const R_IN = 0.0085, R_X = 0.0055;
-  const rx = M.rng(5);
+  // PLACEBO: solo dentro de cada módulo (árbol + las conexiones cortas que falten, repartidas por módulo)
+  const R_IN = 0.0075;
   const pla = [];
-  for (let m = 0; m < MODS; m++) mstModule(m).forEach(([a, b]) => { const c = makeCurve(a, b, 'intra', R_IN); if (c) pla.push({ a, b, m, kind: 'intra', curve: c }); });
-  while (pla.length < E_PLA) {   // completa con la conexión corta que falte
-    let best = null;
-    for (const x of nodes) for (const y of nodes) {
-      if (x.i >= y.i || x.m !== y.m || pla.some((e) => key2(e.a, e.b) === key2(x.i, y.i))) continue;
-      const d = x.p.distanceTo(y.p); if (!best || d < best[2]) best = [x.i, y.i, d];
-    }
-    const c = makeCurve(best[0], best[1], 'intra', R_IN); pla.push({ a: best[0], b: best[1], m: nodes[best[0]].m, kind: 'intra', curve: c || new THREE.LineCurve3(nodes[best[0]].p, nodes[best[1]].p) });
+  const plaHas = (a, b) => pla.some((e) => key2(e.a, e.b) === key2(a, b));
+  for (let m = 0; m < MODS; m++) mstModule(m).forEach(([a, b]) => {
+    if (dist(a, b) > MAX_IN) return;    // ninguna fibra interna larga
+    const c = fiberCurve(a, b, R_IN); if (c) pla.push({ a, b, m, kind: 'intra', curve: c });
+  });
+  for (let m = 0, guard = 0; pla.length < E_PLA && guard < 400; m = (m + 1) % MODS, guard++) {
+    const ids = modNodes(m).map((n) => n.i); const cand = [];
+    for (const a of ids) for (const b of ids) if (a < b && !plaHas(a, b) && dist(a, b) <= MAX_IN) cand.push([a, b, dist(a, b)]);
+    cand.sort((x, y) => x[2] - y[2]);
+    for (const [a, b] of cand) { const c = fiberCurve(a, b, R_IN); if (c) { pla.push({ a, b, m, kind: 'intra', curve: c }); break; } }
   }
-  pla.length = E_PLA;
 
-  // PSILOCIBINA: pocas compartidas con placebo, algunas internas nuevas y muchas ENTRE módulos (azul)
+  // PSILOCIBINA: pocas compartidas con placebo, algunas internas nuevas y muchas ENTRE módulos (azul, en haces)
   const rp = M.rng(77);
   const psi = [];
-  const has = (a, b) => psi.some((e) => key2(e.a, e.b) === key2(a, b));
-  const shuffled = pla.slice().sort(() => rp() - 0.5);
-  shuffled.slice(0, E_SH).forEach((e) => psi.push({ ...e, shared: true }));
+  const psiHas = (a, b) => psi.some((e) => key2(e.a, e.b) === key2(a, b));
+  const deg = new Map(); const bump = (i) => deg.set(i, (deg.get(i) || 0) + 1); const dg = (i) => deg.get(i) || 0;
+  const cap = (i) => (nodes[i].hub ? 14 : 6);
+  // compartidas: repartidas entre módulos
+  for (let m = 0, k = 0; k < E_SH; m = (m + 1) % MODS) {
+    const own = pla.filter((e) => e.m === m && !psiHas(e.a, e.b));
+    const e = own[Math.floor(rp() * own.length)]; psi.push({ ...e, shared: true }); bump(e.a); bump(e.b); k++;
+  }
   // internas nuevas (cortas, que no estaban en placebo)
-  const plaKeys = new Set(pla.map((e) => key2(e.a, e.b)));
-  let guard = 0;
-  while (psi.length < E_SH + 24 && guard++ < 6000) {
-    const x = nodes[Math.floor(rp() * nodes.length)], y = nodes[Math.floor(rp() * nodes.length)];
-    if (x.i === y.i || x.m !== y.m || plaKeys.has(key2(x.i, y.i)) || has(x.i, y.i) || x.p.distanceTo(y.p) > 0.5) continue;
-    const c = makeCurve(x.i, y.i, 'intra', R_IN); if (c) psi.push({ a: x.i, b: y.i, m: x.m, kind: 'intra', curve: c });
+  const N_NEW_IN = 36;
+  for (let m = 0, guard = 0, k = 0; k < N_NEW_IN && guard < 6000; guard++) {
+    const ids = modNodes(m).map((n) => n.i);
+    const a = ids[Math.floor(rp() * ids.length)], b = ids[Math.floor(rp() * ids.length)];
+    if (a === b || plaHas(a, b) || psiHas(a, b) || dist(a, b) > MAX_IN || dg(a) >= cap(a) - 2 || dg(b) >= cap(b) - 2) continue;
+    const c = fiberCurve(a, b, R_IN); if (!c) continue;
+    psi.push({ a, b, m, kind: 'intra', curve: c }); bump(a); bump(b); k++; m = (m + 1) % MODS;
   }
-  // entre módulos: primero garantiza que ningún nodo quede sin conexión, después completa
-  const deg = new Map(); const bump = (i) => deg.set(i, (deg.get(i) || 0) + 1);
-  psi.forEach((e) => { bump(e.a); bump(e.b); });
-  const tryInter = (a) => {
-    for (let t = 0; t < 60; t++) {
-      const y = nodes[Math.floor(rp() * nodes.length)];
-      if (y.m === nodes[a].m || has(a, y.i)) continue;
-      const c = makeCurve(a, y.i, 'inter', R_X); if (c) { psi.push({ a, b: y.i, kind: 'inter', curve: c }); bump(a); bump(y.i); return true; }
+  // entre módulos: haces (uno por par de módulos, edge bundling). Todas las curvas del par pasan por un punto de
+  // control común hacia el centro del anillo (promedio de los centros × 0,5; × 0,8 entre vecinos, para no dibujar
+  // una estrella), con una dispersión chica: el haz viaja junto y solo se abre en los extremos. Pares con distinto
+  // peso: parece un dato, no un logo.
+  const pairs = [];
+  for (let i = 0; i < MODS; i++) for (let j = i + 1; j < MODS; j++) pairs.push({ i, j, d: Math.min(j - i, MODS - (j - i)) });
+  const rb = M.rng(31);
+  pairs.forEach((P) => {
+    // un corrimiento propio de cada haz (sobre todo en profundidad) para que los que cruzan el centro no se toquen
+    P.off = new THREE.Vector3((rb() - 0.5) * 0.14, (rb() - 0.5) * 0.14, (rb() - 0.5) * 0.34);
+    P.C = centers[P.i].clone().add(centers[P.j]).multiplyScalar(P.d === 1 ? 0.4 : 0.25).add(P.off);
+    P.w = [0.35, 1.5, 0.7, 1.15, 0.25, 1.3, 0.9, 0.5, 1.4, 0.8, 1.2, 0.3, 1.0, 0.6, 1.25][pairs.indexOf(P)];
+  });
+  const nInter = E_PSI - psi.length;
+  { const w = pairs.map((P) => P.w); const sw = w.reduce((s, x) => s + x, 0);
+    let left = nInter; pairs.forEach((P, k) => { P.n = Math.floor(nInter * w[k] / sw); left -= P.n; });
+    for (let k = 0; left > 0; k = (k + 1) % pairs.length, left--) pairs[k].n++; }
+  const rj = M.rng(13);
+  // B-spline cúbica uniforme (sujeta en los extremos): el camino A → puerto → punto común → puerto → B
+  class BSpline3 extends THREE.Curve {
+    constructor(P) { super(); this.P = P; }
+    getPoint(t, out = new THREE.Vector3()) {
+      const P = this.P, nSeg = P.length - 3, x = Math.min(0.999999, Math.max(0, t)) * nSeg, i = Math.floor(x), u = x - i;
+      const u2 = u * u, u3 = u2 * u;
+      return out.set(0, 0, 0).addScaledVector(P[i], (1 - 3 * u + 3 * u2 - u3) / 6).addScaledVector(P[i + 1], (4 - 6 * u2 + 3 * u3) / 6)
+        .addScaledVector(P[i + 2], (1 + 3 * u + 3 * u2 - 3 * u3) / 6).addScaledVector(P[i + 3], u3 / 6);
     }
-    return false;
-  };
-  nodes.forEach((n) => { if (!deg.get(n.i)) tryInter(n.i); });
-  guard = 0;
-  while (psi.length < E_PSI && guard++ < 3000) {
-    // los centros de módulo (hubs) concentran más conexiones largas
-    const pick = rp() < 0.35 ? nodes.filter((n) => n.hub)[Math.floor(rp() * MODS)] : nodes[Math.floor(rp() * nodes.length)];
-    tryInter(pick.i);
   }
-  const nInter = psi.filter((e) => e.kind === 'inter').length;
-  console.log(`[h04] nodos ${nodes.length} · placebo ${pla.length} · psilocibina ${psi.length} (inter ${nInter}, compartidas ${E_SH})`);
+  // puerto de salida del módulo m hacia mo: un poco adentro del arco y corrido hacia el destino
+  const port = (m, mo) => {
+    const da = ((MANG[mo] - MANG[m] + 540) % 360) - 180;
+    const ang = (MANG[m] + Math.sign(da) * Math.min(12, Math.abs(da) * 0.14)) * D2R;
+    return new THREE.Vector3(Math.cos(ang) * RING * 0.86, Math.sin(ang) * RING * 0.86, 0);
+  };
+  const BETA = 0.92;   // fuerza del agrupamiento (Holten 2006)
+  function bundleCurve(a, b, P) {
+    const A = nodes[a].p, B = nodes[b].p, mA = nodes[a].m, mB = nodes[b].m;
+    const j = (s) => new THREE.Vector3((rj() - 0.5) * s, (rj() - 0.5) * s, (rj() - 0.5) * s);
+    const zo = new THREE.Vector3(0, 0, P.off.z * 0.5);
+    const ctrl = [A, A, A, port(mA, mB).add(zo).add(j(0.01)), P.C.clone().add(j(0.022)), port(mB, mA).add(zo).add(j(0.01)), B, B, B];
+    const n = ctrl.length - 1;
+    return new BSpline3(ctrl.map((p, i) => p.clone().multiplyScalar(BETA).addScaledVector(A.clone().lerp(B, i / n), 1 - BETA)));
+  }
+  // elige un extremo del módulo m: los nodos que miran hacia el haz pesan más; los que todavía no tienen conexión, mucho más
+  function pickEnd(m, toward, avoid) {
+    const c = centers[m], dir = toward.clone().sub(c).normalize();
+    const cand = modNodes(m).filter((n) => dg(n.i) < cap(n.i) && !avoid.has(n.i));
+    if (!cand.length) return -1;
+    const w = cand.map((n) => { const f = n.hub ? 0.4 : n.p.clone().sub(c).normalize().dot(dir); const w0 = Math.pow(Math.max(0.05, 0.5 + f), 2); return dg(n.i) === 0 ? Math.max(w0, 0.6) * 6 : w0; });
+    let x = rp() * w.reduce((s, v) => s + v, 0);
+    for (let k = 0; k < cand.length; k++) { x -= w[k]; if (x <= 0) return cand[k].i; }
+    return cand[cand.length - 1].i;
+  }
+  pairs.forEach((P, pi) => {
+    let made = 0, guard = 0;
+    while (made < P.n && guard++ < 300) {
+      const a = pickEnd(P.i, P.C, new Set()), b = pickEnd(P.j, P.C, new Set());
+      if (a < 0 || b < 0 || psiHas(a, b)) continue;
+      const rad = 0.002 + rp() * 0.0022;
+      const c = bundleCurve(a, b, P);
+      if (!clearCurve(c, a, b, rad, 40)) continue;
+      psi.push({ a, b, kind: 'inter', pair: pi, rad, op: 0.2 + Math.floor(rp() * 3) * 0.06, curve: c }); bump(a); bump(b); made++;
+    }
+  });
+  // red de seguridad: si quedó algún nodo suelto, se une a su vecino más cercano y se quita una conexión del haz
+  // más grande (con extremos que siguen conectados), así el total sigue en E_PSI
+  nodes.forEach((n) => {
+    if (dg(n.i)) return;
+    const near = modNodes(n.m).filter((o) => o.i !== n.i && !plaHas(n.i, o.i) && !psiHas(n.i, o.i) && dist(n.i, o.i) <= MAX_IN).sort((x, y) => dist(n.i, x.i) - dist(n.i, y.i));
+    for (const o of near) {
+      const c = fiberCurve(n.i, o.i, R_IN); if (!c) continue;
+      const big = pairs.map((P, pi) => pi).sort((x, y) => psi.filter((e) => e.pair === y).length - psi.filter((e) => e.pair === x).length)[0];
+      const drop = psi.findIndex((e) => e.pair === big && dg(e.a) > 1 && dg(e.b) > 1);
+      if (drop < 0) break;
+      deg.set(psi[drop].a, dg(psi[drop].a) - 1); deg.set(psi[drop].b, dg(psi[drop].b) - 1); psi.splice(drop, 1);
+      psi.push({ a: n.i, b: o.i, m: n.m, kind: 'intra', curve: c }); bump(n.i); bump(o.i); break;
+    }
+  });
+  const nX = psi.filter((e) => e.kind === 'inter').length;
+  const isolated = nodes.filter((n) => !dg(n.i)).length;
+  const maxIn = Math.max(...pla.concat(psi.filter((e) => e.kind === 'intra')).map((e) => dist(e.a, e.b)));
+  console.log(`[h04] nodos ${nodes.length} · placebo ${pla.length} · psilocibina ${psi.length} (entre módulos ${nX}, compartidas ${E_SH}) · sin conexión ${isolated} · fibra interna máx ${maxIn.toFixed(3)}`);
 
   /* ---------------- construcción de las dos redes ---------------- */
-  const SEP = 2.5, NSC = 1.42;
+  const SEP = 2.5, NSC = 1.26;
   const sphereGeo = new THREE.SphereGeometry(1, 28, 18);
   const nets = [];
+  const SEGI = 10, SEGX = 44, RADS = 6;
   function buildNet(edges, x) {
-    const g = new THREE.Group(); g.position.set(x, 0, 0); g.rotation.set(0.12, 0, 0); g.scale.setScalar(NSC); scene.add(g);
+    // cada red mira a la cámara (mismo ancho aparente a los dos lados); el giro compartido se suma encima
+    const g = new THREE.Group(); g.position.set(x, 0, 0); g.rotation.set(0.12, Math.atan2(-x, 12.5), 0, 'YXZ'); g.scale.setScalar(NSC); scene.add(g);
     const spin = new THREE.Group(); g.add(spin);
     const lvl = { v: 1 };
-    const nMats = MOD_COL.map((c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.42, metalness: 0 }));
-    const nBase = MOD_COL.map((c) => new THREE.Color(c));
-    const eMats = MOD_COL.map((c) => new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(0.62) }));
-    const eBase = eMats.map((mm) => mm.color.clone());
-    const xMat = new THREE.MeshBasicMaterial({ color: '#86a6f0', transparent: true, opacity: 0.78, depthWrite: false });
-    const xBase = xMat.color.clone();
+    const nMats = TONES.map((c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.36, metalness: 0 }));
+    const nBase = TONES.map((c) => new THREE.Color(c));
+    // fibras internas con la misma luz que las esferas (no líneas planas pegadas)
+    const eBase = TONES.map((c) => new THREE.Color(c).multiplyScalar(0.8));
+    const eMats = eBase.map((c) => new THREE.MeshStandardMaterial({ color: c.clone(), roughness: 0.6, metalness: 0, emissive: c.clone().multiplyScalar(0.1875) }));
+    const xMats = {};
+    const xMat = (op) => (xMats[op] ||= new THREE.MeshBasicMaterial({ color: '#8fb0ff', transparent: true, opacity: op, depthWrite: false }));
     const nodeMeshes = nodes.map((n) => {
-      const s = new THREE.Mesh(sphereGeo, nMats[n.m]); s.position.copy(n.p); s.scale.setScalar(0.0001);
+      const s = new THREE.Mesh(sphereGeo, nMats[tone(n.m)]); s.position.copy(n.p); s.scale.setScalar(0.0001);
       s.castShadow = true; s.receiveShadow = true; spin.add(s); return s;
     });
     const tubes = edges.map((e) => {
-      const geo = new THREE.TubeGeometry(e.curve, e.kind === 'inter' ? 28 : 8, e.kind === 'inter' ? R_X : R_IN, 6, false);
-      const mesh = new THREE.Mesh(geo, e.kind === 'inter' ? xMat : eMats[e.m]);
+      const X = e.kind === 'inter';
+      const geo = new THREE.TubeGeometry(e.curve, X ? SEGX : SEGI, X ? e.rad : R_IN, RADS, false);
+      const mesh = new THREE.Mesh(geo, X ? xMat(e.op) : eMats[tone(e.m)]);
+      if (!X) { mesh.castShadow = true; mesh.receiveShadow = true; }
       geo.setDrawRange(0, 0); spin.add(mesh);
-      return { e, geo, total: geo.index.count, prog: { v: 0 } };
+      return { e, geo, seg: X ? SEGX : SEGI, prog: { v: 0 } };
     });
-    const net = { g, spin, lvl, nMats, nBase, eMats, eBase, xMat, xBase, nodeMeshes, tubes };
+    const net = { g, spin, lvl, nMats, nBase, eMats, eBase, nodeMeshes, tubes };
     nets.push(net); return net;
   }
   const NA = buildNet(pla, -SEP), NB = buildNet(psi, SEP);
 
-  // aparición de los nodos (las dos redes a la vez; la derecha queda en espera, atenuada)
-  NB.lvl.v = 0.26;
-  [NA, NB].forEach((N) => N.nodeMeshes.forEach((s, i) => {
+  const pop = (N, t0) => N.nodeMeshes.forEach((s, i) => {
     const n = nodes[i];
-    tl.to(s.scale, { x: n.rad, y: n.rad, z: n.rad, duration: 0.7, ease: M.spring(0.12) }, 0.12 + n.m * 0.09 + (n.hub ? 0 : 0.12 + (i % PER) * 0.035));
-  }));
-  // beat 1: cableado placebo, módulo por módulo
+    tl.to(s.scale, { x: n.rad, y: n.rad, z: n.rad, duration: 0.7, ease: M.spring(0.12) }, t0 + n.m * 0.08 + (n.hub ? 0 : 0.1 + (i % PER) * 0.03));
+  });
+  // beat 1: solo placebo, centrado en cuadro (un foco a la vez)
+  pop(NA, 0.12);
   { const cnt = new Array(MODS).fill(0);
-    NA.tubes.forEach((T) => tl.to(T.prog, { v: 1, duration: 0.5, ease: 'appleOut' }, 0.95 + T.e.m * 0.17 + (cnt[T.e.m]++) * 0.04)); }
-  // beat 2: la red de la derecha se enciende; primero lo interno, después las conexiones entre módulos
-  tl.to(NB.lvl, { v: 1, duration: 0.8, ease: 'apple' }, 4.4);
-  tl.to(NA.lvl, { v: 0.5, duration: 0.8, ease: 'apple' }, 4.4);
+    NA.tubes.forEach((T) => tl.to(T.prog, { v: 1, duration: 0.5, ease: 'appleOut' }, 0.95 + T.e.m * 0.15 + (cnt[T.e.m]++) * 0.04)); }
+  // beat 2: la cámara se corre a la derecha (placebo pasa de centrado a su columna) y entra la red de psilocibina
+  // (mismos módulos): primero lo interno y después los haces entre módulos
+  const T_B = 4.3, PAN = 445;
+  pop(NB, T_B + 0.15);
+  tl.to(NA.lvl, { v: 0.6, duration: 0.8, ease: 'apple' }, T_B + 0.1);
   const inB = NB.tubes.filter((T) => T.e.kind === 'intra'), xB = NB.tubes.filter((T) => T.e.kind === 'inter');
-  inB.forEach((T, i) => tl.to(T.prog, { v: 1, duration: 0.5, ease: 'appleOut' }, 4.75 + i * 0.03));
-  xB.forEach((T, i) => tl.to(T.prog, { v: 1, duration: 0.7, ease: 'appleOut' }, 5.3 + (i / xB.length) * 1.3));
+  inB.forEach((T, i) => tl.to(T.prog, { v: 1, duration: 0.5, ease: 'appleOut' }, 4.95 + i * 0.02));
+  const T_X = 5.4, PAIR_STEP = 0.09;
+  const order = pairs.map((P, k) => k).sort((a, b) => pairs[a].d - pairs[b].d || a - b);
+  order.forEach((pi, k) => xB.filter((T) => T.e.pair === pi).forEach((T, j) => tl.to(T.prog, { v: 1, duration: 0.75, ease: 'appleOut' }, T_X + k * PAIR_STEP + j * 0.025)));
+  const T_XEND = Math.max(...xB.map((T) => order.indexOf(T.e.pair) * PAIR_STEP + xB.filter((U) => U.e.pair === T.e.pair).indexOf(T) * 0.025)) + T_X + 0.75;
   // beat 3: las dos en valor parejo para comparar
   tl.to(NA.lvl, { v: 0.9, duration: 0.9, ease: 'apple' }, 9.2);
 
-  // pulsos: señal que viaja por algunas conexiones azules
-  const pulseGeo = new THREE.SphereGeometry(1, 12, 8);
+  // señal: tramos cortos y brillantes que recorren algunos haces (el bloom los marca); terminan antes de 10,8 s
+  const pulseMat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#cfe0ff').multiplyScalar(1.3) });
   const pulses = [];
-  { const rq = M.rng(9);
-    for (let k = 0; k < 34; k++) {
-      const T = xB[Math.floor(rq() * xB.length)];
-      const s = new THREE.Mesh(pulseGeo, new THREE.MeshBasicMaterial({ color: '#f2f6ff' })); s.scale.setScalar(0.0001); NB.spin.add(s);
-      const pr = { u: 0, on: 0 }; const st = 7.0 + rq() * 5.4, dur = 0.7 + rq() * 0.4, rev = rq() < 0.5;
-      tl.set(pr, { on: 1 }, st); tl.to(pr, { u: 1, duration: dur, ease: 'none' }, st); tl.set(pr, { on: 0 }, st + dur);
-      pulses.push({ s, T, pr, rev });
+  { const rq = M.rng(9); const N_P = 16, P_SEG = 64, TAIL = 0.07;
+    const byPair = order.map((pi) => xB.filter((T) => T.e.pair === pi));
+    for (let k = 0; k < N_P; k++) {
+      const grp = byPair[(k * 7) % byPair.length]; const T = grp[Math.floor(rq() * grp.length)];
+      const geo = new THREE.TubeGeometry(T.e.curve, P_SEG, T.e.rad + 0.0018, RADS, false); geo.setDrawRange(0, 0);
+      const mesh = new THREE.Mesh(geo, pulseMat); NB.spin.add(mesh);
+      const dur = 0.6 + rq() * 0.25, st = Math.min(10.75 - dur, 7.5 + k * 0.19 + rq() * 0.15);
+      const pr = { u: 0 };
+      tl.fromTo(pr, { u: 0 }, { u: 1 + TAIL, duration: dur, ease: 'none', immediateRender: false }, st);
+      tl.set(pr, { u: 0 }, st + dur);
+      pulses.push({ geo, pr, rev: rq() < 0.5, P_SEG, TAIL });
     } }
 
-  // giro lento de las dos redes, sincronizado. La velocidad baja en cada tramo quieto (la narración entra
-  // sobre una imagen calma) y sube un poco mientras algo se construye. Tabla integrada: determinista.
-  const SPEED = [[0, 0.1], [2.4, 0.1], [2.9, 0.03], [4.3, 0.03], [4.8, 0.08], [6.9, 0.08], [7.4, 0.015], [9.1, 0.015], [9.5, 0.06], [10.7, 0.06], [11.2, 0.015], [12.9, 0.015], [13.3, 0.03], [14.2, 0.03]];
+  // giro lento de las dos redes, sincronizado (≈0,5 rad en total: el anillo nunca se superpone consigo mismo).
+  // La velocidad baja en cada tramo quieto y sube un poco mientras algo se construye. Tabla integrada: determinista.
+  const SPEED = [[0, 0.07], [2.4, 0.07], [2.9, 0.02], [4.3, 0.02], [4.8, 0.056], [6.9, 0.056], [7.4, 0.01], [9.1, 0.01], [9.5, 0.042], [10.7, 0.042], [11.2, 0.01], [12.9, 0.01], [13.3, 0.02], [14.2, 0.02]];
   const vel = (t) => { for (let i = 1; i < SPEED.length; i++) if (t <= SPEED[i][0]) { const [a, va] = SPEED[i - 1], [b, vb] = SPEED[i]; return va + (vb - va) * (t - a) / (b - a); } return SPEED[SPEED.length - 1][1]; };
   const ANG = new Float32Array(14201); for (let i = 1; i < ANG.length; i++) ANG[i] = ANG[i - 1] + 0.0005 * (vel((i - 1) / 1000) + vel(i / 1000));
-  const spinAt = (t) => { const x = Math.max(0, Math.min(14.2, t)) * 1000, i = Math.min(ANG.length - 2, Math.floor(x)); return -0.35 + ANG[i] + (ANG[i + 1] - ANG[i]) * (x - i); };
+  const spin0 = -ANG[ANG.length - 1] / 2;
+  const spinAt = (t) => { const x = Math.max(0, Math.min(14.2, t)) * 1000, i = Math.min(ANG.length - 2, Math.floor(x)); return spin0 + ANG[i] + (ANG[i + 1] - ANG[i]) * (x - i); };
 
   /* ---------------- cámara ---------------- */
-  const cam = { ang: -0.03, rad: 12.6, dr: 0, y: 1.5, ly: -0.62, sy: 0 };
+  const cam = { ang: -0.03, rad: 12.6, dr: 0, y: 1.5, ly: -0.62, sx: -PAN, sy: 0 };
   tl.to(cam, { ang: 0.03, rad: 12.3, duration: 14, ease: 'none' }, 0);
+  tl.to(cam, { sx: 0, duration: 1.0, ease: 'apple' }, T_B);
   // beat 3: sube las redes para dejar lugar a las cifras
-  tl.to(cam, { sy: 80, ly: -0.72, duration: 1.2, ease: 'apple' }, 9.15);
-  tl.to(cam, { dr: 1.8, duration: 1.2, ease: 'apple' }, 9.15);
+  tl.to(cam, { sy: 56, ly: -0.72, duration: 1.2, ease: 'apple' }, 9.15);
+  tl.to(cam, { dr: 2.3, duration: 1.2, ease: 'apple' }, 9.15);
 
   /* ---------------- texto (skill motion-copy: 6 palabras en toda la escena) ---------------- */
   const tA = M.textIn($('#lA'), 1.2, { dur: 1.0, stagger: 0.04, ease: 'appleOut' });
-  tl.to('#lA', { opacity: 0.5, duration: 0.8, ease: 'apple' }, 4.4);
-  const tB = M.textIn($('#lB'), 4.6, { dur: 1.0, stagger: 0.035, ease: 'appleOut' });
+  tl.fromTo('#lA', { x: PAN }, { x: 0, duration: 1.0, ease: 'apple', immediateRender: true }, T_B);   // viaja con su red
+  tl.to('#lA', { opacity: 0.5, duration: 0.8, ease: 'apple' }, T_B + 0.1);
+  const tB = M.textIn($('#lB'), 4.95, { dur: 1.0, stagger: 0.035, ease: 'appleOut' });
   M.textOut(tA, 9.15, { stagger: 0.015 }); M.textOut(tB, 9.2, { stagger: 0.015 });
 
   tl.from('#nA', { yPercent: 16, opacity: 0, duration: 0.9, ease: 'appleOut' }, 9.65);
   tl.from('#nB', { yPercent: 16, opacity: 0, duration: 0.9, ease: 'appleOut' }, 9.75);
-  M.counter($('#nA'), { from: 0, to: N_PLA, at: 9.7, dur: 1.4, ease: 'expo.out' });
-  M.counter($('#nB'), { from: 0, to: N_PSI, at: 9.8, dur: 1.4, ease: 'expo.out' });
+  // misma velocidad de conteo: 374 sigue subiendo después de que 165 se detuvo
+  M.counter($('#nA'), { from: 0, to: N_PLA, at: 9.7, dur: 0.62, ease: 'power2.out' });
+  M.counter($('#nB'), { from: 0, to: N_PSI, at: 9.8, dur: 1.4, ease: 'power2.out' });
   M.textIn($('#cap'), 10.4, { type: 'words', dur: 0.7, stagger: 0.06, ease: 'appleOut' });
   tl.to(['#nums', '#cap'], { opacity: 0, y: -14, duration: 0.5, ease: 'appleIn' }, 12.9);
   tl.to('#fade', { opacity: 1, duration: 0.5, ease: 'appleIn' }, 13.15);
+
+  /* ---------------- sonido (docs/AUDIO.md): misma clave que la serie, pocos efectos ---------------- */
+  M.sfx(0.95, 'grow', { dur: 1.4, density: 60, gain: -5 });
+  M.sfx(1.22, 'tick');
+  M.sfx(T_B, 'whoosh', { dur: 1.0, peak: 0.45, dir: 1, gain: -2 });
+  M.sfx(4.97, 'tick', { tone: 'glass', gain: -2 });
+  M.sfx(T_X, 'grow', { dur: +(T_XEND - T_X).toFixed(2), density: 110 });
+  M.sfx(9.15, 'whoosh', { dur: 1.0, peak: 0.35, dir: -1, gain: -6 });
+  M.sfx(9.8, 'swell', { dur: 1.0 }).sfx(9.8, 'impact', { weight: 0.8 });
+  M.sfx(10.4, 'shimmer', { degs: [2, 4, 7], gain: -3 });
 
   /* ---------------- por cuadro ---------------- */
   const tmp = new THREE.Color();
@@ -287,17 +379,19 @@ M.scene({ duration: 14, push: 0 }, async (tl, M) => {
       N.spin.rotation.y = spinAt(t);
       const k = N.lvl.v;
       N.nMats.forEach((mm, i) => mm.color.copy(tmp.copy(N.nBase[i]).multiplyScalar(k)));
-      N.eMats.forEach((mm, i) => mm.color.copy(tmp.copy(N.eBase[i]).multiplyScalar(k)));
-      N.xMat.color.copy(tmp.copy(N.xBase).multiplyScalar(k));
-      N.tubes.forEach((T) => T.geo.setDrawRange(0, Math.floor(T.total * T.prog.v / 6) * 6));
+      N.eMats.forEach((mm, i) => { mm.color.copy(tmp.copy(N.eBase[i]).multiplyScalar(k)); mm.emissive.copy(tmp.multiplyScalar(0.1875)); });
+      N.tubes.forEach((T) => T.geo.setDrawRange(0, Math.floor(T.seg * T.prog.v) * RADS * 6));
     });
-    pulses.forEach(({ s, T, pr, rev }) => {
-      if (pr.on && pr.u > 0 && pr.u < 1 && T.prog.v >= 1) { s.position.copy(T.e.curve.getPoint(rev ? 1 - pr.u : pr.u)); s.scale.setScalar(0.024); }
-      else s.scale.setScalar(0.0001);
+    pulses.forEach(({ geo, pr, rev, P_SEG, TAIL }) => {
+      const u = pr.u; if (u <= 0) { geo.setDrawRange(0, 0); return; }
+      let lo = Math.max(0, u - TAIL), hi = Math.min(1, u);
+      if (rev) [lo, hi] = [1 - hi, 1 - lo];
+      const s0 = Math.floor(lo * P_SEG), s1 = Math.ceil(hi * P_SEG);
+      geo.setDrawRange(s0 * RADS * 6, Math.max(0, s1 - s0) * RADS * 6);
     });
     camera.position.set(Math.sin(cam.ang) * (cam.rad + cam.dr), cam.y, Math.cos(cam.ang) * (cam.rad + cam.dr));
     camera.lookAt(0, cam.ly, 0);
-    camera.setViewOffset(1920, 1080, 0, cam.sy, 1920, 1080);
+    camera.setViewOffset(1920, 1080, cam.sx, cam.sy, 1920, 1080);
     S.render();
   });
 });
