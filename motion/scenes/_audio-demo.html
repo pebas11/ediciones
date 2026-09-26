@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>_audio-demo · prueba de sonido</title>
+<link rel="stylesheet" href="../lib/theme.css">
+<style>
+  /* Línea de tiempo de 0 a 8 s: cada marca se enciende cuando suena su preset */
+  #track { position: absolute; left: 160px; right: 160px; top: 560px; height: 2px; background: var(--line-faint); }
+  #head { position: absolute; top: 470px; width: 2px; height: 180px; margin-left: -1px; background: var(--cyan); box-shadow: 0 0 16px var(--cyan); }
+  .cue { position: absolute; top: 560px; width: 0; height: 0; }
+  .cue .pt { position: absolute; left: -9px; top: -9px; width: 18px; height: 18px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 18px var(--cyan); }
+  .cue .span { position: absolute; top: -3px; height: 6px; border-radius: 3px; background: var(--electric); }
+  .cue .lb { position: absolute; left: 0; transform: translateX(-50%); font-family: "JetBrains Mono", monospace; font-size: 24px; letter-spacing: 0.06em; color: var(--sky); white-space: nowrap; }
+  .cue.up .lb { top: -64px; } .cue.dn .lb { top: 34px; }
+  #title { top: 250px; left: 0; right: 0; text-align: center; }
+  #title .display { font-size: 120px; display: inline-block; }
+</style>
+</head>
+<body>
+<div id="bg"></div>
+<div id="world">
+  <div id="title" class="abs"><div class="display">Sonido</div></div>
+  <div id="track"></div>
+  <div id="cues"></div>
+  <div id="head"></div>
+</div>
+
+<script src="../node_modules/gsap/dist/gsap.min.js"></script>
+<script src="../node_modules/gsap/dist/SplitText.min.js"></script>
+<script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
+<script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
+<script src="../lib/stage.js"></script>
+<script src="../lib/audio.js"></script>
+<script>
+// Tiempos conocidos (s) para verificar el audio. [at, preset, opciones]
+const CUES = [
+  [0.20, 'whoosh', { dur: 0.8 }],
+  [1.10, 'tick'], [1.25, 'tick'], [1.40, 'tick'],
+  [2.40, 'swell', { dur: 0.8 }],                 // termina en 2,40 (anchor 'end')
+  [2.40, 'impact'],
+  [3.10, 'tap', { deg: 0 }], [3.30, 'tap', { deg: 2 }], [3.50, 'tap', { deg: 4 }],
+  [3.90, 'shimmer'],
+  [4.70, 'scan', { dur: 0.9 }],
+  [5.70, 'grow', { dur: 0.9 }],
+  [7.30, 'riser', { dur: 0.9 }],                 // termina en 7,30 (anchor 'end')
+];
+
+M.scene({ duration: 8, push: 0.02, audio: { key: 'D', mode: 'major', bed: { cycle: 4 } } }, (tl, M) => {
+  const X0 = 160, X1 = 1760, x = (t) => X0 + (X1 - X0) * t / M.duration;
+  const box = document.getElementById('cues');
+  CUES.forEach(([at, type, o = {}], i) => {
+    M.sfx(at, type, o);
+    const end = type === 'riser' || type === 'swell';
+    const d = o.dur ?? MAudio.DUR[type];
+    const c = document.createElement('div');
+    c.className = 'cue ' + (i % 2 ? 'dn' : 'up');
+    c.style.left = x(at) + 'px';
+    const first = CUES.findIndex((q) => q[1] === type) === i;
+    c.innerHTML = (['whoosh', 'scan', 'grow', 'riser', 'swell'].includes(type)
+      ? `<div class="span" style="left:${end ? -(x(d) - X0) : 0}px;width:${x(d) - X0}px"></div>` : '')
+      + '<div class="pt"></div>' + (first ? `<div class="lb">${type}</div>` : '');
+    box.appendChild(c);
+    M.zoomIn(c.querySelector('.pt'), at, { dur: 0.35, ease: 'back.out(2)' });
+    const sp = c.querySelector('.span');
+    if (sp) tl.fromTo(sp, { scaleX: 0, transformOrigin: '0% 50%' }, { scaleX: 1, duration: d, ease: 'none' }, end ? at - d : at);
+  });
+  tl.fromTo('#head', { left: X0 }, { left: X1, duration: M.duration, ease: 'none' }, 0);
+  M.textIn(document.querySelector('#title .display'), 0.2, { dur: 0.9 });
+});
+</script>
+</body>
+</html>

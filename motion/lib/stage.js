@@ -59,6 +59,11 @@
 
     onFrame(fn) { frameHooks.push(fn); },
 
+    /** Sonido: cues que se sintetizan al renderizar (lib/audio.js). Sin audio.js solo se registran.
+        M.sfx(2.0, 'impact', { gain: -3 }) · presets: bed whoosh tick tap impact shimmer scan grow riser swell */
+    audio: { cues: [], opts: null },
+    sfx(at, type, opts = {}) { M.audio.cues.push({ ...opts, at, type }); return M; },
+
     /** Formato numérico en español: 1.800 / 28,8 */
     fmt(v, decimals = 0) {
       const s = Math.abs(v).toFixed(decimals);
@@ -155,6 +160,7 @@
     /** Crea la escena */
     async scene(opts, build) {
       M.duration = opts.duration;
+      if (opts.audio) M.audio.opts = opts.audio;
       buildBackground(opts);
       await document.fonts.ready;
       if (opts.icons) await M.loadIcons(opts.icons);
@@ -239,4 +245,12 @@
 
   window.M = M;
   window.__seek = (t) => M.seek(t);
+  /** Audio de todo el clip → { sampleRate, channels, frames, format:'s16le', b64 (Int16 intercalado), ... } o null.
+      o: { duration (s, por defecto M.duration), only: [índices de cue], bed: false, normalize: false } */
+  window.__renderAudio = async (o = {}) => {
+    const A = M.audio.opts || {};
+    if (!window.MAudio || (!M.audio.cues.length && !A.bed)) return null;
+    const r = await window.MAudio.render(M.audio.cues, o.duration ?? M.duration, A, o);
+    return window.MAudio.encode(r, A.seed ?? 1);
+  };
 })();
