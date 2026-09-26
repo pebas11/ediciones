@@ -15,6 +15,7 @@ Modo `alfa` disponible (PNG con transparencia) — solo usarlo si el usuario con
 2. **Construir** `motion/scenes/NN-nombre.html` copiando la estructura de `scenes/01-balance.html`.
    Reglas técnicas: `motion/docs/RULES.md` (leer SIEMPRE antes de escribir). Tokens de motion: `motion/docs/APPLE-MOTION.md`.
    Recetas de movimiento (on demand, no leer todo): `motion/reference/hyperframes/hyperframes-animation/rules-index.md`.
+   Sonido (opcional, `lib/audio.js` + `M.sfx`): `motion/docs/AUDIO.md`. Iterar con `node render.mjs <escena> --audio-only` (~3 s).
 3. **QA automático** (sin imágenes, ~20 s): `node qa.mjs <escena>` → errores de layout, chroma, cues. Corregir hasta 0 ✖.
 4. **Mirar** solo lo necesario, en este orden de costo:
    - `node render.mjs <escena> --sheet 16 --modes fondo` → 1 imagen 1920×1080 (~2,8k tokens) para ritmo y composición.

@@ -5,8 +5,11 @@
    Estética: motion graphics premium (documental científico / keynote), NO
    videojuego: nada de ondas cuadradas ni arpegios chiptune. Todo nace de ruido
    filtrado, resonadores, FM de índice bajo y una reverb de sala generada.
-   Mezcla pensada para ir DEBAJO de una voz en off: la cama deja un "hueco" en
-   2–4 kHz y los efectos tienen niveles calibrados (ver LEVEL).
+   Mezcla pensada para ir DEBAJO de una voz en off: la mezcla deja un "hueco" en
+   ~3 kHz (pocket) y cada preset tiene un nivel absoluto calibrado (ver LEVEL). El
+   render NO normaliza: una escena con 3 ticks y otra con 20 efectos quedan con la
+   cama y los efectos al mismo nivel, listos para poner a 0 dB en CapCut bajo una
+   voz a −16 LUFS. Documentación: motion/docs/AUDIO.md.
 
    Determinista: 48 kHz estéreo, OfflineAudioContext, ruido con PRNG sembrado.
    Mismo cues + misma semilla → mismas muestras, bit a bit.
@@ -77,8 +80,12 @@
 
   /* ------------------------------ nodos ------------------------------ */
   const G = (ctx, v = 1) => { const g = ctx.createGain(); g.gain.value = v; return g; };
+  /** Biquad. Q siempre LINEAL (0,707 = Butterworth). Ojo: en Web Audio el Q de lowpass/highpass se
+      interpreta en dB (resonancia), no lineal; acá se convierte para que 0,707 sea de verdad plano. */
   function BQ(ctx, type, f, Q = 0.707, gain = 0) {
-    const b = ctx.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = Q; b.gain.value = gain; return b;
+    const b = ctx.createBiquadFilter(); b.type = type; b.frequency.value = f;
+    b.Q.value = type === 'lowpass' || type === 'highpass' ? 20 * Math.log10(Q) : Q;
+    b.gain.value = gain; return b;
   }
   function osc(ctx, type, f) { const o = ctx.createOscillator(); if (typeof type === 'string') o.type = type; else o.setPeriodicWave(type); o.frequency.value = f; return o; }
   function src(ctx, buf) { const s = ctx.createBufferSource(); s.buffer = buf; return s; }
@@ -194,6 +201,9 @@
   }
 
   /* ------------------------------ grafo global ------------------------------ */
+  /* Compresor de master suave (glue). OJO: Chromium le suma una ganancia de compensación automática
+     (con estos valores ≈ +5,3 dB, medido) → cambiar threshold/ratio/knee corre TODOS los LEVEL.
+     En la práctica comprime ≤ 1 dB (solo en impact + swell). */
   const COMP = { threshold: -24, knee: 12, ratio: 2, attack: 0.02, release: 0.3 };
   function master(ctx, dest) {
     const hp = BQ(ctx, 'highpass', 28, 0.707);
@@ -202,12 +212,18 @@
     hp.connect(comp); comp.connect(dest);
     return hp;
   }
+  /** pasa-altos Butterworth de 4.º orden (dos biquads) */
+  function hp4(ctx, f) { const a = BQ(ctx, 'highpass', f, 0.5412), b = BQ(ctx, 'highpass', f, 1.3066); a.connect(b); return [a, b]; }
   function graph(ctx, A, seed) {
     const ins = { sfx: [], bed: [], send: [] };
-    /** se llama después de programar todos los cues: cablea buses → reverb / EQ → master */
+    /** se llama después de programar todos los cues: cablea buses → reverb / EQ → hueco para la voz → master */
     const finalize = () => {
       const mix = G(ctx, dB(A.gain || 0));
-      mix.connect(master(ctx, ctx.destination));
+      // hueco para la voz en TODA la mezcla (efectos + reverb + cama): lo que compite con la
+      // inteligibilidad (2–5 kHz) son sobre todo los efectos, no la cama. pocket: dB (0 = sin hueco)
+      const pk = A.pocket ?? -3;
+      if (pk) { const pocket = BQ(ctx, 'peaking', 3000, 0.9, pk); mix.connect(pocket); pocket.connect(master(ctx, ctx.destination)); }
+      else mix.connect(master(ctx, ctx.destination));
       const parts = [];
       // reverb
       if (ins.send.length) {
@@ -216,23 +232,24 @@
         const ret = G(ctx, dB(A.reverb?.gain ?? -4));
         sum(ctx, ins.send, conv); conv.connect(rhp); rhp.connect(rhs); rhs.connect(ret); parts.push(ret);
       }
-      // efectos
-      if (ins.sfx.length) { const hp = BQ(ctx, 'highpass', 32, 0.707); sum(ctx, ins.sfx, hp); parts.push(hp); }
-      // cama: hueco para la voz (2,8 kHz) y sin retumbe
-      if (ins.bed.length) {
-        const hp = BQ(ctx, 'highpass', 45, 0.707), pocket = BQ(ctx, 'peaking', 2800, 0.8, A.pocket ?? -4);
-        sum(ctx, ins.bed, hp); hp.connect(pocket); parts.push(pocket);
-      }
+      // efectos: pasa-altos de 4.º orden a 40 Hz (el ruido grave de whoosh/riser no aporta y ensucia la voz)
+      if (ins.sfx.length) { const [a, b] = hp4(ctx, 40); sum(ctx, ins.sfx, a); parts.push(b); }
+      // cama: sin retumbe
+      if (ins.bed.length) { const hp = BQ(ctx, 'highpass', 45, 0.707); sum(ctx, ins.bed, hp); parts.push(hp); }
       sum(ctx, parts, mix);
     };
     return { ins, finalize };
   }
 
   /* ------------------------------ presets ------------------------------
-     LEVEL = nivel calibrado de cada preset (dB). Medido aislado (sin cama), queda en
-     loudness momentáneo aprox.: cama −30 LUFS · tick −31 · tap −27 · scan/grow −28 ·
-     whoosh/shimmer −25 · swell/riser −23 · impact −21. `gain` de cada cue suma a esto. */
-  const LEVEL = { bed: -37, tick: -14, tap: -21, impact: -18, whoosh: -6.5, shimmer: -28.5, scan: -6.4, grow: -1.8, riser: -15.2, swell: -13 };
+     LEVEL = nivel ABSOLUTO calibrado de cada preset (dB): es lo que sale en el WAV con gain 0 (el
+     render no normaliza). Medido con cada preset aislado, mediana de 6 semillas, parámetros por defecto
+     (BS.1770, momentáneo = ventana de 400 ms):
+       cama: M máx −32 LUFS, corto plazo ≈ −34 · riser −22 · swell −23 · impact −20 · whoosh −24 ·
+       shimmer −24 · tap −26 · scan −28 · grow −29,5 · tick: pico ≈ −21,5 dBFS (M ≈ −43).
+     Pensado para ir a 0 dB en CapCut bajo una voz a −16 LUFS: la cama queda ~18 LU abajo y los
+     efectos 4–13 LU abajo. `gain` (dB) de cada cue suma a esto. Si se toca un preset, re-medir. */
+  const LEVEL = { bed: -37.9, tick: -9.8, tap: -21, impact: -17.3, whoosh: -5.2, shimmer: -26.8, scan: -3.7, grow: -3.8, riser: -14.7, swell: -12.8 };
 
   // Cómo se interpreta `at` en cada preset (anchor por defecto): 'start' | 'end' | 'peak' (solo whoosh)
   const ANCHOR = { riser: 'end', swell: 'end' };
@@ -274,7 +291,8 @@
     na.gain.setValueAtTime(0.12, t); na.gain.setTargetAtTime(0, t, 0.005);
     ns.connect(nbp); nbp.connect(na); ns.start(t);
     sum(ctx, [amp, a4, na], mix);
-    const lp = BQ(ctx, 'lowpass', 5200, 0.707); mix.connect(lp);
+    // la FM de relación 1 deja una banda lateral en 0 Hz (un "golpe" de continua): pasa-altos a media fundamental
+    const hp = BQ(ctx, 'highpass', f * 0.5, 0.707), lp = BQ(ctx, 'lowpass', 5200, 0.707); mix.connect(hp); hp.connect(lp);
     out(ctx, g, lp, { pan: (p.pan || 0) + J(0.1), verb: p.verb ?? 0.22 });
   };
 
@@ -282,7 +300,7 @@
       "thump" de aire, transitorio medio y una floración tonal que alimenta la reverb. */
   P.impact = (ctx, g, t, p, R, K, J, span) => {
     const f0 = (p.note !== undefined ? tone(p, K, 0, 1) : rootIn(K, 40, 80) * semis(p.pitch || 0));
-    const tail = span.d, w = p.weight ?? 1, t1 = t + tail + 0.5;
+    const tail = span.d, w = p.weight ?? 1, t1 = t + tail * 2.2 + 0.1;   // cortar cuando la floración ya bajó ~60 dB
     const lvl = dB(LEVEL.impact + (p.gain || 0));
     // sub
     const o = osc(ctx, 'sine', f0 * 1.9);
@@ -320,22 +338,22 @@
       : Math.pow(Math.cos(0.5 * Math.PI * (u - pk) / (1 - pk)), 2) * Math.exp(-1.2 * (u - pk) / (1 - pk));
     const lvl = dB(LEVEL.whoosh + (p.gain || 0) + J(0.8));
     const layer = (fLo, fHi, q, level, panOff) => {
-      const s = src(ctx, noiseBuf(ctx, d + 0.05, R, 'pink'));
+      const s = src(ctx, noiseBuf(ctx, d + 0.05, R, 'pink')), [h1, h2] = hp4(ctx, 80);
       const bp = BQ(ctx, 'bandpass', fLo * br, q);
       bp.frequency.setValueAtTime(fLo * br, t);
       bp.frequency.exponentialRampToValueAtTime(fHi * br, t + d * pk);
       bp.frequency.exponentialRampToValueAtTime(fLo * 1.8 * br, t + d);
       const env = G(ctx, 0); env.gain.setValueCurveAtTime(curve(shape, 512, level * lvl), t, d);
-      s.connect(bp); bp.connect(env); s.start(t); s.stop(t + d + 0.02);
+      s.connect(h1); h2.connect(bp); bp.connect(env); s.start(t); s.stop(t + d + 0.02);
       out(ctx, g, env, { pan: [(p.pan || 0) - dir * wd + panOff, (p.pan || 0) + dir * wd + panOff, t, t + d], verb: p.verb ?? 0.14 });
       return s;
     };
     layer(240, 2300, 1.1, 1, -0.08);
     layer(330, 3100, 1.6, 0.55, 0.08);
-    // cuerpo (desplazamiento de aire)
-    const s = src(ctx, noiseBuf(ctx, d + 0.05, R, 'pink')), lp = BQ(ctx, 'lowpass', 380, 0.7), env = G(ctx, 0);
+    // cuerpo (desplazamiento de aire), sin retumbe por debajo de 90 Hz
+    const s = src(ctx, noiseBuf(ctx, d + 0.05, R, 'pink')), [h1, h2] = hp4(ctx, 90), lp = BQ(ctx, 'lowpass', 380, 0.7), env = G(ctx, 0);
     env.gain.setValueCurveAtTime(curve(shape, 512, 0.5 * lvl), t, d);
-    s.connect(lp); lp.connect(env); s.start(t); s.stop(t + d + 0.02);
+    s.connect(h1); h2.connect(lp); lp.connect(env); s.start(t); s.stop(t + d + 0.02);
     out(ctx, g, env, { pan: p.pan || 0, verb: 0.05 });
   };
 
@@ -366,7 +384,7 @@
   /** Scan: barrido delicado. Ruido por pasa-banda estrecho que sube (from→to) mientras cruza
       el estéreo como la línea de escaneo, con una sombra tonal casi inaudible. */
   P.scan = (ctx, g, t, p, R, K, J, span) => {
-    const d = span.d, tr = semis(p.pitch || 0), from = (p.from ?? 500) * tr, to = (p.to ?? 5000) * tr;
+    const d = span.d, tr = semis(p.pitch || 0), from = (p.from ?? 500) * tr, to = (p.to ?? 3500) * tr;
     const dir = p.dir ?? 1, wd = p.width ?? 0.6;
     const lvl = dB(LEVEL.scan + (p.gain || 0));
     const shape = (u) => smooth(0, 0.14, u) * (1 - 0.2 * u) * (1 - smooth(0.8, 1, u));
@@ -374,22 +392,24 @@
     const s = src(ctx, noiseBuf(ctx, d + 0.05, R, 'pink')), bp = BQ(ctx, 'bandpass', from, p.q ?? 5);
     bp.frequency.setValueAtTime(from, t); bp.frequency.exponentialRampToValueAtTime(to, t + d);
     s.connect(bp); bp.connect(env); s.start(t); s.stop(t + d + 0.02);
-    const o = osc(ctx, 'sine', from / 2), og = G(ctx, p.tone ?? 0.05);
+    const o = osc(ctx, 'sine', from / 2), og = G(ctx, p.tone ?? 0.015);   // sombra tonal: casi inaudible (un glissando senoidal claro suena a videojuego)
     o.frequency.setValueAtTime(from / 2, t); o.frequency.exponentialRampToValueAtTime(to / 2, t + d);
     o.connect(og); og.connect(env); o.start(t); o.stop(t + d + 0.02);
     out(ctx, g, env, { pan: [(p.pan || 0) - dir * wd, (p.pan || 0) + dir * wd, t, t + d], verb: p.verb ?? 0.2 });
   };
 
   /** Grow: crepitar orgánico fino (granular). Proceso de Poisson de micro-resonancias amortiguadas
-      (1,5–6 kHz, 0,5–2,5 ms), a veces en racimos, repartidas en estéreo, + un roce de fondo. */
+      (0,7–3,5 kHz, ~0,6–3,5 ms), a veces en racimos, repartidas en estéreo, + un roce de fondo.
+      Granos más graves y de amplitud más pareja que un crepitar "de fuego": así no compite con las
+      consonantes de la voz (2–5 kHz) ni dispara picos. */
   P.grow = (ctx, g, t, p, R, K, J, span) => {
     const d = span.d, dens = p.density ?? 110, sp = p.spread ?? 0.7, br = (p.bright ?? 1) * semis(p.pitch || 0);
     const env = (u) => smooth(0, 0.18, u) * (1 - smooth(0.72, 1, u)) * (0.7 + 0.3 * u);
     const n = Math.ceil((d + 0.05) * SR), buf = ctx.createBuffer(2, n, SR), L = buf.getChannelData(0), Rt = buf.getChannelData(1);
     const grain = (tt, e) => {
-      const f = Math.exp(Math.log(1500) + R() * (Math.log(6000) - Math.log(1500))) * br;
-      const tau = (0.0005 + R() * 0.002) * Math.sqrt(2500 / f);
-      const a = 0.25 * Math.pow(10, -R() * 1.3) * (0.6 + 0.4 * e) * (R() < 0.5 ? -1 : 1);
+      const f = Math.exp(Math.log(700) + R() * (Math.log(3500) - Math.log(700))) * br;
+      const tau = (0.0005 + R() * 0.002) * Math.sqrt(1500 / f);
+      const a = 0.25 * Math.pow(10, -R() * 0.8) * (0.6 + 0.4 * e) * (R() < 0.5 ? -1 : 1);
       const pan = clamp((p.pan || 0) + (R() * 2 - 1) * sp, -1, 1), gl = Math.cos((pan + 1) * Math.PI / 4), gr = Math.sin((pan + 1) * Math.PI / 4);
       const i0 = Math.round(tt * SR), len = Math.min(Math.ceil(tau * 7 * SR), n - i0), w = 2 * Math.PI * f / SR, k = 1 / (tau * SR);
       for (let i = 0; i < len; i++) { const v = a * Math.exp(-i * k) * Math.sin(w * i) * (i < 6 ? i / 6 : 1); L[i0 + i] += v * gl; Rt[i0 + i] += v * gr; }
@@ -403,11 +423,14 @@
       grain(tt, e);
       if (R() < 0.18) { const m = 1 + Math.floor(R() * 3); for (let j = 0; j < m; j++) { const t2 = tt + 0.002 + R() * 0.007; if (t2 < d) grain(t2, e); } }
     }
-    const s = src(ctx, buf), hp = BQ(ctx, 'highpass', 350, 0.707), lp = BQ(ctx, 'lowpass', 9500 * Math.min(1.2, br), 0.707);
+    // saturación suave de los racimos (los granos sueltos pasan casi intactos): menos factor de cresta
+    const SC = 0.18;
+    for (let i = 0; i < n; i++) { L[i] = SC * Math.tanh(L[i] / SC); Rt[i] = SC * Math.tanh(Rt[i] / SC); }
+    const s = src(ctx, buf), hp = BQ(ctx, 'highpass', 350, 0.707), lp = BQ(ctx, 'lowpass', 7000 * Math.min(1.2, br), 0.707);
     const lvl = dB(LEVEL.grow + (p.gain || 0)), mix = G(ctx, lvl);
     s.connect(hp); hp.connect(lp); lp.connect(mix); s.start(t);
     // roce de fondo (fibras): ruido rosa por banda ancha, casi inaudible
-    const rs = src(ctx, noiseBuf(ctx, d + 0.05, R, 'pink')), rbp = BQ(ctx, 'bandpass', 2200 * br, 0.7), ra = G(ctx, 0);
+    const rs = src(ctx, noiseBuf(ctx, d + 0.05, R, 'pink')), rbp = BQ(ctx, 'bandpass', 1600 * br, 0.7), ra = G(ctx, 0);
     ra.gain.setValueCurveAtTime(curve(env, 256, 0.05 * (p.body ?? 1)), t, d);
     rs.connect(rbp); rbp.connect(ra); ra.connect(mix); rs.start(t); rs.stop(t + d + 0.02);
     out(ctx, g, mix, { pan: 0, verb: p.verb ?? 0.12, stereo: true });
@@ -424,9 +447,9 @@
     bus.gain.setTargetAtTime(0, t1, 0.03);
     const parts = [], oscs = [];
     [-0.45, 0.45].forEach((pan) => {
-      const s = src(ctx, noiseBuf(ctx, d + 0.3, R, 'pink')), lp = BQ(ctx, 'lowpass', 250 * br, 1.4);
+      const s = src(ctx, noiseBuf(ctx, d + 0.3, R, 'pink')), [h1, h2] = hp4(ctx, 70), lp = BQ(ctx, 'lowpass', 250 * br, 1.4);
       lp.frequency.setValueAtTime(250 * br, t0); lp.frequency.exponentialRampToValueAtTime(6500 * br, t1);
-      s.connect(lp); parts.push(pan2(ctx, lp, pan)); s.start(t0); s.stop(t1 + 0.3);
+      s.connect(h1); h2.connect(lp); parts.push(pan2(ctx, lp, pan)); s.start(t0); s.stop(t1 + 0.3);
     });
     const tg = G(ctx, 0); tg.gain.setValueCurveAtTime(curve((u) => Math.pow(u, 1.6), 256, 0.22), t0, d);
     const tlp = BQ(ctx, 'lowpass', 1800, 0.707); tg.connect(tlp); parts.push(tlp);
@@ -512,15 +535,15 @@
     });
     sum(ctx, voices, lp);
     // pedal sub
-    if ((p.sub ?? 0.35) > 0) {
-      const o = osc(ctx, 'sine', mtof(degMidi(K, 0, oct - 1)) * semis(p.pitch || 0)), sg = G(ctx, p.sub ?? 0.35);
+    if ((p.sub ?? 0.18) > 0) {                                        // bajo debajo de una voz: poco sub
+      const o = osc(ctx, 'sine', mtof(degMidi(K, 0, oct - 1)) * semis(p.pitch || 0)), sg = G(ctx, p.sub ?? 0.18);
       o.connect(sg); envIn.push(sg); o.start(t); o.stop(t + d);
     }
     // aire: dos ruidos rosa decorrelados, banda alta ancha, respiración lenta
     if ((p.air ?? 1) > 0) {
       [-0.7, 0.7].forEach((pan, i) => {
-        const s = src(ctx, noiseBuf(ctx, d, R, 'pink')), bp = BQ(ctx, 'bandpass', 4200, 0.45), ag = G(ctx, 0.05 * (p.air ?? 1));
-        const lfo = osc(ctx, 'sine', 0.07 + 0.03 * i), lg = G(ctx, 0.015 * (p.air ?? 1));
+        const s = src(ctx, noiseBuf(ctx, d, R, 'pink')), bp = BQ(ctx, 'bandpass', 4200, 0.45), ag = G(ctx, 0.1 * (p.air ?? 1));
+        const lfo = osc(ctx, 'sine', 0.07 + 0.03 * i), lg = G(ctx, 0.03 * (p.air ?? 1));
         lfo.connect(lg); lg.connect(ag.gain); lfo.start(t); lfo.stop(t + d);
         s.connect(bp); bp.connect(ag); envIn.push(pan2(ctx, ag, pan)); s.start(t); s.stop(t + d);
       });
@@ -555,14 +578,16 @@
   }
 
   /**
-   * Renderiza el clip completo.
-   * cues: [{ at, type, ...params }] · duration (s) · audio: { key, mode, gain, bed, reverb, pocket, seed }
-   * opts: { only: [índices de cue], bed: false, normalize: true }
-   * → { sampleRate, channels, frames, latency, gainDb, peakDb, left, right } (Float32Array)
+   * Renderiza el clip completo, a nivel absoluto calibrado (sin normalizar).
+   * cues: [{ at, type, ...params }] · duration (s) de la escena · audio: { key, mode, gain, bed, reverb, pocket, seed }
+   * opts: { only: [índices de cue], bed: false, tail: s de cola después del final (reverb, colas de
+   *         impactos), normalize: true (pico a −1 dBFS; solo para escuchar suelto, rompe la calibración) }
+   * → { sampleRate, channels, frames (escena + cola), sceneFrames, latency, gainDb, peakDb, left, right } (Float32Array)
    */
   async function render(cues, duration, audio = {}, opts = {}) {
     const lat = await measureLatency();
-    const frames = Math.round(duration * SR);
+    const sceneFrames = Math.round(duration * SR);
+    const frames = sceneFrames + Math.round(Math.max(0, opts.tail || 0) * SR);
     const total = frames + Math.round(PAD * SR) + lat + 64;
     const ctx = new OfflineAudioContext(2, total, SR);
     keepAlive(ctx);
@@ -570,12 +595,19 @@
     const seed = audio.seed ?? 1;
     const K = makeKey(audio.key || 'D', audio.mode || 'major');
     const g = graph(ctx, audio, seed);
-    const list = cues.map((c, i) => ({ ...c, _i: i })).filter((c) => !opts.only || opts.only.includes(c._i));
-    if (audio.bed && opts.bed !== false) list.unshift({ at: 0, type: 'bed', ...audio.bed, _i: -1 });
+    // Semilla por cue = tipo + tiempo (ms) + n.º de aparición de ese mismo tipo en ese mismo tiempo:
+    // agregar o quitar un cue no cambia el ruido/variación de los demás (y `only` tampoco).
+    const seen = new Map();
+    const list = cues.map((c, i) => {
+      const k = c.type + '|' + Math.round(c.at * 1000), n = seen.get(k) || 0;
+      seen.set(k, n + 1);
+      return { ...c, _i: i, _k: k + '|' + n };
+    }).filter((c) => !opts.only || opts.only.includes(c._i));
+    if (audio.bed && opts.bed !== false) list.unshift({ at: 0, type: 'bed', ...audio.bed, _i: -1, _k: 'bed|0|0' });
     for (const c of list) {
       const fn = P[c.type];
       if (!fn) throw new Error('MAudio: preset desconocido ' + c.type);
-      const R = mulberry32(hashStr(c.type) ^ Math.imul(seed, 2654435761) ^ Math.imul(c._i + 7, 40503) ^ Math.round(c.at * 1000));
+      const R = mulberry32(hashStr(c._k) ^ Math.imul(seed, 2654435761));
       const J = (amt) => (R() * 2 - 1) * amt * (c.vary ?? 1);          // variación humana (tono, nivel, paneo)
       const anchor = c.anchor || ANCHOR[c.type] || 'start';
       let d = c.dur ?? (c.type === 'bed' ? duration - c.at : DUR[c.type]);
@@ -589,17 +621,32 @@
     ctx.__keep.length = 0;
     const off = Math.round(PAD * SR) + lat;
     const left = buf.getChannelData(0).slice(off, off + frames), right = buf.getChannelData(1).slice(off, off + frames);
-    // fundidos de seguridad (5 ms al inicio, 30 ms al final) para que no haya clics en los bordes
+    // fundidos de seguridad (5 ms al inicio, 30 ms al final de la cola) para que no haya clics en los bordes
     const fa = Math.round(0.005 * SR), fb = Math.round(0.03 * SR);
     for (let i = 0; i < fa && i < frames; i++) { const k = i / fa; left[i] *= k; right[i] *= k; }
     for (let i = 0; i < fb && i < frames; i++) { const k = i / fb, j = frames - 1 - i; left[j] *= k; right[j] *= k; }
     let peak = 0; for (let i = 0; i < frames; i++) peak = Math.max(peak, Math.abs(left[i]), Math.abs(right[i]));
     let gainDb = 0;
-    if (opts.normalize !== false && peak > 0) {
+    if (opts.normalize === true && peak > 0) {
       gainDb = -1 - 20 * Math.log10(peak);                            // pico a −1 dBFS (resolución máxima en 16 bits)
       const k = dB(gainDb); for (let i = 0; i < frames; i++) { left[i] *= k; right[i] *= k; }
     }
-    return { sampleRate: SR, channels: 2, frames, latency: lat, gainDb, peakDb: peak > 0 ? 20 * Math.log10(peak) : -Infinity, left, right };
+    return { sampleRate: SR, channels: 2, frames, sceneFrames, latency: lat, gainDb, peakDb: peak > 0 ? 20 * Math.log10(peak) : -Infinity, left, right };
+  }
+
+  const toB64 = (bytes) => new Promise((res, rej) => {
+    const fr = new FileReader();
+    fr.onload = () => res(String(fr.result).split(',')[1] || '');
+    fr.onerror = rej;
+    fr.readAsDataURL(new Blob([bytes], { type: 'application/octet-stream' }));
+  });
+  /** Tramo [i0, i0+n) de un render como float32 intercalado (little endian) → base64. Lo usa render.mjs
+      para traer el audio en float (la ganancia, el limitador y el dither a 16 bits los hace ffmpeg). */
+  function chunk(r, i0, n) {
+    n = Math.max(0, Math.min(n, r.frames - i0));
+    const f = new Float32Array(n * 2);
+    for (let i = 0; i < n; i++) { f[2 * i] = r.left[i0 + i]; f[2 * i + 1] = r.right[i0 + i]; }
+    return toB64(f.buffer);
   }
 
   /** Int16 intercalado con dither TPDF sembrado → base64 (vía Blob/FileReader: rápido para clips largos) */
@@ -611,14 +658,9 @@
         pcm[2 * i + c] = x > 32767 ? 32767 : x < -32768 ? -32768 : Math.round(x);
       }
     }
-    const b64 = await new Promise((res, rej) => {
-      const fr = new FileReader();
-      fr.onload = () => res(String(fr.result).split(',')[1] || '');
-      fr.onerror = rej;
-      fr.readAsDataURL(new Blob([pcm.buffer], { type: 'application/octet-stream' }));
-    });
-    return { sampleRate: r.sampleRate, channels: 2, frames: n, format: 's16le', latency: r.latency, gainDb: r.gainDb, peakDb: r.peakDb, b64 };
+    const b64 = await toB64(pcm.buffer);
+    return { sampleRate: r.sampleRate, channels: 2, frames: n, sceneFrames: r.sceneFrames, format: 's16le', latency: r.latency, gainDb: r.gainDb, peakDb: r.peakDb, b64 };
   }
 
-  window.MAudio = { SR, PRESETS: Object.keys(P), LEVEL, ANCHOR, DUR, MODES, render, encode, makeKey, degMidi, mtof };
+  window.MAudio = { SR, PRESETS: Object.keys(P), LEVEL, ANCHOR, DUR, MODES, render, encode, chunk, makeKey, degMidi, mtof };
 })();

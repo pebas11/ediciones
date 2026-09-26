@@ -46,6 +46,7 @@
 <script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
 <script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
 <script src="../lib/stage.js"></script>
+<script src="../lib/audio.js"></script>
 <script type="module">
 import { createStage3D, THREE, fbm } from '../lib/three-stage.mjs';
 import { buildMushroom, buildGrass } from '../lib/mushroom3d.mjs';
@@ -53,7 +54,7 @@ import { buildMushroom, buildGrass } from '../lib/mushroom3d.mjs';
 // Dato verificado (FICHA-HONGOS.md): "Más de 140 especies de Psilocybe son alucinógenas" — Guzmán 2005.
 const STAT = 140;
 
-M.scene({ duration: 14, push: 0 }, async (tl, M) => {
+M.scene({ duration: 14, push: 0, audio: { key: 'D', mode: 'lydian', bed: { cycle: 9, bright: 0.9 } } }, async (tl, M) => {
   const $ = (s) => document.querySelector(s);
   const r = M.rng(21);
 
@@ -222,6 +223,16 @@ M.scene({ duration: 14, push: 0 }, async (tl, M) => {
   const nl = M.textIn($('#numL'), 10.6, { type: 'words', dur: 0.7, stagger: 0.05, ease: 'appleOut' });
   tl.to(['#num', '#numL'], { opacity: 0, y: -14, duration: 0.5, ease: 'appleIn' }, 13.0);
   tl.to('#fade', { opacity: 1, duration: 0.55, ease: 'appleIn' }, 13.3);
+
+  /* ---------------- sonido (docs/AUDIO.md): pocos efectos, cada uno con motivo ---------------- */
+  M.sfx(0.35, 'scan', { dur: 2.1, from: 300, to: 2600, dir: 1, gain: -2 });
+  M.sfx(0.92, 'tick').sfx(1.27, 'tap', { deg: 4, oct: 5, bright: 0.7, gain: -3 });
+  M.sfx(4.3, 'whoosh', { dur: 1.9, peak: 0.45, dir: 1, gain: -1 });
+  M.sfx(6.0, 'grow', { dur: 3.2, density: 90 }).sfx(6.02, 'tick');
+  M.sfx(7.87, 'tick', { tone: 'glass', gain: -2 });
+  M.sfx(9.3, 'whoosh', { dur: 1.0, peak: 0.35, dir: -1, gain: -5 });
+  M.sfx(10.05, 'swell', { dur: 1.0 }).sfx(10.05, 'impact', { weight: 0.8 });
+  M.sfx(10.6, 'shimmer', { degs: [2, 4, 7], gain: -3 });
 
   /* ---------------- por cuadro ---------------- */
   M.onFrame(() => {

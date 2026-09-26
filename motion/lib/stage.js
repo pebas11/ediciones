@@ -245,12 +245,20 @@
 
   window.M = M;
   window.__seek = (t) => M.seek(t);
-  /** Audio de todo el clip → { sampleRate, channels, frames, format:'s16le', b64 (Int16 intercalado), ... } o null.
-      o: { duration (s, por defecto M.duration), only: [índices de cue], bed: false, normalize: false } */
+  /** Audio de todo el clip (nivel absoluto calibrado, sin normalizar; ver docs/AUDIO.md)
+      → { sampleRate, channels, frames, sceneFrames, format:'s16le', b64 (Int16 intercalado), ... } o null.
+      o: { duration (s, por defecto M.duration), tail (s de cola), only: [índices de cue], bed: false,
+           bedOnly: true (solo la cama, aunque la escena no tenga `bed`), normalize: true,
+           keep: true (no codifica: guarda el render en window.__audioResult y devuelve solo los metadatos;
+           render.mjs lo trae en float con MAudio.chunk) } */
   window.__renderAudio = async (o = {}) => {
     const A = M.audio.opts || {};
-    if (!window.MAudio || (!M.audio.cues.length && !A.bed)) return null;
-    const r = await window.MAudio.render(M.audio.cues, o.duration ?? M.duration, A, o);
+    if (!window.MAudio) return null;
+    if (!o.bedOnly && !M.audio.cues.length && !A.bed) return null;
+    const r = o.bedOnly
+      ? await window.MAudio.render([], o.duration ?? M.duration, { ...A, bed: A.bed || {} }, { ...o, only: null, bed: true })
+      : await window.MAudio.render(M.audio.cues, o.duration ?? M.duration, A, o);
+    if (o.keep) { window.__audioResult = r; const { left, right, ...meta } = r; return meta; }
     return window.MAudio.encode(r, A.seed ?? 1);
   };
 })();
