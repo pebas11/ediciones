@@ -48,7 +48,11 @@
     4. Versión ENTREGA.
     5. Enviar y hacer commit.
 
-### Serie 3: Psicodélicos SIN TEXTO. PENDIENTE (pedido del 26/09)
+### Serie 3: Psicodélicos SIN TEXTO. CONSTRUIDA; render en curso (pedido del 26/09)
+- Escenas p01–p05 construidas (QA sin errores).
+- Render FONDO con audio + ENTREGA: lanzados con `/tmp/claude-0/batch.sh` (se pierde si reinicia el contenedor). Si faltan `renders/p0*_ENTREGA.mp4`, re-renderizar.
+- p03: el recorrido de los axones cambió al final y no se revisó en detalle. En la hoja se ve bien.
+
 Son 5 animaciones útiles como B-roll para narración, **sin ningún texto en pantalla**. Mismo estilo v3 (3D, cálido y azul, grano, viñeta, fundido a `#060504`) y con sonido. Cada una dura 12–15 s y muestra una idea por beat. Escenas en `scenes/p0N-*.html`.
 
 **Storyboards:**

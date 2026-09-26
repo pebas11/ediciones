@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>P04 · Cerebro entrópico (sin texto)</title>
+<link rel="stylesheet" href="../lib/theme.css">
+<script type="importmap">{ "imports": { "three": "../node_modules/three/build/three.module.js", "three/addons/": "../node_modules/three/examples/jsm/" } }</script>
+<style>
+  /* Guion de color: actividad ordenada = cálido terroso; actividad entrópica = UN acento azul. Sin texto: B-roll. */
+  body { background: #060504; }
+  #gl { position: absolute; inset: 0; }
+  #grain { position: absolute; inset: -20px; opacity: 0.06; mix-blend-mode: overlay; pointer-events: none; }
+  #vig { position: absolute; inset: 0; background: radial-gradient(110% 100% at 50% 46%, transparent 48%, rgba(4,3,2,0.62) 100%); }
+  #fade { position: absolute; inset: 0; background: #060504; opacity: 1; }
+</style>
+</head>
+<body>
+<div id="world">
+  <div id="gl"></div>
+  <div id="vig"></div>
+  <canvas id="grain" width="512" height="512" style="width:1960px;height:1120px"></canvas>
+  <div id="fade"></div>
+</div>
+
+<script src="../node_modules/gsap/dist/gsap.min.js"></script>
+<script src="../node_modules/gsap/dist/SplitText.min.js"></script>
+<script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
+<script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
+<script src="../lib/stage.js"></script>
+<script src="../lib/audio.js"></script>
+<script type="module">
+import { createStage3D, THREE, fbm } from '../lib/three-stage.mjs';
+
+M.scene({ duration: 14, push: 0, audio: { key: 'D', mode: 'lydian', bed: { cycle: 9, bright: 0.85 } } }, async (tl, M) => {
+  const $ = (s) => document.querySelector(s);
+  const r = M.rng(44);
+
+  { const g = $('#grain').getContext('2d'); const im = g.createImageData(512, 512); const rn = M.rng(3);
+    for (let i = 0; i < im.data.length; i += 4) { const v = 128 + (rn() - 0.5) * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+    g.putImageData(im, 0, 0); }
+
+  const S = createStage3D($('#gl'), { bgTop: '#130f0c', bgBottom: '#050403', bgGlow: '#2a1f17', bloom: { strength: 0.1, radius: 0.35, threshold: 0.95 }, exposure: 1.0, env: 0.2 });
+  const { scene, camera, renderer } = S;
+  const PR = renderer.getPixelRatio();
+
+  /* ---------------- geometría del cerebro (nube de puntos sobre la superficie) ---------------- */
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+  const gauss = (v, s) => Math.exp(-(v / s) * (v / s));
+  const sstep = (a, b, v) => { const t = Math.min(1, Math.max(0, (v - a) / (b - a))); return t * t * (3 - 2 * t); };
+  // cerebro: ~167 × 140 × 93 mm → semiejes 0,84 (z, adelante +) × 0,70 (x) × 0,50 (y)
+  function cortexBase(d) {
+    let x = d.x * 0.70, y = d.y * 0.52, z = d.z * 0.84;
+    if (y < 0) y *= 0.72;                                            // base aplanada
+    const zf = z / 0.84;
+    x *= 1 - 0.13 * sstep(0.2, 1, zf) - 0.05 * sstep(0.4, 1, -zf);    // polo frontal y occipital más angostos
+    y *= 1 - 0.18 * sstep(0.3, 1, zf);                               // frente baja
+    // lóbulo temporal: abulta hacia abajo en los costados
+    const tl_ = gauss(Math.abs(x) - 0.58, 0.16) * gauss(z - 0.05, 0.36) * sstep(0.1, -0.2, y);
+    y -= 0.13 * tl_;
+    // cisura de Silvio: surco oblicuo arriba del temporal
+    const syl = gauss((y + 0.02) - (z - 0.1) * 0.35, 0.03) * sstep(0.35, 0.6, Math.abs(x) / 0.7) * sstep(-0.45, 0.1, z) * sstep(0.7, 0.35, z);
+    // cisura interhemisférica
+    const fis = gauss(x, 0.05) * sstep(-0.15, 0.25, y);
+    y -= 0.12 * fis;
+    return { p: V(x, y, z), syl, fis };
+  }
+  function cortex(d) {
+    const b = cortexBase(d); const p = b.p;
+    const n = fbm(p.x * 4.2 + 3.1 * Math.sign(p.x), p.y * 4.2, p.z * 4.2, 3);   // hemisferios con surcos distintos
+    const sulc = Math.max(gauss(n, 0.07), b.syl);
+    const len = p.length();
+    p.multiplyScalar(1 - (0.03 * sulc + 0.02 * b.syl) / len);
+    return { p, sulc: Math.max(sulc, b.fis * 0.8) };
+  }
+  // test de "adentro del cerebro" (forma base, sin surcos) para que nada se atraviese
+  function insideCortex(q, margin = 0.99) {
+    let yy = q.y; if (yy < 0) yy /= 0.72;
+    const zf = q.z / 0.84;
+    const xs = 0.70 * (1 - 0.13 * sstep(0.2, 1, zf) - 0.05 * sstep(0.4, 1, -zf));
+    const ys = 0.52 * (1 - 0.18 * sstep(0.3, 1, zf));
+    return (q.x / xs) ** 2 + (yy / ys) ** 2 + zf ** 2 < margin;
+  }
+  const CB = { c: V(0, -0.34, -0.5), a: V(0.46, 0.2, 0.3) };
+  const insideCB = (q) => ((q.x - CB.c.x) / CB.a.x) ** 2 + ((q.y - CB.c.y) / CB.a.y) ** 2 + ((q.z - CB.c.z) / CB.a.z) ** 2 < 0.98;
+  function cerebellum(d) {
+    // dos lóbulos unidos por el vermis, con folias horizontales finas
+    const x = d.x * CB.a.x, y0 = d.y * CB.a.y, z = d.z * CB.a.z;
+    const verm = gauss(x, 0.06) * 0.25;
+    const fol = Math.abs(Math.sin((y0 + 0.4 * z) * 70));
+    const k = 1 - 0.035 * (1 - fol) - verm * 0.2;
+    return { p: V(x * k, y0 * k, z * k).add(CB.c), sulc: (1 - fol) * 0.7 };
+  }
+
+  const pos = [], nrm = [], sul = [], mod = [], rnd = [];
+  function surfPoint(fn, d) {
+    const e = 0.004;
+    const t1 = V(0, 1, 0).cross(d); if (t1.lengthSq() < 1e-4) t1.set(1, 0, 0); t1.normalize();
+    const t2 = d.clone().cross(t1).normalize();
+    const a = fn(d.clone().addScaledVector(t1, e).normalize()).p, b = fn(d.clone().addScaledVector(t1, -e).normalize()).p;
+    const c = fn(d.clone().addScaledVector(t2, e).normalize()).p, dd = fn(d.clone().addScaledVector(t2, -e).normalize()).p;
+    const n = a.sub(b).cross(c.sub(dd)).normalize();
+    const s = fn(d);
+    return { p: s.p, n, sulc: s.sulc };
+  }
+  const randDir = () => { const u = r() * 2 - 1, th = r() * Math.PI * 2, s = Math.sqrt(1 - u * u); return V(s * Math.cos(th), u, s * Math.sin(th)); };
+  const pushPt = (p, n, sulc) => { pos.push(p.x, p.y, p.z); nrm.push(n.x, n.y, n.z); sul.push(sulc); rnd.push(r()); };
+  // corteza
+  for (let i = 0; i < 30000; i++) {
+    const d = randDir(); const s = surfPoint(cortex, d);
+    if (s.n.dot(s.p) < 0) s.n.negate();
+    pushPt(s.p, s.n, s.sulc);
+  }
+  const nCortex = pos.length / 3;
+  // cerebelo (solo la parte que queda fuera de la corteza)
+  for (let i = 0; i < 9000; i++) {
+    const d = randDir(); const s = surfPoint(cerebellum, d);
+    if (insideCortex(s.p)) continue;
+    if (s.n.dot(s.p.clone().sub(CB.c)) < 0) s.n.negate();
+    pushPt(s.p, s.n, s.sulc);
+  }
+  const nCB = pos.length / 3;
+  // tronco: tubo que entra por debajo de la corteza y pasa por delante del cerebelo
+  const stemC = new THREE.CatmullRomCurve3([V(0, -0.05, -0.12), V(0, -0.35, -0.2), V(0, -0.66, -0.27), V(0, -0.86, -0.3)]);
+  for (let i = 0; i < 3200; i++) {
+    const u = r(), th = r() * Math.PI * 2;
+    const c = stemC.getPointAt(u), tg = stemC.getTangentAt(u);
+    const n = V(Math.cos(th), 0, Math.sin(th)); n.addScaledVector(tg, -n.dot(tg)).normalize();
+    const rad = 0.14 - 0.045 * u + 0.02 * gauss(u - 0.3, 0.12);
+    const p = c.clone().addScaledVector(n, rad);
+    if (insideCortex(p) || insideCB(p)) continue;
+    pushPt(p, n, 0.1);
+  }
+  const N = pos.length / 3;
+
+  // módulos funcionales: semillas por hemisferio (x = |x|) → cada punto va a la más cercana de su lado
+  const seeds0 = [[0.28, 0.08, 0.7], [0.45, 0.3, 0.38], [0.42, 0.42, 0.02], [0.4, 0.34, -0.36], [0.3, 0.1, -0.74], [0.6, -0.22, 0.28], [0.62, -0.12, -0.25], [0.1, 0.28, -0.05]];
+  const seeds = []; [-1, 1].forEach((s) => seeds0.forEach(([x, y, z]) => seeds.push(V(s * x, y, z))));
+  const NM = seeds.length + 2;   // + cerebelo + tronco
+  const members = Array.from({ length: NM }, () => []);
+  for (let i = 0; i < N; i++) {
+    let m;
+    if (i >= nCB) m = NM - 1; else if (i >= nCortex) m = NM - 2;
+    else { const p = V(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]); let best = 1e9; m = 0;
+      seeds.forEach((sd, k) => { if (Math.sign(sd.x) !== Math.sign(p.x || 1)) return; const d2 = sd.distanceToSquared(p); if (d2 < best) { best = d2; m = k; } }); }
+    mod.push(m); members[m].push(i);
+  }
+  // cada módulo: fase propia y dirección de onda propia (orden = mismas frecuencias, fases fijas)
+  const modPh = [], modDir = [];
+  for (let m = 0; m < NM; m++) { modPh.push((m * 2.39996) % (Math.PI * 2)); const d = randDir(); modDir.push(d.x, d.y, d.z); }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('aN', new THREE.Float32BufferAttribute(nrm, 3));
+  geo.setAttribute('aS', new THREE.Float32BufferAttribute(sul, 1));
+  geo.setAttribute('aR', new THREE.Float32BufferAttribute(rnd, 1));
+  geo.setAttribute('aPh', new THREE.Float32BufferAttribute(mod.map((m) => modPh[m]), 1));
+  geo.setAttribute('aWd', new THREE.Float32BufferAttribute(mod.flatMap((m) => [modDir[m * 3], modDir[m * 3 + 1], modDir[m * 3 + 2]]), 3));
+
+  const NOISE = `
+    float h3(vec3 p){ p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+    float vn(vec3 x){ vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
+      return mix(mix(mix(h3(i), h3(i + vec3(1,0,0)), f.x), mix(h3(i + vec3(0,1,0)), h3(i + vec3(1,1,0)), f.x), f.y),
+                 mix(mix(h3(i + vec3(0,0,1)), h3(i + vec3(1,0,1)), f.x), mix(h3(i + vec3(0,1,1)), h3(i + vec3(1,1,1)), f.x), f.y), f.z); }`;
+  const U = {
+    uT: { value: 0 }, uMix: { value: 0 }, uAppear: { value: 0 }, uOrd: { value: 0 },
+    uScale: { value: 1080 / (2 * Math.tan(THREE.MathUtils.degToRad(28) / 2)) * PR },
+    uCam: { value: new THREE.Vector3() },
+    uKey: { value: V(-4, 4.5, 4).normalize() }, uRim: { value: V(3.5, 3, -4).normalize() },
+  };
+  const ptsMat = new THREE.ShaderMaterial({
+    uniforms: U, transparent: true, depthWrite: false,
+    vertexShader: `
+      uniform float uT, uMix, uAppear, uOrd, uScale; uniform vec3 uCam, uKey, uRim;
+      attribute vec3 aN, aWd; attribute float aS, aR, aPh;
+      varying vec3 vC; varying float vA;
+      ${NOISE}
+      void main(){
+        vec3 V = normalize(uCam - position);
+        float face = dot(aN, V);
+        float front = smoothstep(-0.35, 0.45, face);
+        // luz como h01: clave cálida lateral, contraluz frío, relleno bajo
+        float lam = max(dot(aN, uKey), 0.0);
+        float rim = pow(1.0 - max(face, 0.0), 2.5) * max(dot(aN, uRim) + 0.35, 0.0);
+        float ao = 1.0 - 0.72 * aS;
+        vec3 base = ((vec3(0.10, 0.075, 0.06) + vec3(0.42, 0.33, 0.25) * lam) * ao + vec3(0.22, 0.30, 0.50) * rim * 0.5) * (1.0 - 0.25 * uMix);
+        // actividad ordenada: misma frecuencia en todo el cerebro, cada módulo con su fase → ondas periódicas en bloques
+        float w = 0.5 + 0.5 * sin(uT * 5.65 + aPh - dot(position, aWd) * 5.0);
+        float ord = pow(w, 5.0) * uOrd;
+        // actividad entrópica: patrón que no se repite, a varias escalas
+        float n = vn(position * 4.2 + vec3(0.0, uT * 0.45, uT * 0.3)) * 0.62 + vn(position * 10.0 - vec3(uT * 0.9, 0.0, uT * 0.5)) * 0.38;
+        float ent = smoothstep(0.52, 0.8, n);
+        float flick = step(0.965, fract(sin(dot(vec2(aR * 91.7, floor(uT * 7.0 + aR * 13.0)), vec2(12.99, 78.23))) * 43758.5));
+        ent = max(ent, flick * 0.8);
+        float act = mix(ord, ent, uMix);
+        vec3 warm = vec3(0.95, 0.55, 0.22), blue = vec3(0.34, 0.52, 1.0);
+        vec3 ac = mix(warm, blue, smoothstep(0.25, 0.75, uMix));
+        vC = min(base + ac * act * (0.7 + 0.3 * ao), vec3(0.95));
+        float appear = smoothstep(aR * 0.6, aR * 0.6 + 0.4, uAppear);
+        vA = appear * (0.1 + 0.75 * front) * (0.5 + 0.5 * ao) * (0.55 + 0.45 * act);
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        gl_PointSize = (0.0075 + 0.0045 * act) * uScale / -mv.z;
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      varying vec3 vC; varying float vA;
+      void main(){ vec2 q = gl_PointCoord - 0.5; float d = length(q); if (d > 0.5) discard;
+        gl_FragColor = vec4(vC, vA * smoothstep(0.5, 0.3, d)); }`,
+  });
+  const brain = new THREE.Group(); scene.add(brain);
+  const points = new THREE.Points(geo, ptsMat); brain.add(points);
+
+  /* ---------------- conexiones: locales (cálidas, dentro de cada módulo) y de largo alcance (azules) ---------------- */
+  const P = (i) => V(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]);
+  const SEG = 28;
+  const lp = [], lu = [], ls = [], lk = [], lph = [];
+  function addLink(a, b, bow, start, kind, ph) {
+    const mid = a.clone().add(b).multiplyScalar(0.5);
+    const ctrl = mid.multiplyScalar(bow);   // se curva hacia el centro: tractos por dentro, nunca por fuera
+    const cv = new THREE.QuadraticBezierCurve3(a.clone().multiplyScalar(0.985), ctrl, b.clone().multiplyScalar(0.985));
+    const pts = cv.getPoints(SEG);
+    for (let s = 0; s < SEG; s++) {
+      [s, s + 1].forEach((k) => { lp.push(pts[k].x, pts[k].y, pts[k].z); lu.push(k / SEG); ls.push(start); lk.push(kind); lph.push(ph); });
+    }
+  }
+  const pick = (m) => members[m][Math.floor(r() * members[m].length)];
+  // locales: 5 por módulo cortical, cortas
+  for (let m = 0; m < seeds.length; m++) {
+    let made = 0, guard = 0;
+    while (made < 5 && guard++ < 200) {
+      const a = P(pick(m)), b = P(pick(m)); const d = a.distanceTo(b);
+      if (d < 0.1 || d > 0.26) continue;
+      addLink(a, b, 0.9, 0.9 + r() * 1.3, 0, modPh[m]); made++;
+    }
+  }
+  // largo alcance: entre regiones distintas, incluidos los dos hemisferios
+  const NL = 170;
+  for (let k = 0; k < NL; k++) {
+    let ma = Math.floor(r() * (NM - 1)), mb = Math.floor(r() * (NM - 1));
+    if (ma === mb) mb = (mb + 3) % (NM - 1);
+    const a = P(pick(ma)), b = P(pick(mb));
+    if (a.distanceTo(b) < 0.45) { k--; continue; }
+    const start = 5.3 + Math.pow(k / NL, 0.8) * 3.6 + r() * 0.25;
+    addLink(a, b, 0.42 + r() * 0.25, start, 1, r() * 6.28);
+  }
+  const lg = new THREE.BufferGeometry();
+  lg.setAttribute('position', new THREE.Float32BufferAttribute(lp, 3));
+  lg.setAttribute('aU', new THREE.Float32BufferAttribute(lu, 1));
+  lg.setAttribute('aSt', new THREE.Float32BufferAttribute(ls, 1));
+  lg.setAttribute('aK', new THREE.Float32BufferAttribute(lk, 1));
+  lg.setAttribute('aPh', new THREE.Float32BufferAttribute(lph, 1));
+  const LU = { uT: U.uT, uWarm: { value: 1 }, uBlue: { value: 1 } };
+  const lineMat = new THREE.ShaderMaterial({
+    uniforms: LU, transparent: true, depthWrite: false,
+    vertexShader: `
+      uniform float uT; attribute float aU, aSt, aK, aPh; varying float vU, vSt, vK, vPh;
+      void main(){ vU = aU; vSt = aSt; vK = aK; vPh = aPh; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: `
+      uniform float uT, uWarm, uBlue; varying float vU, vSt, vK, vPh;
+      void main(){
+        float grow = clamp((uT - vSt) / (vK > 0.5 ? 1.3 : 0.9), 0.0, 1.0);
+        if (vU > grow) discard;
+        float tipFade = smoothstep(grow, grow - 0.12, vU) * 0.6 + 0.4 * step(0.999, grow);
+        float a;
+        vec3 c;
+        if (vK < 0.5) {
+          // local: late en fase con su módulo
+          float w = pow(0.5 + 0.5 * sin(uT * 5.65 + vPh), 5.0);
+          c = vec3(0.98, 0.62, 0.3); a = (0.4 + 0.6 * w) * uWarm;
+        } else {
+          // largo alcance: señales que viajan a ritmos distintos
+          float pu = fract(uT * (0.35 + fract(vPh) * 0.5) + vPh);
+          float pulse = smoothstep(0.1, 0.0, abs(vU - pu));
+          c = mix(vec3(0.30, 0.46, 0.95), vec3(0.68, 0.8, 1.0), pulse); a = (0.32 + 0.6 * pulse) * uBlue;
+        }
+        gl_FragColor = vec4(c, a * max(tipFade, 0.4));
+      }`,
+  });
+  const links = new THREE.LineSegments(lg, lineMat); links.renderOrder = 2; brain.add(links);
+  brain.rotation.set(0.0, 0, 0);
+
+  /* ---------------- tiempo y beats ---------------- */
+  // Beat 1 (0,2–4,9): aparece el cerebro; actividad ORDENADA (ondas periódicas cálidas, módulos sincronizados)
+  tl.to('#fade', { opacity: 0, duration: 0.9, ease: 'appleOut' }, 0.15);
+  tl.to(U.uAppear, { value: 1, duration: 1.8, ease: 'appleOut' }, 0.2);
+  tl.to(U.uOrd, { value: 1, duration: 1.2, ease: 'apple' }, 0.7);
+  // Beat 2 (4,9–9,2): el orden se rompe → patrón diverso azul, crecen conexiones entre regiones
+  tl.to(U.uMix, { value: 1, duration: 2.6, ease: 'apple' }, 4.9);
+  tl.to(LU.uWarm, { value: 0.25, duration: 2.0, ease: 'apple' }, 5.2);
+  // Beat 3 (9,2–13,3): estado entrópico sostenido, señales viajando por toda la red
+  tl.to('#fade', { opacity: 1, duration: 0.6, ease: 'appleIn' }, 13.3);
+
+  /* ---------------- cámara: lenta y motivada ---------------- */
+  const cam = { ang: -1.05, rad: 4.3, y: 0.75, lx: 0, ly: -0.12, lz: 0 };
+  tl.to(cam, { ang: -1.2, rad: 4.0, duration: 4.8, ease: 'appleOut' }, 0);
+  // al romperse el orden, la cámara sube para ver ambos hemisferios conectándose
+  tl.to(cam, { ang: -1.6, rad: 3.9, y: 2.3, ly: -0.2, duration: 3.6, ease: 'apple' }, 4.9);
+  tl.to(cam, { ang: -1.85, rad: 3.7, y: 2.1, duration: 4.9, ease: 'none' }, 8.5);
+
+  /* ---------------- sonido (docs/AUDIO.md) ---------------- */
+  const per = (Math.PI * 2) / 5.65;          // período de la onda ordenada (≈1,11 s)
+  [2, 3, 4].forEach((k, i) => M.sfx(k * per + 0.05, 'tap', { deg: 0, oct: 4, bright: 0.6, vary: 0, gain: -6 - i }));   // pulso regular = orden
+  M.sfx(4.9, 'whoosh', { dur: 3.2, peak: 0.5, dir: -1, gain: -4 });
+  M.sfx(5.3, 'grow', { dur: 3.8, density: 120, gain: -2 });
+  M.sfx(8.6, 'shimmer', { degs: [2, 4, 7], spread: 0.07, gain: -4 });
+
+  /* ---------------- por cuadro ---------------- */
+  M.onFrame((t) => {
+    U.uT.value = t;
+    camera.position.set(Math.sin(cam.ang) * cam.rad, cam.y, Math.cos(cam.ang) * cam.rad);
+    camera.lookAt(cam.lx, cam.ly, cam.lz);
+    U.uCam.value.copy(camera.position);
+    S.render();
+  });
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>P03 · Plasticidad (sin texto)</title>
+<link rel="stylesheet" href="../lib/theme.css">
+<script type="importmap">{ "imports": { "three": "../node_modules/three/build/three.module.js", "three/addons/": "../node_modules/three/examples/jsm/" } }</script>
+<style>
+  /* Sin texto: B-roll. Cálido terroso (tejido) + UN acento azul (sinapsis nuevas). */
+  body { background: #060504; }
+  #gl { position: absolute; inset: 0; }
+  #grain { position: absolute; inset: -20px; opacity: 0.06; mix-blend-mode: overlay; pointer-events: none; }
+  #vig { position: absolute; inset: 0; background: radial-gradient(115% 100% at 55% 45%, transparent 48%, rgba(4,3,2,0.62) 100%); }
+  #fade { position: absolute; inset: 0; background: #060504; opacity: 1; }
+</style>
+</head>
+<body>
+<div id="world">
+  <div id="gl"></div>
+  <div id="vig"></div>
+  <canvas id="grain" width="512" height="512" style="width:1960px;height:1120px"></canvas>
+  <div id="fade"></div>
+</div>
+
+<script src="../node_modules/gsap/dist/gsap.min.js"></script>
+<script src="../node_modules/gsap/dist/SplitText.min.js"></script>
+<script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
+<script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
+<script src="../lib/stage.js"></script>
+<script src="../lib/audio.js"></script>
+<script type="module">
+import { createStage3D, THREE, fbm } from '../lib/three-stage.mjs';
+
+M.scene({ duration: 14.5, push: 0, audio: { key: 'D', mode: 'lydian', bed: { cycle: 9, bright: 0.85 } } }, async (tl, M) => {
+  const $ = (s) => document.querySelector(s);
+  const r = M.rng(31);
+  const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
+
+  { const g = $('#grain').getContext('2d'); const im = g.createImageData(512, 512); const rn = M.rng(3);
+    for (let i = 0; i < im.data.length; i += 4) { const v = 128 + (rn() - 0.5) * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+    g.putImageData(im, 0, 0); }
+
+  const S = createStage3D($('#gl'), { bgTop: '#130f0c', bgBottom: '#050403', bgGlow: '#2a1e16', bloom: { strength: 0.22, radius: 0.45, threshold: 0.93 }, exposure: 1.0, env: 0.22 });
+  const { scene, camera } = S;
+  scene.fog = new THREE.FogExp2('#0a0807', 0.1);
+
+  /* ---------------- luces (como h01): clave cálida lateral, contraluz frío, relleno bajo ---------------- */
+  const key = new THREE.DirectionalLight('#ffdcae', 2.3); key.position.set(-4, 5, 4); key.castShadow = true;
+  key.shadow.mapSize.set(2048, 2048); key.shadow.radius = 4; key.shadow.bias = -0.0004;
+  Object.assign(key.shadow.camera, { left: -4, right: 4, top: 4, bottom: -4, near: 0.5, far: 20 }); key.shadow.camera.updateProjectionMatrix(); scene.add(key);
+  const rim = new THREE.DirectionalLight('#7fa2ff', 1.6); rim.position.set(3.5, 2.5, -4); scene.add(rim);
+  scene.add(new THREE.HemisphereLight('#3a3440', '#140d08', 0.45));
+  const glowL = new THREE.PointLight('#8fb0ff', 0, 3.2, 1.6); glowL.position.set(0.3, 0.9, 0.6); scene.add(glowL);
+
+  /* ---------------- dendrita: tubo propio con marco estable (N≈arriba, B≈hacia cámara) ---------------- */
+  const X0 = -11, X1 = 11;
+  const C = (x) => V(x, 0.22 * Math.sin(x * 0.33) + 0.06 * Math.sin(x * 1.05 + 1), 0.35 * Math.sin(x * 0.21 + 0.4));
+  const Rb = (x) => 0.29 * (1 + 0.1 * Math.sin(x * 0.55 + 2)) * (1 - 0.012 * x);
+  const disp = (x, th) => 0.05 * fbm(x * 1.3, Math.cos(th) * 0.9, Math.sin(th) * 0.9) + 0.02 * fbm(x * 5, Math.cos(th) * 3, Math.sin(th) * 3 + 7);
+  const frame = (x) => { const T = C(x + 0.01).sub(C(x - 0.01)).normalize(); const N = V(0, 1, 0).addScaledVector(T, -T.y).normalize(); const B = T.clone().cross(N); return { T, N, B }; };
+  const surfDir = (x, th) => { const { N, B } = frame(x); return N.multiplyScalar(Math.cos(th)).addScaledVector(B, Math.sin(th)); };
+
+  const tissue = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.5, sheen: 0.7, sheenColor: new THREE.Color('#ffcf9e'), sheenRoughness: 0.5, clearcoat: 0.25, clearcoatRoughness: 0.45 });
+  {
+    const nU = 520, nV = 48, pos = [], col = [], idx = [];
+    const a = new THREE.Color('#a8674a'), b = new THREE.Color('#c99472'), c2 = new THREE.Color('#7a4a38');
+    for (let i = 0; i <= nU; i++) { const x = X0 + (X1 - X0) * i / nU; const c = C(x);
+      for (let j = 0; j <= nV; j++) { const th = j / nV * Math.PI * 2; const d = surfDir(x, th); const R = Rb(x) * (1 + disp(x, th));
+        const p = c.clone().addScaledVector(d, R); pos.push(p.x, p.y, p.z);
+        const n = fbm(x * 3, Math.cos(th) * 2, Math.sin(th) * 2 + 3); const cc = a.clone().lerp(b, 0.5 + 0.5 * n).lerp(c2, Math.max(0, fbm(x * 0.8, th, 11)) * 0.7);
+        col.push(cc.r, cc.g, cc.b); } }
+    for (let i = 0; i < nU; i++) for (let j = 0; j < nV; j++) { const A = i * (nV + 1) + j, Bq = A + nV + 1; idx.push(A, Bq, A + 1, Bq, Bq + 1, A + 1); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx); g.computeVertexNormals();
+    const m = new THREE.Mesh(g, tissue); m.castShadow = m.receiveShadow = true; scene.add(m);
+  }
+
+  /* ---------------- espinas ---------------- */
+  const neckGeo = new THREE.CylinderGeometry(0.024, 0.042, 1, 14, 6, true); neckGeo.translate(0, 0.5, 0);
+  { const p = neckGeo.attributes.position; for (let i = 0; i < p.count; i++) { const y = p.getY(i); const f = 1 + 0.55 * Math.pow(1 - y, 4); p.setX(i, p.getX(i) * f); p.setZ(i, p.getZ(i) * f); } neckGeo.computeVertexNormals(); }
+  const headGeo = new THREE.SphereGeometry(1, 28, 20);
+  const spineMat = new THREE.MeshPhysicalMaterial({ color: '#be8664', roughness: 0.5, sheen: 0.7, sheenColor: new THREE.Color('#ffcf9e'), sheenRoughness: 0.5, clearcoat: 0.25, clearcoatRoughness: 0.45 });
+  const spines = []; const WARM = new THREE.Color('#be8664'), BLUE = new THREE.Color('#5d7fd8');
+  function makeSpine(x, th, L, hr, isNew) {
+    const d = surfDir(x, th); const base = C(x).addScaledVector(d, Rb(x) * 0.8);
+    const g = new THREE.Group(); g.position.copy(base); g.quaternion.setFromUnitVectors(V(0, 1, 0), d);
+    const neck = new THREE.Mesh(neckGeo, spineMat); neck.castShadow = neck.receiveShadow = true;
+    const hm = isNew ? spineMat.clone() : spineMat;
+    if (isNew) { hm.emissive = new THREE.Color('#4a6fd8'); hm.emissiveIntensity = 0; }
+    const head = new THREE.Mesh(headGeo, hm); head.castShadow = head.receiveShadow = true;
+    g.add(neck, head); scene.add(g);
+    const s = { x, th, d, base, L, hr, g, neck, head, hm, isNew, len: { v: isNew ? 0 : 1 }, hv: { v: isNew ? 0 : 1 } };
+    s.tip = () => base.clone().addScaledVector(d, L + hr * 0.85);
+    spines.push(s); return s;
+  }
+  // distancia mínima entre segmentos
+  function segDist(p1, q1, p2, q2) {
+    const d1 = q1.clone().sub(p1), d2 = q2.clone().sub(p2), rr = p1.clone().sub(p2);
+    const a = d1.dot(d1), e = d2.dot(d2), f = d2.dot(rr), c = d1.dot(rr), b = d1.dot(d2), den = a * e - b * b;
+    let s = den > 1e-9 ? THREE.MathUtils.clamp((b * f - c * e) / den, 0, 1) : 0; let t = (b * s + f) / e;
+    if (t < 0) { t = 0; s = THREE.MathUtils.clamp(-c / a, 0, 1); } else if (t > 1) { t = 1; s = THREE.MathUtils.clamp((b - c) / a, 0, 1); }
+    return p1.clone().addScaledVector(d1, s).distanceTo(p2.clone().addScaledVector(d2, t));
+  }
+  const ptSeg = (c, p, q) => { const d = q.clone().sub(p); const t = THREE.MathUtils.clamp(c.clone().sub(p).dot(d) / d.lengthSq(), 0, 1); return p.clone().addScaledVector(d, t).distanceTo(c); };
+  const spineSeg = (s) => [s.base, s.base.clone().addScaledVector(s.d, s.L + s.hr)];
+  const spineOK = (x, th, L, hr) => { const d = surfDir(x, th); const b0 = C(x).addScaledVector(d, Rb(x) * 0.95), b1 = C(x).addScaledVector(d, Rb(x) * 0.8 + L + hr);
+    return spines.every((o) => { const [p, q] = spineSeg(o); return segDist(b0, b1, p, q) > hr + o.hr + 0.06; }); };
+
+  // nuevas (zona central, apuntan arriba/adelante para leer el crecimiento)
+  const NEW = [];
+  const newPlan = [[-1.0, -0.15], [-0.4, 0.7], [0.15, 0.0], [0.7, 0.9], [1.3, -0.25], [1.75, 0.5]];
+  newPlan.forEach(([x, th]) => { for (let k = 0; k < 20; k++) { const xx = x + (k ? (r() - 0.5) * 0.3 : 0), tt = th + (k ? (r() - 0.5) * 0.5 : 0); const L = 0.34 + r() * 0.12, hr = 0.085 + r() * 0.025;
+    if (spineOK(xx, tt, L, hr)) { NEW.push(makeSpine(xx, tt, L, hr, true)); break; } } });
+  // existentes (maduras, cálidas), a lo largo de toda la dendrita
+  for (let n = 0, tries = 0; n < 34 && tries < 600; tries++) {
+    const x = -6 + r() * 13, th = (r() - 0.5) * Math.PI * 2; const stub = r() < 0.3;
+    const L = stub ? 0.12 + r() * 0.08 : 0.24 + r() * 0.2, hr = stub ? 0.08 + r() * 0.02 : 0.065 + r() * 0.035;
+    if (x > -1.4 && x < 2.1 && Math.cos(th) > -0.3 && Math.abs(Math.sin(th)) < 0.97) continue;   // deja lugar a las nuevas
+    if (spineOK(x, th, L, hr)) { makeSpine(x, th, L, hr, false); n++; }
+  }
+
+  /* ---------------- axones con botones (contacto en las espinas nuevas) ---------------- */
+  const camSamples = [];
+  const camAt = (c) => { const tg = V(c.lx, c.ly, c.lz); return tg.add(V(Math.sin(c.ang) * Math.cos(c.el), Math.sin(c.el), Math.cos(c.ang) * Math.cos(c.el)).multiplyScalar(c.rad)); };
+  const CAM = [
+    { ang: -0.6, el: 0.2, rad: 5.4, lx: 0.1, ly: 0.12, lz: 0 },
+    { ang: -0.5, el: 0.22, rad: 5.0, lx: 0.25, ly: 0.18, lz: 0 },
+    { ang: -0.32, el: 0.28, rad: 3.6, lx: 0.35, ly: 0.32, lz: 0.1 },
+    { ang: -0.18, el: 0.26, rad: 4.6, lx: 0.35, ly: 0.3, lz: 0 },
+    { ang: -0.1, el: 0.25, rad: 4.7, lx: 0.35, ly: 0.3, lz: 0 },
+  ];
+  CAM.forEach((c, i) => { camSamples.push(camAt(c)); if (i) camSamples.push(camAt(c).lerp(camAt(CAM[i - 1]), 0.5)); });
+  const axonMat = new THREE.MeshStandardMaterial({ color: '#58412f', roughness: 0.66 });
+  const dendPts = []; for (let x = X0; x <= X1; x += 0.08) dendPts.push(C(x));
+  const axons = [];
+  function axonOK(pts, rad) {
+    for (let i = 0; i < pts.length - 1; i++) { const p = pts[i], q = pts[i + 1];
+      for (let k = 0; k < dendPts.length - 1; k += 1) { const x = dendPts[k].x; if (Math.abs(x - p.x) > 2 && Math.abs(x - q.x) > 2) continue; if (segDist(p, q, dendPts[k], dendPts[k + 1]) < Rb(x) * 1.07 + rad + 0.05) return false; }
+      for (const s of spines) { if (s === pts.skip) continue; const [a, b] = spineSeg(s); if (segDist(p, q, a, b) < rad + s.hr + 0.05) return false; }
+      for (const o of axons) for (let j = 0; j < o.pts.length - 1; j++) if (segDist(p, q, o.pts[j], o.pts[j + 1]) < rad * 2 + 0.06) return false;
+      for (const c of camSamples) if (ptSeg(c, p, q) < 2.0) return false; }
+    return true;
+  }
+  function buildAxon(center, dir, perp, seed, ext = 6.5) {
+    const rn = M.rng(seed), ph = rn() * 6, ph2 = rn() * 6, pts = [];
+    for (let s = -ext; s <= ext + 1e-6; s += 0.25) { const w = Math.min(1, Math.abs(s) / 0.9);
+      pts.push(center.clone().addScaledVector(dir, s).addScaledVector(perp, w * 0.07 * Math.sin(s * 1.1 + ph)).addScaledVector(dir.clone().cross(perp), w * 0.06 * Math.sin(s * 0.8 + ph2))); }
+    return pts;
+  }
+  const boutonGeo = new THREE.SphereGeometry(1, 28, 18);
+  const clefts = []; window.__dbg = () => ({ nNew: NEW.length, nCl: clefts.length, nSp: spines.length });
+  NEW.forEach((s, i) => {
+    const T = frame(s.x).T; const w = s.d.clone().cross(T).normalize();
+    const bR = 0.1; const bc = s.base.clone().addScaledVector(s.d, s.L + s.hr * 0.85 + 0.028 + bR * 0.8);
+    for (let k = 0; k < 90; k++) {
+      const a = (r() < 0.5 ? -1 : 1) * (r() * (k < 30 ? 0.5 : 1.0)); const dir = w.clone().multiplyScalar(Math.cos(a)).addScaledVector(T, Math.sin(a)).normalize();
+      const pts = buildAxon(bc, dir, s.d, 100 + i * 7 + k); pts.skip = s;
+      if (!axonOK(pts, 0.03)) continue;
+      const tube = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 220, 0.018, 10, false), axonMat); tube.castShadow = tube.receiveShadow = true; scene.add(tube);
+      const bm = new THREE.MeshStandardMaterial({ color: '#8f6d56', roughness: 0.55, emissive: new THREE.Color('#3e5cc0'), emissiveIntensity: 0 });
+      const bt = new THREE.Mesh(boutonGeo, bm); bt.position.copy(bc); bt.quaternion.setFromUnitVectors(V(0, 1, 0), dir); bt.scale.set(bR * 0.9, bR * 1.5, bR * 0.8);
+      bt.castShadow = bt.receiveShadow = true; scene.add(bt);
+      // hendidura: disco fino entre cabeza y botón
+      const cm = new THREE.MeshBasicMaterial({ color: '#a4bdff', transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide });
+      const cl = new THREE.Mesh(new THREE.CircleGeometry(1, 40), cm); cl.position.copy(s.base.clone().addScaledVector(s.d, s.L + s.hr * 0.85 + 0.014));
+      cl.quaternion.setFromUnitVectors(V(0, 0, 1), s.d); cl.scale.setScalar(s.hr * 0.85); scene.add(cl);
+      axons.push({ pts }); clefts.push({ s, bm, cm, lit: { v: 0 } });
+      break;
+    }
+  });
+  if (clefts.length < NEW.length || NEW.length < 6) console.error('p03: faltan espinas/axones', NEW.length, clefts.length);
+  // axones de fondo sin contacto (neuropilo), para dar contexto
+  for (let n = 0, k = 0; n < 0 && k < 200; k++) {
+    const c = V(-3 + r() * 7, (r() - 0.5) * 2.4, -1.6 - r() * 2.2); const dir = V(r() - 0.5, r() - 0.5, (r() - 0.5) * 0.4).normalize(); const perp = dir.clone().cross(V(0, 0, 1)).normalize();
+    const pts = buildAxon(c, dir, perp, 500 + k, 8); if (!axonOK(pts, 0.03)) continue;
+    const tube = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 240, 0.03, 10, false), axonMat); tube.castShadow = true; scene.add(tube); axons.push({ pts }); n++;
+  }
+
+  /* ---------------- línea de tiempo ---------------- */
+  tl.to('#fade', { opacity: 0, duration: 0.9, ease: 'appleOut' }, 0.1);
+  // beat 2: brotan las espinas nuevas (filopodio → cuello → cabeza)
+  const order = NEW.map((s, i) => i).sort((a, b) => NEW[a].x - NEW[b].x);
+  const T_G = 4.2;
+  order.forEach((i, k) => { const s = NEW[i]; const t0 = T_G + [0, 0.55, 0.25, 0.9, 0.45, 1.2][k % 6] * 1.6;
+    tl.to(s.len, { v: 1, duration: 1.7, ease: 'appleOut' }, t0);
+    tl.to(s.hv, { v: 1, duration: 1.1, ease: M.spring(0.1) }, t0 + 0.75); s.t0 = t0; });
+  // beat 3: sinapsis nuevas se encienden en azul, de a una
+  const T_S = 9.0;
+  const litOrder = clefts.map((c, i) => i).sort((a, b) => clefts[a].s.t0 - clefts[b].s.t0);
+  litOrder.forEach((ci, k) => { const c = clefts[ci]; const t = T_S + k * 0.32; c.t = t;
+    tl.to(c.lit, { v: 1.6, duration: 0.35, ease: 'appleOut' }, t); tl.to(c.lit, { v: 1, duration: 1.0, ease: 'apple' }, t + 0.35); });
+  tl.to(glowL, { intensity: 2.2, duration: 2.4, ease: 'appleOut' }, T_S);
+
+  // cámara
+  const cam = { ...CAM[0] };
+  tl.to(cam, { ...CAM[1], duration: 3.8, ease: 'apple' }, 0);
+  tl.to(cam, { ...CAM[2], duration: 3.0, ease: 'apple' }, 3.7);
+  tl.to(cam, { ...CAM[3], duration: 2.2, ease: 'apple' }, 8.3);
+  tl.to(cam, { ...CAM[4], duration: 3.9, ease: 'none' }, 10.5);
+  tl.to('#fade', { opacity: 1, duration: 0.55, ease: 'appleIn' }, 13.75);
+
+  /* ---------------- sonido (docs/AUDIO.md) ---------------- */
+  M.sfx(3.7, 'whoosh', { dur: 3.0, peak: 0.45, dir: 1, gain: -7 });              // la cámara se acerca
+  M.sfx(T_G, 'grow', { dur: 3.6, density: 70, gain: -2 });                        // brotan las espinas
+  M.sfx(8.3, 'whoosh', { dur: 2.2, peak: 0.45, dir: -1, gain: -6 });              // se aleja
+  M.sfx(T_S - 0.9, 'swell', { dur: 0.9 });                                         // primera sinapsis
+  const tt = litOrder.map((ci) => clefts[ci].t);
+  [0, 2, 4].forEach((deg, k) => { const t = tt[Math.min(tt.length - 1, k * 2)]; if (t != null) M.sfx(t, 'tap', { deg, oct: 5, bright: 0.6, gain: -4 }); });
+  if (tt.length) M.sfx(tt[tt.length - 1] + 0.2, 'shimmer', { degs: [2, 4, 7], spread: 0.05, gain: -4 });
+
+  /* ---------------- por cuadro ---------------- */
+  M.onFrame(() => {
+    spines.forEach((s) => {
+      const L = s.L * s.len.v; s.neck.scale.set(1, Math.max(0.001, L + s.hr * 0.3), 1);
+      const h = s.hv.v; s.head.visible = h > 0.001; s.head.position.set(0, L, 0);
+      s.head.scale.set(s.hr * h, s.hr * 0.85 * h, s.hr * h);
+      s.neck.visible = s.len.v > 0.001;
+    });
+    clefts.forEach((c) => { const v = c.lit.v; c.cm.opacity = Math.min(1, v); c.s.hm.color.copy(WARM).lerp(BLUE, Math.min(1, v) * 0.7); c.s.hm.emissiveIntensity = 0.22 * v; c.bm.emissiveIntensity = 0.08 * v; });
+    camera.position.copy(camAt(cam)); camera.lookAt(cam.lx, cam.ly, cam.lz);
+    S.render();
+  });
+});
+</script>
+</body>
+</html>

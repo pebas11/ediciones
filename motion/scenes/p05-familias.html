@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>P05 · Familias de psicodélicos (sin texto)</title>
+<link rel="stylesheet" href="../lib/theme.css">
+<link rel="stylesheet" href="../lib/fonts-spartan.css">
+<script type="importmap">{ "imports": { "three": "../node_modules/three/build/three.module.js", "three/addons/": "../node_modules/three/examples/jsm/" } }</script>
+<style>
+  /* Guion de color (v3): base cálida terrosa; UN acento frío = azul, solo para el núcleo indol de las triptaminas.
+     La mescalina (fenetilamina) marca su núcleo bencénico en cálido. Sin texto en pantalla (B-roll). */
+  body { background: #060504; }
+  #gl { position: absolute; inset: 0; }
+  #grain { position: absolute; inset: -20px; opacity: 0.06; mix-blend-mode: overlay; pointer-events: none; }
+  #vig { position: absolute; inset: 0; background: radial-gradient(115% 100% at 55% 45%, transparent 50%, rgba(4,3,2,0.6) 100%); }
+  #fade { position: absolute; inset: 0; background: #060504; opacity: 0; }
+</style>
+</head>
+<body>
+<div id="world">
+  <div id="gl"></div>
+  <div id="vig"></div>
+  <canvas id="grain" width="512" height="512" style="width:1960px;height:1120px"></canvas>
+  <div id="fade"></div>
+</div>
+
+<script src="../node_modules/gsap/dist/gsap.min.js"></script>
+<script src="../node_modules/gsap/dist/SplitText.min.js"></script>
+<script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
+<script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
+<script src="../lib/stage.js"></script>
+<script src="../lib/audio.js"></script>
+<script type="module">
+import { createStage3D, THREE } from '../lib/three-stage.mjs';
+
+/* Estructuras: conformeros 3D de PubChem (átomos pesados; H implícitos), descargados el 26/09/2026:
+   psilocina CID 4980 (C12H16N2O, 4-OH en el indol) · DMT CID 6089 (C12H16N2) · LSD CID 5761 (C20H25N3O, ergolina)
+   · mescalina CID 4076 (C11H17NO3, 3,4,5-trimetoxifenetilamina).
+   Cada una alineada (Kabsch) a un indol plano canónico: triptaminas por sus 9 átomos del indol; mescalina por su benceno
+   sobre el hexágono del indol. core = índices del núcleo. a = [elemento, x, y, z] en Å; b = [i, j, orden]. */
+const MOLS = {"psilocin":{"a":[["O",-1.276,2.78,0.0],["N",2.569,4.432,1.417],["N",1.296,-1.1,0.0],["C",1.884,2.503,0.0],["C",1.368,1.118,-0.0],["C",0.003,0.718,-0.0],["C",2.089,3.055,1.425],["C",-0.014,-0.679,-0.0],["C",2.139,-0.021,0.0],["C",-1.224,1.411,0.0],["C",-1.202,-1.42,-0.0],["C",-2.419,0.683,0.0],["C",2.708,4.937,2.784],["C",1.665,5.289,0.649],["C",-2.406,-0.71,0.0]],"b":[[0,9,1],[1,6,1],[1,12,1],[1,13,1],[2,7,1],[2,8,1],[3,4,1],[3,6,1],[4,5,1],[4,8,2],[5,7,2],[5,9,1],[7,10,1],[9,11,2],[10,14,2],[11,14,1]],"core":[2,4,5,7,8,9,10,11,14],"ids":{"N1":2,"C2":8,"C3":4,"C3a":5,"C4":9,"C5":11,"C6":14,"C7":10,"C7a":7}},"dmt":{"a":[["N",2.563,4.447,1.39],["N",1.296,-1.1,0.0],["C",1.879,2.504,-0.001],["C",1.368,1.118,-0.0],["C",2.086,3.068,1.417],["C",0.003,0.718,0.0],["C",-0.014,-0.679,0.0],["C",2.139,-0.021,0.0],["C",-1.224,1.411,-0.0],["C",-1.202,-1.42,-0.0],["C",2.707,4.968,2.75],["C",1.652,5.291,0.616],["C",-2.419,0.683,0.0],["C",-2.406,-0.71,0.0]],"b":[[0,4,1],[0,10,1],[0,11,1],[1,6,1],[1,7,1],[2,3,1],[2,4,1],[3,5,1],[3,7,2],[5,6,1],[5,8,2],[6,9,2],[8,12,1],[9,13,1],[12,13,2]],"core":[1,3,5,6,7,8,9,12,13],"ids":{"N1":1,"C2":7,"C3":3,"C3a":5,"C4":8,"C5":12,"C6":13,"C7":9,"C7a":6}},"lsd":{"a":[["O",-3.572,4.969,1.577],["N",0.615,4.874,0.306],["N",1.307,-1.098,0.011],["N",-3.507,6.996,0.44],["C",0.414,3.41,0.484],["C",-0.995,2.893,0.068],["C",1.621,2.579,-0.081],["C",-1.843,5.236,-0.008],["C",-0.572,5.608,0.769],["C",1.33,1.123,-0.013],["C",-1.197,1.425,0.009],["C",-0.01,0.678,0.003],["C",-1.998,3.753,-0.185],["C",-0.015,-0.707,0.003],["C",0.995,5.282,-1.047],["C",-3.049,5.713,0.743],["C",2.131,0.006,-0.003],["C",-2.4,0.705,0.002],["C",-1.205,-1.436,-0.005],["C",-2.398,-0.697,-0.008],["C",-4.669,7.583,1.095],["C",-2.857,7.844,-0.556],["C",-4.267,8.342,2.349],["C",-3.452,7.624,-1.936]],"b":[[0,15,2],[1,4,1],[1,8,1],[1,14,1],[2,13,1],[2,16,1],[3,15,1],[3,20,1],[3,21,1],[4,5,1],[4,6,1],[5,10,1],[5,12,2],[6,9,1],[7,8,1],[7,12,1],[7,15,1],[9,11,1],[9,16,2],[10,11,2],[10,17,1],[11,13,1],[13,18,2],[17,19,2],[18,19,1],[20,22,1],[21,23,1]],"core":[2,9,10,11,13,16,17,18,19],"ids":{"N1":2,"C2":16,"C3":9,"C3a":11,"C4":10,"C5":17,"C6":19,"C7":18,"C7a":13}},"mescaline":{"a":[["O",-1.198,-2.757,-0.002],["O",-3.593,1.39,-0.002],["O",-3.601,-1.379,-0.003],["N",3.037,2.484,1.41],["C",-0.004,0.697,0.0],["C",1.287,1.443,0.001],["C",-1.212,1.395,-0.0],["C",-0.004,-0.697,0.0],["C",1.787,1.732,1.423],["C",-1.213,-1.395,-0.0],["C",-2.42,0.697,0.0],["C",-2.42,-0.697,0.0],["C",-1.193,-3.407,1.267],["C",-3.505,2.814,-0.002],["C",-4.482,-1.152,1.095]],"b":[[0,9,1],[0,12,1],[1,10,1],[1,13,1],[2,11,1],[2,14,1],[3,8,1],[4,5,1],[4,6,2],[4,7,1],[5,8,1],[6,10,1],[7,9,2],[9,11,1],[10,11,2]],"core":[4,6,7,9,10,11],"ids":{"C3a":4,"C4":6,"C5":10,"C6":11,"C7":9,"C7a":7}}};
+
+M.scene({ duration: 14, push: 0, audio: { key: 'D', mode: 'lydian', bed: { cycle: 9, bright: 0.9 } } }, async (tl, M) => {
+  const $ = (s) => document.querySelector(s);
+  const r = M.rng(55);
+
+  { const g = $('#grain').getContext('2d'); const im = g.createImageData(512, 512); const rn = M.rng(3);
+    for (let i = 0; i < im.data.length; i += 4) { const v = 128 + (rn() - 0.5) * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+    g.putImageData(im, 0, 0); }
+
+  /* ---------------- escena 3D (luz de h01: clave cálida lateral + contraluz frío) ---------------- */
+  const S = createStage3D($('#gl'), { bgTop: '#130f0c', bgBottom: '#050403', bgGlow: '#2c2017', bloom: { strength: 0.25, radius: 0.45, threshold: 0.94 }, exposure: 1.0, env: 0.2 });
+  const { scene, camera } = S;
+  scene.fog = new THREE.FogExp2('#090706', 0.008);
+  const key = new THREE.DirectionalLight('#ffdcae', 2.1); key.position.set(-24, 26, 24); key.castShadow = true;
+  key.shadow.mapSize.set(2048, 2048); key.shadow.radius = 5; key.shadow.bias = -0.0005; key.shadow.normalBias = 0.03;
+  Object.assign(key.shadow.camera, { left: -30, right: 30, top: 22, bottom: -22, near: 1, far: 100 }); key.shadow.camera.updateProjectionMatrix();
+  scene.add(key); scene.add(key.target);
+  const rim = new THREE.DirectionalLight('#7fa2ff', 2.0); rim.position.set(26, 8, -8); scene.add(rim);
+  scene.add(new THREE.HemisphereLight('#3a3440', '#140d08', 0.4));
+
+  /* ---------------- materiales (los de h02) ---------------- */
+  const EL = { C: { r: 0.38, c: '#b3a79a' }, N: { r: 0.39, c: '#95a1b6' }, O: { r: 0.39, c: '#E3A560' } };
+  const STICK = new THREE.Color('#d6ccbf');
+  const BLUE = new THREE.Color('#7fa2ff'), STICK_B = new THREE.Color('#7fa0ea');
+  const WARM = new THREE.Color('#e8a560'), STICK_W = new THREE.Color('#d9a066');
+  const phys = (c, o = {}) => new THREE.MeshPhysicalMaterial({ color: c, roughness: 0.34, metalness: 0, clearcoat: 0.6, clearcoatRoughness: 0.25, ...o });
+  // contraluz por material (Fresnel): el núcleo "se enciende" sin teñir el color base
+  function withRim(mat, col) {
+    mat.userData.rim = { value: 0.3 }; mat.userData.col = { value: col.clone() };
+    mat.onBeforeCompile = (sh) => {
+      sh.uniforms.uRim = mat.userData.rim; sh.uniforms.uRimCol = mat.userData.col;
+      sh.fragmentShader = 'uniform float uRim;\nuniform vec3 uRimCol;\n' + sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        float frz = 1.0 - clamp(dot(normalize(normal), normalize(vViewPosition)), 0.0, 1.0);
+        totalEmissiveRadiance += uRimCol * uRim * pow(frz, 2.6);`);
+    };
+    return mat;
+  }
+  const sphGeo = new THREE.SphereGeometry(1, 40, 28);
+  const cylGeo = new THREE.CylinderGeometry(1, 1, 1, 20, 1, false);
+  const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
+  const UP = V(0, 1, 0);
+
+  // contorno del núcleo (polígono de la periferia desplazado hacia afuera, esquinas convexas redondeadas) — de h02
+  function outline(pts, d) {
+    const n = pts.length, out = [];
+    const nrm = (a, c) => { const e = c.clone().sub(a).normalize(); return new THREE.Vector2(e.y, -e.x); };
+    for (let i = 0; i < n; i++) {
+      const p0 = pts[(i - 1 + n) % n], p = pts[i], p1 = pts[(i + 1) % n];
+      const n0 = nrm(p0, p), n1 = nrm(p, p1);
+      const cr = (p.x - p0.x) * (p1.y - p.y) - (p.y - p0.y) * (p1.x - p.x);
+      if (cr > 0) { let a0 = Math.atan2(n0.y, n0.x), a1 = Math.atan2(n1.y, n1.x); if (a1 < a0) a1 += Math.PI * 2;
+        for (let k = 0; k <= 6; k++) { const a = a0 + (a1 - a0) * k / 6; out.push(new THREE.Vector2(p.x + d * Math.cos(a), p.y + d * Math.sin(a))); } }
+      else { const m = n0.clone().add(n1).multiplyScalar(d / (1 + n0.dot(n1))); out.push(new THREE.Vector2(p.x + m.x, p.y + m.y)); }
+    }
+    return out;
+  }
+
+  function build(name, family) {
+    const D = MOLS[name], tryp = family === 'tryp';
+    const outer = new THREE.Group(), inner = new THREE.Group(); outer.add(inner); scene.add(outer);
+    const A = D.a.map(([el, x, y, z], i) => ({ el, p: V(x, y, z), core: D.core.includes(i), show: { v: 0 } }));
+    const cent = V(); A.forEach((a) => cent.add(a.p)); cent.divideScalar(A.length);
+    inner.position.copy(cent).negate();                       // gira alrededor del centro de la molécula
+    const adj = A.map(() => []);
+    D.b.forEach(([i, j]) => { adj[i].push(j); adj[j].push(i); });
+    A.forEach((a) => {
+      a.mat = withRim(phys(EL[a.el].c), tryp ? BLUE : WARM);
+      a.mesh = new THREE.Mesh(sphGeo, a.mat); a.mesh.position.copy(a.p); a.mesh.castShadow = a.mesh.receiveShadow = true; inner.add(a.mesh);
+    });
+    const B = D.b.map(([i, j, o]) => {
+      const bd = { a: i, b: j, o, core: A[i].core && A[j].core, g: { v: 0 } };
+      bd.mat = phys(STICK.clone(), { roughness: 0.4, clearcoat: 0.4 });
+      // enlace doble: dos varillas desplazadas en el plano local (definido por un vecino), no atravesadas
+      const dv = A[j].p.clone().sub(A[i].p).normalize();
+      const nb = adj[i].find((k) => k !== j) ?? adj[j].find((k) => k !== i);
+      const tmp = nb !== undefined ? A[nb].p.clone().sub(A[i].p) : V(0, 0, 1);
+      bd.side = tmp.sub(dv.clone().multiplyScalar(tmp.dot(dv))).normalize();
+      bd.sticks = Array.from({ length: o === 2 ? 2 : 1 }, () => { const c = new THREE.Mesh(cylGeo, bd.mat); c.castShadow = c.receiveShadow = true; inner.add(c); return c; });
+      return bd;
+    });
+    // contorno del núcleo: línea fina en el plano del anillo, apenas detrás
+    const ids = D.ids, perim = tryp ? ['C4', 'C5', 'C6', 'C7', 'C7a', 'N1', 'C2', 'C3', 'C3a'] : ['C3a', 'C4', 'C5', 'C6', 'C7', 'C7a'];
+    const pts = perim.map((k) => new THREE.Vector2(A[ids[k]].p.x, A[ids[k]].p.y));
+    let area = 0; pts.forEach((p, i) => { const q = pts[(i + 1) % pts.length]; area += p.x * q.y - q.x * p.y; });
+    if (area < 0) pts.reverse();
+    const curve = new THREE.CatmullRomCurve3(outline(pts, 0.85).map((p) => V(p.x, p.y, -0.42)), true, 'centripetal');
+    const tubeGeo = new THREE.TubeGeometry(curve, 240, 0.03, 8, true);
+    const tube = new THREE.Mesh(tubeGeo, new THREE.MeshBasicMaterial({ color: tryp ? '#8FB0FF' : '#E3A560', toneMapped: false }));
+    tubeGeo.setDrawRange(0, 0); inner.add(tube);
+    // BFS desde el núcleo (C3a) para el armado
+    const dep = new Map([[ids.C3a, 0]]), q = [ids.C3a];
+    while (q.length) { const i = q.shift(); adj[i].forEach((j) => { if (!dep.has(j)) { dep.set(j, dep.get(i) + 1); q.push(j); } }); }
+    B.forEach((bd) => { if (dep.get(bd.a) > dep.get(bd.b)) [bd.a, bd.b] = [bd.b, bd.a]; });
+    return { name, tryp, outer, inner, A, B, cent, dep, tube, tubeTotal: tubeGeo.index.count, contour: { v: 0 }, hi: { v: 0 },
+      q0: new THREE.Quaternion(), axis: V(), spin: 0, pos0: V(), core1: V(), core2: V() };
+  }
+
+  const mols = [build('psilocin', 'tryp'), build('dmt', 'tryp'), build('lsd', 'tryp'), build('mescaline', 'phen')];
+  const [mPsi, mDmt, mLsd, mMes] = mols;
+
+  /* ---------------- disposición ---------------- */
+  // beat 1: en fila, cada una con su orientación (giro lento propio)
+  const SLOT = [-16.5, -5.5, 5.5, 16.5];
+  mols.forEach((m, i) => {
+    m.pos0.set(SLOT[i], 0.4 * (i % 2 ? -1 : 1), 0);
+    m.q0.setFromEuler(new THREE.Euler((r() - 0.5) * 2.2, (r() - 0.5) * 2.6, (r() - 0.5) * 1.6));
+    m.axis.set(r() - 0.5, 1, r() - 0.5).normalize();
+    m.spin = (i % 2 ? -1 : 1) * (0.22 + r() * 0.1);          // rad/s
+    // beat 2: alineadas por el núcleo, todos los núcleos a la misma altura
+    m.core1.set(SLOT[i] + (m === mLsd ? 1.2 : 0), -1.6, 0);
+  });
+  // beat 3: las tres triptaminas apiladas en profundidad (núcleos coincidentes), la mescalina aparte
+  mPsi.core2.set(-5, -2.2, 7.0); mDmt.core2.set(-5, -2.2, 0.4); mLsd.core2.set(-5, -2.2, -7.0); mMes.core2.set(12, -2.2, 0.4);
+
+  /* ---------------- beat 1: se arman (0,3–2,6) ---------------- */
+  const T_GROW = [0.3, 0.6, 0.9, 1.2], DT = 0.07;
+  mols.forEach((m, i) => {
+    m.A.forEach((a, k) => tl.to(a.show, { v: 1, duration: 0.36, ease: M.spring(0.1) }, T_GROW[i] + m.dep.get(k) * DT));
+    m.B.forEach((bd) => tl.to(bd.g, { v: 1, duration: DT, ease: 'none' }, T_GROW[i] + m.dep.get(bd.a) * DT + 0.05));
+  });
+
+  /* ---------------- beat 2: giran y se alinean por el núcleo (4,4–6,4); núcleos se marcan ---------------- */
+  const T_AL = 4.4, T_HI = 6.3, T_MES = 7.0;
+  const al = { u: 0 }; tl.to(al, { u: 1, duration: 2.0, ease: 'apple' }, T_AL);
+  [mPsi, mDmt, mLsd].forEach((m, i) => { tl.to(m.hi, { v: 1, duration: 0.9, ease: 'apple' }, T_HI + i * 0.12); tl.to(m.contour, { v: 1, duration: 1.0, ease: 'apple' }, T_HI + 0.1 + i * 0.12); });
+  tl.to(mMes.hi, { v: 1, duration: 0.9, ease: 'apple' }, T_MES); tl.to(mMes.contour, { v: 1, duration: 1.0, ease: 'apple' }, T_MES + 0.1);
+
+  /* ---------------- beat 3: las triptaminas se apilan por el núcleo común (9,0–10,9) ---------------- */
+  const T_ST = 9.0;
+  const st = { u: 0 }; tl.to(st, { u: 1, duration: 1.9, ease: 'apple' }, T_ST);
+  tl.to('#fade', { opacity: 1, duration: 0.55, ease: 'appleIn' }, 13.3);
+
+  /* ---------------- cámara ---------------- */
+  const cam = { ang: -0.12, el: 0.1, rad: 55, lx: 0, ly: 1.4, lz: 0 };
+  tl.to(cam, { ang: -0.04, rad: 52, duration: 4.4, ease: 'apple' }, 0);
+  tl.to(cam, { ang: 0.02, rad: 49, ly: 1.2, duration: 4.6, ease: 'apple' }, 4.4);
+  // beat 3: se acerca y orbita para revelar la pila en profundidad
+  tl.to(cam, { ang: 0.42, el: 0.14, rad: 42, lx: 2.6, ly: -0.6, lz: 0, duration: 2.2, ease: 'apple' }, T_ST);
+  tl.to(cam, { ang: 0.5, rad: 40, duration: 13.9 - (T_ST + 2.2), ease: 'none' }, T_ST + 2.2);
+
+  /* ---------------- sonido (docs/AUDIO.md): pocos efectos, cada uno con motivo ---------------- */
+  M.sfx(0.3, 'grow', { dur: 1.9, density: 70, gain: -2 });
+  T_GROW.forEach((t, i) => M.sfx(t + 0.02, 'tap', { deg: [0, 2, 4, 7][i], oct: 5, bright: 0.7, gain: -4 }));
+  M.sfx(T_AL, 'whoosh', { dur: 2.0, peak: 0.45, dir: 1, gain: -4 });
+  M.sfx(T_HI, 'shimmer', { degs: [2, 4, 7], gain: -3 });
+  M.sfx(T_MES + 0.02, 'tap', { deg: 0, oct: 4, bright: 0.6, gain: -3 });
+  M.sfx(T_ST, 'whoosh', { dur: 1.9, peak: 0.45, dir: -1, gain: -2 });
+  M.sfx(T_ST + 1.9, 'swell', { dur: 1.2 }).sfx(T_ST + 1.9, 'impact', { weight: 0.75 });
+
+  /* ---------------- por cuadro ---------------- */
+  const qs = new THREE.Quaternion(), qI = new THREE.Quaternion(), qa = new THREE.Quaternion(), dv = V(), e0 = V(), e1 = V(), tgt = V(), off = V();
+  const setStick = (c, p0, p1, rad, side, o) => {
+    dv.subVectors(p1, p0); const len = dv.length();
+    if (len < 1e-3) { c.visible = false; return; }
+    c.visible = true; c.position.copy(p0).add(p1).multiplyScalar(0.5).addScaledVector(side, o);
+    c.quaternion.setFromUnitVectors(UP, dv.divideScalar(len)); c.scale.set(rad, len, rad);
+  };
+  M.onFrame((t) => {
+    const u = al.u, s = st.u;
+    mols.forEach((m) => {
+      // orientación: giro propio que se detiene al alinearse (identidad = núcleo en el plano XY, de frente)
+      qs.setFromAxisAngle(m.axis, m.spin * Math.min(t, T_AL + 2.0 * 0.5)).premultiply(m.q0);
+      qa.slerpQuaternions(qs, qI, u); m.outer.quaternion.copy(qa);
+      // posición: centro de la ranura → núcleo en su marca (beat 2) → pila (beat 3)
+      tgt.copy(m.core1).lerp(m.core2, s);
+      off.copy(m.cent).applyQuaternion(qa);                   // centro del núcleo (origen local) = outer.pos - q·cent
+      e0.copy(m.pos0).lerp(tgt.add(off), u);
+      m.outer.position.copy(e0);
+      const hi = m.hi.v;
+      m.A.forEach((a) => {
+        const sc = EL[a.el].r * a.show.v;
+        a.mesh.scale.setScalar(Math.max(1e-4, sc)); a.mesh.visible = sc > 1e-3;
+        a.mat.userData.rim.value = a.core ? 0.3 + 1.5 * hi : 0.3;
+        if (!m.tryp) a.mat.userData.col.value.copy(a.core && hi > 0 ? WARM : BLUE);
+      });
+      m.B.forEach((bd) => {
+        const A0 = m.A[bd.a], A1 = m.A[bd.b], g = bd.g.v;
+        if (g < 0.002) { bd.sticks.forEach((c) => (c.visible = false)); return; }
+        const dbl = bd.o === 2, rad = dbl ? 0.068 : 0.1, o = dbl ? 0.12 : 0;
+        e0.copy(A0.p); e1.copy(A0.p).lerp(A1.p, g);
+        bd.sticks.forEach((c, j) => setStick(c, e0, e1, rad, bd.side, dbl ? (j ? o : -o) : 0));
+        const k = bd.core ? hi : 0;
+        bd.mat.color.copy(STICK).lerp(m.tryp ? STICK_B : STICK_W, 0.7 * k);
+        bd.mat.emissive.copy(m.tryp ? BLUE : WARM); bd.mat.emissiveIntensity = 0.2 * k;
+      });
+      m.tube.geometry.setDrawRange(0, Math.floor(m.tubeTotal * m.contour.v / 3) * 3);
+    });
+    camera.position.set(cam.lx + Math.sin(cam.ang) * Math.cos(cam.el) * cam.rad, cam.ly + Math.sin(cam.el) * cam.rad, cam.lz + Math.cos(cam.ang) * Math.cos(cam.el) * cam.rad);
+    camera.lookAt(cam.lx, cam.ly, cam.lz);
+    S.render();
+  });
+});
+</script>
+</body>
+</html>

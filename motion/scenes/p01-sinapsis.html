@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>P01 · Sinapsis (sin texto)</title>
+<link rel="stylesheet" href="../lib/theme.css">
+<script type="importmap">{ "imports": { "three": "../node_modules/three/build/three.module.js", "three/addons/": "../node_modules/three/examples/jsm/" } }</script>
+<style>
+  /* B-roll SIN TEXTO. Guion de color: membranas y serotonina cálidas; UN acento azul (psilocina y su señal). */
+  body { background: #060504; }
+  #gl { position: absolute; inset: 0; }
+  #grain { position: absolute; inset: -20px; opacity: 0.06; mix-blend-mode: overlay; pointer-events: none; }
+  #vig { position: absolute; inset: 0; background: radial-gradient(115% 100% at 55% 48%, transparent 50%, rgba(4,3,2,0.62) 100%); }
+  #fade { position: absolute; inset: 0; background: #060504; opacity: 1; }
+</style>
+</head>
+<body>
+<div id="world">
+  <div id="gl"></div>
+  <div id="vig"></div>
+  <canvas id="grain" width="512" height="512" style="width:1960px;height:1120px"></canvas>
+  <div id="fade"></div>
+</div>
+
+<script src="../node_modules/gsap/dist/gsap.min.js"></script>
+<script src="../node_modules/gsap/dist/SplitText.min.js"></script>
+<script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
+<script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
+<script src="../lib/stage.js"></script>
+<script src="../lib/audio.js"></script>
+<script type="module">
+import { createStage3D, THREE, fbm } from '../lib/three-stage.mjs';
+
+M.scene({ duration: 14, push: 0, audio: { key: 'D', mode: 'lydian', bed: { cycle: 9, bright: 0.85 } } }, async (tl, M) => {
+  const $ = (s) => document.querySelector(s);
+  const r = M.rng(11);
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+
+  { const g = $('#grain').getContext('2d'); const im = g.createImageData(512, 512); const rn = M.rng(3);
+    for (let i = 0; i < im.data.length; i += 4) { const v = 128 + (rn() - 0.5) * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+    g.putImageData(im, 0, 0); }
+
+  /* ---------------- escenario (misma luz que h01) ---------------- */
+  const S = createStage3D($('#gl'), { bgTop: '#130f0c', bgBottom: '#050403', bgGlow: '#2c2017', bloom: { strength: 0.3, radius: 0.5, threshold: 0.9 }, exposure: 1.0, env: 0.2 });
+  const { scene, camera, renderer } = S;
+  renderer.localClippingEnabled = true;
+  scene.fog = new THREE.FogExp2('#090706', 0.03);
+  const G = new THREE.Group(); G.rotation.z = Math.PI / 2; scene.add(G); G.updateMatrixWorld(true);   // sinapsis acostada: presináptica a la izquierda
+
+  const key = new THREE.DirectionalLight('#ffdcae', 2.2); key.position.set(-4, 5, 5); key.castShadow = true; key.shadow.mapSize.set(2048, 2048); key.shadow.radius = 5; key.shadow.bias = -0.0005;
+  Object.assign(key.shadow.camera, { left: -4, right: 4, top: 4, bottom: -4 }); key.shadow.camera.updateProjectionMatrix(); scene.add(key);
+  const rim = new THREE.DirectionalLight('#7fa2ff', 1.6); rim.position.set(3.5, 2.5, -4); scene.add(rim);
+  scene.add(new THREE.HemisphereLight('#3a3440', '#140d08', 0.45));
+  const fill = new THREE.PointLight('#ffcf9e', 1.2, 6, 1.6); fill.position.set(0.6, 0.0, 2.2); scene.add(fill);   // ilumina la hendidura
+
+  /* ---------------- membranas: material con potencial de acción y ondas en la superficie ---------------- */
+  const CUTZ = 0.25;                                             // corte de lámina: se ve el interior (z > CUTZ se quita)
+  const clip = [new THREE.Plane(V(0, 0, -1), CUTZ)];
+  const NW = 10;
+  const U = {
+    uWave: { value: Array.from({ length: NW }, () => new THREE.Vector4(0, -99, 0, 99)) },   // xyz centro, w = inicio
+    uWCol: { value: Array.from({ length: NW }, () => new THREE.Vector3()) },
+    uWPar: { value: Array.from({ length: NW }, () => new THREE.Vector3(0, 1, 1)) },          // amp, velocidad, caída
+    uT: { value: 0 }, uAP: { value: -1 }, uAPCol: { value: new THREE.Color('#ff9a52').multiplyScalar(1.6) },
+  };
+  let nWave = 0;
+  const addWave = (at, c, col, amp, spd, dec) => {
+    const i = nWave++; const w = G.localToWorld(c.clone()); U.uWave.value[i].set(w.x, w.y, w.z, at); U.uWCol.value[i].set(col.r, col.g, col.b); U.uWPar.value[i].set(amp, spd, dec);
+  };
+  function membraneMat(color, inner = 0.42, cut = true, waves = true) {
+    const m = new THREE.MeshPhysicalMaterial({ color, vertexColors: true, roughness: 0.52, sheen: 0.7, sheenColor: new THREE.Color('#ffd7b0'), sheenRoughness: 0.5, clearcoat: 0.25, clearcoatRoughness: 0.45, side: cut ? THREE.DoubleSide : THREE.FrontSide, clippingPlanes: cut ? clip : null, clipShadows: cut });
+    m.onBeforeCompile = (sh) => {
+      Object.assign(sh.uniforms, U); sh.uniforms.uInner = { value: inner }; sh.uniforms.uWOn = { value: waves ? 1 : 0 };
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aL; varying float vL; varying vec3 vWP;')
+        .replace('#include <project_vertex>', '#include <project_vertex>\nvL = aL; vWP = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
+        varying float vL; varying vec3 vWP; uniform float uT; uniform float uAP; uniform vec3 uAPCol; uniform float uInner; uniform float uWOn;
+        uniform vec4 uWave[${NW}]; uniform vec3 uWCol[${NW}]; uniform vec3 uWPar[${NW}];`)
+        .replace('#include <color_fragment>', '#include <color_fragment>\n if (!gl_FrontFacing) diffuseColor.rgb *= uInner;')
+        .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+          if (vL > 0.001) { float a = (vL - uAP) / 0.035; totalEmissiveRadiance += uAPCol * exp(-a * a); }
+          for (int i = 0; i < ${NW}; i++) { if (uWOn < 0.5) break;
+            float age = uT - uWave[i].w; if (age <= 0.0) continue;
+            float d = distance(vWP, uWave[i].xyz); float rr = age * uWPar[i].y;
+            float k = (d - rr) / (0.045 + 0.03 * rr);
+            totalEmissiveRadiance += uWCol[i] * uWPar[i].x * exp(-k * k) * exp(-age * uWPar[i].z) * smoothstep(0.0, 0.15, age);
+          }`);
+    };
+    return m;
+  }
+  // colorea y agrega aL (posición a lo largo del axón: 0 = no aplica)
+  function finish(geo, base, tint, seed, aLfn = null) {
+    const p = geo.attributes.position, col = new Float32Array(p.count * 3), aL = new Float32Array(p.count);
+    const a = new THREE.Color(base), b = new THREE.Color(tint);
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+      const n = fbm(x * 2.2 + seed, y * 2.2, z * 2.2), n2 = fbm(x * 9, y * 9 + seed, z * 9);
+      const c = a.clone().lerp(b, 0.5 + 0.6 * n).multiplyScalar(0.9 + 0.2 * n2);
+      col.set([c.r, c.g, c.b], i * 3); aL[i] = aLfn ? aLfn(i) : 0;
+    }
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); geo.setAttribute('aL', new THREE.BufferAttribute(aL, 1));
+    geo.computeVertexNormals(); return geo;
+  }
+  function ellipsoid(rx, ry, rz, seed, amp = 0.012) {
+    const g = new THREE.SphereGeometry(1, 160, 110), p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+      const d = 1 + amp * fbm(x * 3 + seed, y * 3, z * 3);
+      p.setXYZ(i, x * rx * d, y * ry * d, z * rz * d);
+    }
+    return g;
+  }
+
+  /* ---------------- neurona presináptica: botón + axón ---------------- */
+  const PRE = { cy: 1.3, rx: 1.35, ry: 1.0 };
+  const preBottom = (x, z) => PRE.cy - PRE.ry * Math.sqrt(Math.max(0, 1 - (x * x + z * z) / (PRE.rx * PRE.rx)));
+  const preMat = membraneMat('#c79268', 0.42, true, false);
+  const bouton = new THREE.Mesh(finish(ellipsoid(PRE.rx, PRE.ry, PRE.rx, 1), '#b98460', '#d8a57a', 1), preMat);
+  bouton.position.y = PRE.cy; bouton.castShadow = bouton.receiveShadow = true; G.add(bouton);
+  const axCurve = new THREE.CatmullRomCurve3([V(5.5, 6.5, -3.0), V(3.2, 4.8, -1.5), V(1.5, 3.4, -0.5), V(0.4, 2.62, -0.12), V(0, 2.22, -0.05)]);
+  const axGeo = new THREE.TubeGeometry(axCurve, 220, 0.27, 28, false);
+  { const uv = axGeo.attributes.uv; finish(axGeo, '#b98460', '#d8a57a', 4, (i) => 0.002 + uv.getX(i)); }
+  const axon = new THREE.Mesh(axGeo, preMat); axon.castShadow = axon.receiveShadow = true; G.add(axon);
+  // corte de la membrana (cara plana del corte)
+  function cutRing(cx, cy, rx, ry, color) {
+    const s = new THREE.Shape(); s.absellipse(0, 0, rx, ry, 0, Math.PI * 2, false);
+    const h = new THREE.Path(); h.absellipse(0, 0, rx - 0.035, ry - 0.035, 0, Math.PI * 2, true); s.holes.push(h);
+    const m = new THREE.Mesh(new THREE.ShapeGeometry(s, 96), new THREE.MeshStandardMaterial({ color, roughness: 0.7, side: THREE.DoubleSide }));
+    m.position.set(cx, cy, CUTZ); G.add(m); return m;
+  }
+  const kPre = Math.sqrt(1 - (CUTZ / PRE.rx) ** 2);
+  cutRing(0, PRE.cy, PRE.rx * kPre, PRE.ry * kPre, '#e0b48c');
+
+  // mitocondria (cápsula con crestas) dentro del botón
+  { const mito = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.17, 0.5, 10, 24), new THREE.MeshStandardMaterial({ color: '#8a5a3c', roughness: 0.6 }));
+    mito.add(body);
+    for (let i = 0; i < 5; i++) { const c = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.012, 6, 24), new THREE.MeshStandardMaterial({ color: '#b27a52', roughness: 0.6 })); c.rotation.x = Math.PI / 2; c.position.y = -0.24 + i * 0.12; mito.add(c); }
+    mito.position.set(0.62, 1.62, -0.45); mito.rotation.set(0.3, 0.2, 1.1); mito.traverse((o) => (o.castShadow = true)); G.add(mito); }
+
+  /* ---------------- neurona postsináptica: espina + dendrita ---------------- */
+  const POST = { cy: -1.25, rx: 1.5, ry: 0.95, rz: 1.45 };
+  const postSurf = (x, z) => {
+    const y = POST.cy + POST.ry * Math.sqrt(Math.max(0, 1 - (x * x) / POST.rx ** 2 - (z * z) / POST.rz ** 2));
+    const n = V(x / POST.rx ** 2, (y - POST.cy) / POST.ry ** 2, z / POST.rz ** 2).normalize();
+    return { p: V(x, y, z), n };
+  };
+  const postMat = membraneMat('#b98663', 0.42, false);
+  const head = new THREE.Mesh(finish(ellipsoid(POST.rx, POST.ry, POST.rz, 7, 0.006), '#ad7a58', '#cf9b72', 7), postMat);
+  head.position.y = POST.cy; head.castShadow = head.receiveShadow = true; G.add(head);
+  const neck = new THREE.Mesh(finish(new THREE.CylinderGeometry(0.34, 0.46, 0.85, 48, 8, true), '#ad7a58', '#cf9b72', 8), postMat);
+  neck.position.y = -2.4; neck.receiveShadow = true; G.add(neck);
+  const shaft = new THREE.Mesh(finish(new THREE.CylinderGeometry(0.62, 0.62, 18, 64, 60, true), '#a57353', '#c58f68', 9), postMat);
+  shaft.rotation.z = Math.PI / 2; shaft.position.set(0, -3.4, -0.1); shaft.receiveShadow = true; G.add(shaft);
+
+  // neuritas lejanas (contexto, sin movimiento propio)
+  { const m = new THREE.MeshStandardMaterial({ color: '#3a281c', roughness: 0.8 });
+    [[V(-14, -4, -12), V(-5, -1, -11), V(4, 2.5, -13), V(14, 6, -14)], [V(-12, 7, -13), V(-3, 4.2, -14), V(6, 1, -12), V(15, -3, -13)], [V(-6, -9, -10), V(-4.5, -3, -10.5), V(-3.5, 3, -11), V(-2, 9, -12)]]
+      .forEach((pts, i) => scene.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 120, 0.28 + i * 0.06, 20), m))); }
+
+  /* ---------------- receptores (7 hélices transmembrana, medio hundidos) ---------------- */
+  const helixGeo = new THREE.CapsuleGeometry(0.034, 0.24, 6, 12);
+  const helixMat = new THREE.MeshStandardMaterial({ color: '#9c8672', roughness: 0.55 });
+  const RXZ = [[0.1, 0.72], [-0.55, 0.35], [0.7, 0.25], [-0.35, -0.35], [0.45, -0.4], [-0.95, -0.1], [0.2, -0.9]];   // [0] = libre (psilocina)
+  const receptors = RXZ.map(([x, z], idx) => {
+    const { p, n } = postSurf(x, z);
+    const g = new THREE.Group(); g.position.copy(p); g.quaternion.setFromUnitVectors(V(0, 1, 0), n);
+    for (let k = 0; k < 7; k++) {
+      const a = (k / 7) * Math.PI * 2 + idx;
+      const h = new THREE.Mesh(helixGeo, helixMat); h.position.set(Math.cos(a) * 0.068, 0.02, Math.sin(a) * 0.068);
+      h.rotation.set(Math.sin(a) * 0.18, 0, Math.cos(a) * 0.18); h.castShadow = true; g.add(h);
+    }
+    const coreMat = new THREE.MeshStandardMaterial({ color: '#3a2a20', emissive: '#000000', roughness: 0.5 });
+    const core = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.036, 0.22, 16), coreMat); core.position.y = 0.0; g.add(core);
+    G.add(g);
+    return { g, p, n, core, coreMat, pocket: p.clone().addScaledVector(n, 0.2) };
+  });
+
+  /* ---------------- vesículas con serotonina ---------------- */
+  const vesMat = new THREE.MeshPhysicalMaterial({ color: '#f0dcc2', roughness: 0.3, transparent: true, opacity: 0.38, depthWrite: false, sheen: 0.5, sheenColor: new THREE.Color('#fff0dd') });
+  const molMat = new THREE.MeshStandardMaterial({ color: '#e3a560', emissive: '#6a3510', emissiveIntensity: 0.5, roughness: 0.35 });
+  const molGeoA = new THREE.SphereGeometry(0.042, 20, 14), molGeoB = new THREE.SphereGeometry(0.028, 16, 12);
+  const makeMol = () => { const g = new THREE.Group(); g.add(new THREE.Mesh(molGeoA, molMat)); const b = new THREE.Mesh(molGeoB, molMat); b.position.set(0.05, 0.02, 0); g.add(b); g.traverse((o) => (o.castShadow = true)); return g; };
+  const VR = 0.13;
+  const vesicles = [];
+  function addVesicle(pos, nMol, rot = 0) {
+    const g = new THREE.Group(); g.position.copy(pos);
+    const shell = new THREE.Mesh(new THREE.SphereGeometry(VR, 28, 20), vesMat); shell.renderOrder = 2; g.add(shell);
+    const mols = [];
+    for (let k = 0; k < nMol; k++) { const m = makeMol(); const a = rot + k * Math.PI * 2 / nMol; m.position.set(Math.cos(a) * 0.05, (k % 2 ? -0.03 : 0.025), Math.sin(a) * 0.05); m.rotation.set(a, a * 2, 0); m.userData.off = m.position.clone(); g.add(m); mols.push(m); }
+    G.add(g); const v = { g, shell, mols }; vesicles.push(v); return v;
+  }
+  // tres vesículas acopladas junto a la membrana, sobre los receptores
+  const dockXZ = [[-0.3, -0.05], [0.4, -0.1], [-0.05, -0.62]];
+  const docked = dockXZ.map(([x, z], i) => { const y = preBottom(x, z) + VR + 0.1; return addVesicle(V(x, y, z), 2, i); });
+  // resto de vesículas, sin atravesarse ni salir del botón ni del corte
+  { const taken = docked.map((v) => v.g.position.clone()); taken.push(V(0.62, 1.62, -0.45), V(0.45, 1.45, -0.35), V(0.8, 1.8, -0.55));
+    let tries = 0;
+    while (taken.length < 22 && tries++ < 4000) {
+      const p = V((r() - 0.5) * 2.2, 0.55 + r() * 1.3, -1.05 + r() * 1.12);
+      const e = (p.x / (PRE.rx - 0.2)) ** 2 + ((p.y - PRE.cy) / (PRE.ry - 0.2)) ** 2 + (p.z / (PRE.rx - 0.2)) ** 2;
+      if (e > 1 || p.z > CUTZ - VR - 0.04) continue;
+      if (taken.some((q) => q.distanceTo(p) < 0.33)) continue;
+      taken.push(p); addVesicle(p, 2 + (r() < 0.4 ? 1 : 0), r() * 6);
+    } }
+
+  /* ---------------- cámara y reloj ---------------- */
+  const cam = { ang: -0.08, rad: 14.5, y: 2.2, lx: -2.0, ly: 1.4, lz: 0 };
+  const clock = { t: 0 };
+  tl.to(clock, { t: 14, duration: 14, ease: 'none' }, 0);
+  tl.to('#fade', { opacity: 0, duration: 0.7, ease: 'appleOut' }, 0.15);
+
+  /* ---------------- BEAT 1 (0–3,4): el impulso baja por el axón ---------------- */
+  const ap = { v: -0.1 };
+  tl.to(cam, { ang: -0.14, rad: 12.0, y: 1.4, lx: -1.0, ly: 0.6, duration: 3.6, ease: 'apple' }, 0);
+  tl.to(ap, { v: 1.08, duration: 1.9, ease: 'none' }, 0.6);   // velocidad constante de conducción
+  const T_ARR = 0.6 + 1.9 * (1.0 / 1.18);
+  const boutonGlow = { v: 0 };
+  tl.to(boutonGlow, { v: 1, duration: 0.25, ease: 'appleOut' }, T_ARR - 0.05).to(boutonGlow, { v: 0, duration: 1.2, ease: 'apple' }, T_ARR + 0.25);
+
+  /* ---------------- BEAT 2 (2,4–7,8): exocitosis y acople a receptores ---------------- */
+  tl.to(cam, { ang: -0.3, rad: 7.6, y: 0.9, lx: 0.1, ly: 0.1, lz: 0.2, duration: 3.2, ease: 'apple' }, 3.1);
+  tl.to(cam, { ang: -0.22, duration: 1.5, ease: 'none' }, 6.3);
+  const targetsByVes = [[1, 3], [2, 4], [5, 6]];          // cada vesícula → dos receptores cercanos
+  const arrivals = [];
+  docked.forEach((v, i) => {
+    const t0 = T_ARR + 0.15 + i * 0.18;
+    const x = v.g.position.x, z = v.g.position.z, yb = preBottom(x, z);
+    tl.to(v.g.position, { y: yb + VR * 0.55, duration: 0.45, ease: 'apple' }, t0);                           // se acerca a la membrana
+    tl.to(v.shell.scale, { x: 1.25, y: 0.35, z: 1.25, duration: 0.35, ease: 'appleIn' }, t0 + 0.45);          // se fusiona y se aplana
+    tl.to(v.shell.scale, { x: 0.001, y: 0.001, z: 0.001, duration: 0.2, ease: 'appleIn' }, t0 + 0.8);
+    v.mols.forEach((m, k) => {
+      const ri = targetsByVes[i][k], R = receptors[ri];
+      const start = V(x + (k ? 0.04 : -0.04), yb - 0.02, z);
+      const mid = start.clone().lerp(R.pocket, 0.5); mid.x += (r() - 0.5) * 0.35; mid.z += (r() - 0.5) * 0.25; mid.y = Math.min(mid.y, 0.12);
+      const curve = new THREE.CatmullRomCurve3([start, mid, R.pocket]);
+      const pr = { u: 0 }, ts = t0 + 0.78 + k * 0.07, dur = 1.55 + r() * 0.5;
+            arrivals.push({ m, v, curve, pr, ts, ri });
+      tl.to(pr, { u: 1, duration: dur, ease: 'apple' }, ts);
+      const ta = ts + dur;
+      tl.to(R.coreMat.emissive, { r: 0.55, g: 0.26, b: 0.08, duration: 0.5, ease: 'appleOut' }, ta);
+      addWave(ta, R.p, new THREE.Color('#ff9a52'), 0.55, 0.55, 2.8);
+      R.tBind = ta;
+    });
+  });
+
+  /* ---------------- BEAT 3 (7,8–13,4): psilocina ocupa el receptor libre, la señal se amplifica ---------------- */
+  const psi = new THREE.Group();
+  { const bm = new THREE.MeshStandardMaterial({ color: '#8fb0ff', emissive: '#2a4a9a', emissiveIntensity: 0.55, roughness: 0.3 });
+    const stick = new THREE.MeshStandardMaterial({ color: '#c9d6f5', roughness: 0.4 });
+    // esqueleto tipo indol (hexágono + pentágono) con una cadena: bolas y varillas
+    const pts = [], hexC = V(-0.05, 0, 0), pentC = V(0.093, 0, 0);
+    for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3 + Math.PI / 6; pts.push(hexC.clone().add(V(Math.cos(a) * 0.085, Math.sin(a) * 0.085, 0))); }
+    const p5a = V(0.12, 0.075, 0), p5b = V(0.19, 0.02, 0), p5c = V(0.155, -0.065, 0), chainA = V(0.21, 0.16, 0), chainB = V(0.3, 0.17, 0.02);
+    const atoms = [...pts, p5a, p5b, p5c, chainA, chainB];
+    { const c = new THREE.Vector3(); atoms.forEach((p) => c.add(p)); c.divideScalar(atoms.length); atoms.forEach((p) => p.sub(c)); }
+    const bonds = [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0], [0, 6], [6, 7], [7, 8], [8, 5], [6, 9], [9, 10]];
+    atoms.forEach((p, i) => { const s = new THREE.Mesh(new THREE.SphereGeometry(i === 10 ? 0.032 : 0.026, 16, 12), bm); s.position.copy(p); psi.add(s); });
+    bonds.forEach(([a, b]) => { const A = atoms[a], B = atoms[b], L = A.distanceTo(B); const c = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.009, L, 8), stick); c.position.copy(A).lerp(B, 0.5); c.quaternion.setFromUnitVectors(V(0, 1, 0), B.clone().sub(A).normalize()); psi.add(c); });
+    psi.traverse((o) => (o.castShadow = true)); psi.scale.setScalar(0.85); G.add(psi); }
+  const RF = receptors[0];
+  const psiCurve = new THREE.CatmullRomCurve3([V(2.8, 0.05, 1.0), V(1.5, 0.06, 0.95), V(0.55, 0.04, 0.82), RF.pocket.clone().addScaledVector(RF.n, 0.04)]);
+  const psiP = { u: 0 };
+  const T_PSI = 8.0, T_DOCK = 9.7;
+  tl.to(psiP, { u: 1, duration: T_DOCK - T_PSI, ease: 'apple' }, T_PSI);
+  tl.to(cam, { ang: -0.45, rad: 4.4, y: 0.6, lx: 0.4, ly: 0.15, lz: 0.6, duration: 2.1, ease: 'apple' }, 7.7);
+  tl.to(RF.coreMat.emissive, { r: 0.35, g: 0.55, b: 1.4, duration: 0.5, ease: 'appleOut' }, T_DOCK);
+  const blue = new THREE.Color('#7294f0');
+  [0, 0.6, 1.2, 1.8].forEach((d, i) => addWave(T_DOCK + 0.05 + d, RF.p, blue, 0.75 + i * 0.25, 1.05, 0.55));
+  tl.to(cam, { ang: -0.25, rad: 9.0, y: 1.0, lx: 1.2, ly: -0.2, lz: 0, duration: 2.6, ease: 'apple' }, 10.2);
+  tl.to(cam, { ang: -0.18, duration: 1.2, ease: 'none' }, 12.8);
+  tl.to('#fade', { opacity: 1, duration: 0.6, ease: 'appleIn' }, 13.25);
+
+  /* ---------------- sonido (docs/AUDIO.md) ---------------- */
+  M.sfx(0.6, 'scan', { dur: 1.7, from: 280, to: 1800, dir: 1, q: 4, gain: -3 });                 // impulso por el axón
+  M.sfx(T_ARR, 'tap', { deg: 0, oct: 4, bright: 0.7, gain: -2 });                                   // llega al botón
+  M.sfx(3.1, 'whoosh', { dur: 3.0, peak: 0.45, dir: 1, gain: -6 });                                // cámara hacia la hendidura
+  M.sfx(T_ARR + 0.95, 'grow', { dur: 1.2, density: 55, gain: -3 });                                 // liberación
+  const binds = receptors.slice(1).map((R) => R.tBind).sort((a, b) => a - b);
+  M.sfx(binds[0], 'tap', { deg: 2, oct: 5, bright: 0.6, gain: -4 }).sfx(binds[3], 'tap', { deg: 4, oct: 5, bright: 0.6, gain: -4 });
+  M.sfx(7.7, 'whoosh', { dur: 2.1, peak: 0.45, dir: -1, gain: -4 });                                // entra la psilocina
+  M.sfx(T_DOCK, 'swell', { dur: 1.2 }).sfx(T_DOCK, 'impact', { weight: 0.8 });                      // se acopla
+  M.sfx(T_DOCK + 0.7, 'shimmer', { degs: [4, 7, 9], spread: 0.06, gain: -3 });                     // ondas azules
+
+  /* ---------------- por cuadro ---------------- */
+  M.onFrame(() => {
+    U.uT.value = clock.t; U.uAP.value = ap.v;
+    preMat.emissive.set('#ff9a52').multiplyScalar(0.28 * boutonGlow.v);
+    arrivals.forEach(({ m, v, curve, pr, ts }) => {
+      if (m.parent !== G) G.add(m);
+      if (clock.t < ts) { m.position.copy(v.g.position).add(m.userData.off); return; }
+      m.position.copy(curve.getPointAt(Math.min(1, pr.u)));
+      m.rotation.y = ts + pr.u * 4.0;
+    });
+    psi.position.copy(psiCurve.getPointAt(psiP.u));
+    psi.rotation.set(0.4 + (1 - psiP.u) * 1.2, -0.6 + (1 - psiP.u) * 2.4, 0.3 * (1 - psiP.u));
+    psi.visible = clock.t >= T_PSI - 0.01;
+    camera.position.set(Math.sin(cam.ang) * cam.rad, cam.y, Math.cos(cam.ang) * cam.rad);
+    camera.lookAt(cam.lx, cam.ly, cam.lz);
+    S.render();
+  });
+});
+</script>
+</body>
+</html>

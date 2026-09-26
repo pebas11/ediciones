@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>P02 · Viaje de la molécula (sin texto)</title>
+<link rel="stylesheet" href="../lib/theme.css">
+<script type="importmap">{ "imports": { "three": "../node_modules/three/build/three.module.js", "three/addons/": "../node_modules/three/examples/jsm/" } }</script>
+<style>
+  /* Guion de color: cuerpo y tejidos cálidos terrosos; UN acento azul = la molécula (psilocibina → psilocina). Sin texto: B-roll. */
+  body { background: #060504; }
+  #gl { position: absolute; inset: 0; }
+  #grain { position: absolute; inset: -20px; opacity: 0.06; mix-blend-mode: overlay; pointer-events: none; }
+  #vig { position: absolute; inset: 0; background: radial-gradient(115% 100% at 50% 45%, transparent 50%, rgba(4,3,2,0.62) 100%); }
+  #fade { position: absolute; inset: 0; background: #060504; opacity: 1; }
+</style>
+</head>
+<body>
+<div id="world">
+  <div id="gl"></div>
+  <div id="vig"></div>
+  <canvas id="grain" width="512" height="512" style="width:1960px;height:1120px"></canvas>
+  <div id="fade"></div>
+</div>
+
+<script src="../node_modules/gsap/dist/gsap.min.js"></script>
+<script src="../node_modules/gsap/dist/SplitText.min.js"></script>
+<script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
+<script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
+<script src="../lib/stage.js"></script>
+<script src="../lib/audio.js"></script>
+<script type="module">
+import { createStage3D, THREE, fbm } from '../lib/three-stage.mjs';
+
+M.scene({ duration: 14, push: 0, audio: { key: 'D', mode: 'lydian', bed: { cycle: 9, bright: 0.9 } } }, async (tl, M) => {
+  const $ = (s) => document.querySelector(s);
+  const r = M.rng(52);
+  const V = (a) => new THREE.Vector3(a[0], a[1], a[2]);
+
+  { const g = $('#grain').getContext('2d'); const im = g.createImageData(512, 512); const rn = M.rng(3);
+    for (let i = 0; i < im.data.length; i += 4) { const v = 128 + (rn() - 0.5) * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+    g.putImageData(im, 0, 0); }
+
+  const S = createStage3D($('#gl'), { bgTop: '#130f0c', bgBottom: '#050403', bgGlow: '#2c2017', bloom: { strength: 0.22, radius: 0.45, threshold: 0.94 }, exposure: 1.0, env: 0.22 });
+  const { scene, camera } = S;
+  camera.near = 0.005; camera.updateProjectionMatrix();
+
+  // luces como h01: clave cálida lateral, contraluz frío, relleno bajo
+  const key = new THREE.DirectionalLight('#ffdcae', 2.1); key.position.set(-4, 4.5, 4); key.castShadow = true; key.shadow.mapSize.set(2048, 2048); key.shadow.radius = 5; key.shadow.bias = -0.0005;
+  Object.assign(key.shadow.camera, { left: -8, right: 8, top: 8, bottom: -8, near: 0.5, far: 20 }); key.shadow.camera.updateProjectionMatrix(); scene.add(key);
+  const rim = new THREE.DirectionalLight('#7fa2ff', 1.5); rim.position.set(3.5, 3, -4); scene.add(rim);
+  scene.add(new THREE.HemisphereLight('#3a3440', '#140d08', 0.45));
+
+  /* ---------- helpers ---------- */
+  // tubo con radio variable y extremos redondeados (órganos, vasos, dendritas)
+  function taperTube(pts, radius, { segs = 96, radial = 18, capA = true, capB = true } = {}) {
+    const curve = new THREE.CatmullRomCurve3(pts.map(V), false, 'centripetal');
+    const g = new THREE.TubeGeometry(curve, segs, 1, radial, false);
+    const L = curve.getLength(), p = g.attributes.position, c = new THREE.Vector3(), v = new THREE.Vector3();
+    for (let i = 0; i <= segs; i++) {
+      const u = i / segs; curve.getPointAt(u, c);
+      let rr = radius(u);
+      const eA = rr / L, eB = rr / L;
+      if (capA && u < eA) rr *= Math.sqrt(Math.max(0, 1 - (1 - u / eA) ** 2));
+      if (capB && 1 - u < eB) rr *= Math.sqrt(Math.max(0, 1 - (1 - (1 - u) / eB) ** 2));
+      for (let j = 0; j <= radial; j++) { const k = i * (radial + 1) + j; v.fromBufferAttribute(p, k).sub(c).multiplyScalar(Math.max(rr, 1e-5)).add(c); p.setXYZ(k, v.x, v.y, v.z); }
+    }
+    g.computeVertexNormals();
+    return { geo: g, curve };
+  }
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  const tissue = (color, opacity, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.5, metalness: 0, transparent: opacity < 1, opacity, depthWrite: opacity >= 1, ...extra });
+
+  /* ---------- molécula: psilocibina (indol + cadena dimetilaminoetilo + 4-fosforiloxi) ---------- */
+  function buildMolecule() {
+    const g = new THREE.Group();
+    const cBlue = new THREE.MeshStandardMaterial({ color: '#86a6f0', roughness: 0.32, emissive: '#1e3170', emissiveIntensity: 0.55 });
+    const nBlue = new THREE.MeshStandardMaterial({ color: '#c8d6ff', roughness: 0.3, emissive: '#27397a', emissiveIntensity: 0.5 });
+    const stick = new THREE.MeshStandardMaterial({ color: '#a9bbe6', roughness: 0.4, emissive: '#1a2856', emissiveIntensity: 0.4 });
+    const warmP = new THREE.MeshStandardMaterial({ color: '#E3A560', roughness: 0.38, emissive: '#4a2a0c', emissiveIntensity: 0.35, transparent: true });
+    const warmO = new THREE.MeshStandardMaterial({ color: '#d9b58e', roughness: 0.4, emissive: '#3a2410', emissiveIntensity: 0.3, transparent: true });
+    const warmS = new THREE.MeshStandardMaterial({ color: '#cfa77c', roughness: 0.45, transparent: true });
+    const hex = [30, 90, 150, 210, 270, 330].map((d) => [Math.cos(d * Math.PI / 180), Math.sin(d * Math.PI / 180), 0]);
+    const A = { C3a: hex[0], C4: hex[1], C5: hex[2], C6: hex[3], C7: hex[4], C7a: hex[5],
+      C3: [1.817, 0.809, 0], C2: [2.405, 0, 0], N1: [1.817, -0.809, 0],
+      Ca: [1.55, 1.78, 0.12], Cb: [2.3, 2.45, 0.2], Nm: [2.05, 3.42, 0.1], Me1: [2.8, 4.1, 0.25], Me2: [1.08, 3.72, -0.1],
+      O4: [0, 2.0, 0] };
+    const bonds = [['C3a', 'C4'], ['C4', 'C5'], ['C5', 'C6'], ['C6', 'C7'], ['C7', 'C7a'], ['C7a', 'C3a'], ['C3a', 'C3'], ['C3', 'C2'], ['C2', 'N1'], ['N1', 'C7a'],
+      ['C3', 'Ca'], ['Ca', 'Cb'], ['Cb', 'Nm'], ['Nm', 'Me1'], ['Nm', 'Me2'], ['C4', 'O4']];
+    const cen = new THREE.Vector3(1.2, 1.5, 0);
+    const sph = new THREE.SphereGeometry(1, 24, 16), cyl = new THREE.CylinderGeometry(1, 1, 1, 10);
+    const atom = (p, rad, mat, parent) => { const m = new THREE.Mesh(sph, mat); m.position.copy(V(p)).sub(cen); m.scale.setScalar(rad); parent.add(m); return m; };
+    const bond = (a, b, mat, parent, rr = 0.085) => { const pa = V(a).sub(cen), pb = V(b).sub(cen); const m = new THREE.Mesh(cyl, mat);
+      m.position.copy(pa).add(pb).multiplyScalar(0.5); m.scale.set(rr, pa.distanceTo(pb), rr);
+      m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), pb.clone().sub(pa).normalize()); parent.add(m); };
+    Object.entries(A).forEach(([k, p]) => atom(p, k.startsWith('N') ? 0.3 : k === 'O4' ? 0.3 : 0.27, k.startsWith('N') || k === 'O4' ? nBlue : cBlue, g));
+    bonds.forEach(([a, b]) => bond(A[a], A[b], stick, g));
+    // grupo fosfato (se desprende en el hígado)
+    const phos = new THREE.Group(); g.add(phos);
+    const P = [-0.87, 2.52, 0];
+    atom(P, 0.36, warmP, phos);
+    [[-1.82, 2.2, 0.22], [-0.95, 3.48, 0.3], [-0.82, 2.62, -0.97]].forEach((o) => { atom(o, 0.24, warmO, phos); bond(P, o, warmS, phos, 0.075); });
+    bond(A.O4, P, warmS, phos, 0.075);
+    const light = new THREE.PointLight('#8fb0ff', 0, 1, 2); g.add(light);
+    return { group: g, phos, light, warmMats: [warmP, warmO, warmS] };
+  }
+  const mol = buildMolecule(); scene.add(mol.group);
+
+  /* ======================= MUNDO 1: cuerpo (escala en metros) ======================= */
+  const body = new THREE.Group(); scene.add(body);
+  // silueta: torno con sección elíptica (cadera → cabeza)
+  const prof = [[0.0, 0.165], [0.06, 0.163], [0.14, 0.151], [0.22, 0.139], [0.30, 0.143], [0.38, 0.151], [0.46, 0.161], [0.53, 0.173], [0.575, 0.198], [0.603, 0.196], [0.628, 0.168], [0.646, 0.114], [0.662, 0.063], [0.70, 0.056], [0.735, 0.058], [0.76, 0.071], [0.79, 0.083], [0.83, 0.091], [0.87, 0.094], [0.91, 0.088], [0.94, 0.074], [0.962, 0.05], [0.975, 0.022], [0.979, 0.0]];
+  const depthTab = [[0, 0.66], [0.22, 0.70], [0.38, 0.68], [0.53, 0.60], [0.59, 0.50], [0.63, 0.52], [0.655, 0.9], [0.70, 1.0], [0.76, 1.1], [0.83, 1.17], [0.91, 1.12], [0.98, 1.05]];
+  const interp = (tab, y) => { if (y <= tab[0][0]) return tab[0][1]; for (let i = 1; i < tab.length; i++) if (y <= tab[i][0]) { const [y0, v0] = tab[i - 1], [y1, v1] = tab[i]; return lerp(v0, v1, (y - y0) / (y1 - y0)); } return tab[tab.length - 1][1]; };
+  const profC = new THREE.SplineCurve(prof.map(([y, rr]) => new THREE.Vector2(rr, y)));
+  const lathe = new THREE.LatheGeometry(profC.getPoints(160), 120);
+  { const p = lathe.attributes.position;
+    for (let i = 0; i < p.count; i++) { const y = p.getY(i); p.setZ(i, p.getZ(i) * interp(depthTab, y) + 0.012 * sstep(0.7, 0.78, y) - 0.004 * sstep(0.6, 0.66, y) * (1 - sstep(0.7, 0.76, y))); }
+    lathe.computeVertexNormals(); }
+  const shellMat = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    uniforms: { uCol: { value: new THREE.Color('#e9c9a6') }, uRim: { value: new THREE.Color('#8fb0ff') }, keyDir: { value: key.position.clone().normalize() }, rimDir: { value: rim.position.clone().normalize() }, uA: { value: 1 } },
+    vertexShader: 'varying vec3 vN; varying vec3 vW; void main(){ vec4 w = modelMatrix*vec4(position,1.0); vW = w.xyz; vN = normalize(mat3(modelMatrix)*normal); gl_Position = projectionMatrix*viewMatrix*w; }',
+    fragmentShader: `uniform vec3 uCol; uniform vec3 uRim; uniform vec3 keyDir; uniform vec3 rimDir; uniform float uA; varying vec3 vN; varying vec3 vW;
+      void main(){ vec3 N = normalize(vN); vec3 Vd = normalize(cameraPosition - vW); if (dot(N,Vd) < 0.0) N = -N;
+        float f = pow(1.0 - max(dot(N, Vd), 0.0), 2.6);
+        float k = max(dot(N, keyDir), 0.0), rl = max(dot(N, rimDir), 0.0);
+        vec3 c = uCol * (0.18 + 0.75 * k) + uRim * rl * f * 0.55;
+        float a = (0.018 + 0.34 * f) * (0.55 + 0.45 * k + 0.5 * rl) * smoothstep(0.0, 0.16, vW.y) * uA;
+        gl_FragColor = vec4(c, a); }`,
+  });
+  const shell = new THREE.Mesh(lathe, shellMat); shell.renderOrder = 5; body.add(shell);
+
+  // columna vertebral
+  const spineC = new THREE.CatmullRomCurve3([[0, 0.02, -0.05], [0, 0.2, -0.06], [0, 0.4, -0.074], [0, 0.58, -0.06], [0, 0.66, -0.03], [0, 0.785, -0.022]].map(V));
+  const boneM = new THREE.MeshStandardMaterial({ color: '#8f7a62', roughness: 0.75, transparent: true, opacity: 0.55, depthWrite: false });
+  { const vg = new THREE.SphereGeometry(1, 24, 14); const pg = new THREE.SphereGeometry(0.55, 12, 8);
+    const n = 30; const inst = new THREE.InstancedMesh(vg, boneM, n), proc = new THREE.InstancedMesh(pg, boneM, n);
+    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
+    for (let i = 0; i < n; i++) { const u = (i + 0.5) / n; const p = spineC.getPointAt(u), t = spineC.getTangentAt(u); q.setFromUnitVectors(up, t);
+      const rr = p.y > 0.64 ? 0.011 : 0.0165 - 0.004 * (p.y / 0.64); const h = (spineC.getLength() / n) * 0.72;
+      m4.compose(p, q, new THREE.Vector3(rr, h * 0.55, rr * 0.85)); inst.setMatrixAt(i, m4);
+      m4.compose(p.clone().add(new THREE.Vector3(0, -0.003, -rr * 1.25)), q, new THREE.Vector3(rr * 0.35, h * 0.8, rr * 1.2)); proc.setMatrixAt(i, m4); }
+    body.add(inst, proc); }
+
+  // órganos (translúcidos: se ve la molécula adentro)
+  const stom = taperTube([[0.074, 0.405, -0.004], [0.086, 0.372, 0.008], [0.072, 0.332, 0.022], [0.038, 0.307, 0.032], [0.004, 0.311, 0.034], [-0.018, 0.326, 0.03]],
+    (u) => lerp(lerp(0.031, 0.027, sstep(0, 0.4, u)), 0.009, sstep(0.45, 1, u)));
+  body.add(new THREE.Mesh(stom.geo, tissue('#c99282', 0.62, { roughness: 0.45 })));
+  const eso = taperTube([[0, 0.75, 0.014], [0, 0.66, 0.006], [0.004, 0.56, -0.026], [0.01, 0.5, -0.035], [0.03, 0.44, -0.02], [0.062, 0.412, -0.004]], () => 0.0065, { capA: false, capB: false });
+  body.add(new THREE.Mesh(eso.geo, tissue('#b98474', 0.55)));
+  // hígado: cuña, lóbulo izquierdo afinado, cara inferior plana, delante del estómago
+  const liverG = new THREE.SphereGeometry(1, 72, 48);
+  { const p = liverG.attributes.position;
+    for (let i = 0; i < p.count; i++) { let x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+      const t = 1 - 0.62 * sstep(-0.3, 1.0, x); y *= t; if (y < 0) y *= 0.55; z *= 0.75 + 0.25 * t;
+      const n = 1 + 0.03 * fbm(x * 2, y * 2, z * 2); p.setXYZ(i, x * 0.105 * n, y * 0.062 * n, z * 0.056 * n); }
+    liverG.computeVertexNormals(); }
+  const liver = new THREE.Mesh(liverG, tissue('#7a3326', 0.6, { roughness: 0.38 })); liver.position.set(-0.048, 0.448, 0.034); liver.rotation.z = -0.12; body.add(liver);
+  // corazón
+  const heartG = new THREE.SphereGeometry(1, 48, 32);
+  { const p = heartG.attributes.position; for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i); const k = 1 - 0.35 * sstep(-0.2, -1, y); p.setXYZ(i, x * 0.032 * k, y * 0.04, z * 0.028 * k); } heartG.computeVertexNormals(); }
+  const heart = new THREE.Mesh(heartG, tissue('#8a3228', 0.58)); heart.position.set(0.012, 0.52, 0.036); heart.rotation.z = 0.55; body.add(heart);
+  // cerebro con circunvoluciones y cisura longitudinal
+  const brainG = new THREE.SphereGeometry(1, 128, 96);
+  { const p = brainG.attributes.position;
+    for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+      const g2 = Math.pow(1 - Math.abs(fbm(x * 4.5, y * 4.5, z * 4.5, 3)), 2); const fis = 1 - 0.1 * Math.exp(-((x / 0.07) ** 2)) * sstep(-0.1, 0.5, y);
+      const s = (1 + 0.035 * g2 * g2) * fis * (y < -0.3 ? lerp(1, 0.9, sstep(-0.3, -1, y)) : 1);
+      p.setXYZ(i, x * 0.066 * s, y * 0.058 * s, z * 0.084 * s); }
+    brainG.computeVertexNormals(); }
+  const brain = new THREE.Mesh(brainG, tissue('#cf9f8c', 0.7, { roughness: 0.55 })); brain.position.set(0, 0.87, 0.01); body.add(brain);
+  // vasos: vena porta (estómago → hígado) y ruta hígado → corazón → carótida → cerebro
+  const portalPts = [[0.046, 0.345, 0.026], [0.02, 0.36, 0.032], [-0.01, 0.376, 0.036], [-0.03, 0.4, 0.036], [-0.042, 0.428, 0.034], [-0.048, 0.448, 0.034]];
+  const portal = taperTube(portalPts, () => 0.0045, { capA: false, capB: true });
+  const vesselM = tissue('#8e3a30', 0.5, { roughness: 0.35 });
+  body.add(new THREE.Mesh(portal.geo, vesselM));
+  const routePts = [[-0.048, 0.448, 0.034], [-0.038, 0.462, 0.03], [-0.028, 0.478, 0.026], [-0.01, 0.5, 0.032], [0.01, 0.52, 0.038], [0.012, 0.55, 0.03], [0.002, 0.573, 0.014], [0.012, 0.59, 0.002], [0.022, 0.635, 0.006], [0.028, 0.70, 0.012], [0.025, 0.77, 0.012], [0.012, 0.81, 0.008], [0.004, 0.835, 0.008]];
+  const route = taperTube(routePts, (u) => 0.0048 + 0.0022 * sstep(0.3, 0.4, u) * (1 - sstep(0.45, 0.55, u)), { capA: true, capB: false });
+  body.add(new THREE.Mesh(route.geo, vesselM));
+  const pathA = new THREE.CatmullRomCurve3([[0, 0.64, 0.004], [0.004, 0.56, -0.026], [0.01, 0.5, -0.035], [0.03, 0.44, -0.02], [0.058, 0.41, -0.003], [0.072, 0.38, 0.01], [0.062, 0.352, 0.024], [0.046, 0.345, 0.026]].map(V), false, 'centripetal');
+  const pathB = new THREE.CatmullRomCurve3(portalPts.map(V), false, 'centripetal');
+  const pathC = new THREE.CatmullRomCurve3(routePts.map(V), false, 'centripetal');
+
+  /* ======================= MUNDO 2: capilar cerebral y corteza (escala micro) ======================= */
+  const micro = new THREE.Group(); scene.add(micro); micro.visible = false;
+  const RIN = 1.0, ROUT = 1.13, A0 = Math.PI - 0.42, A1 = 2 * Math.PI + 0.42, XL = 16;
+  // endotelio: células alargadas (Voronoi) con núcleos que abultan hacia la luz
+  const seeds = []; for (let ix = -9; ix <= 9; ix++) for (let is = 0; is < 5; is++) seeds.push([ix * 1.9 + (r() - 0.5) * 1.1 + (is % 2) * 0.9, A0 * RIN + (is + 0.5) * ((A1 - A0) * RIN / 5) + (r() - 0.5) * 0.35, 0.85 + r() * 0.3]);
+  function wallSurface(R, inner) {
+    const nx = 360, na = 72, pos = [], col = [], idx = [];
+    const cA = new THREE.Color('#bd8a78'), cB = new THREE.Color('#6c3e35'), cN = new THREE.Color('#94646a'), cO = new THREE.Color('#9c7160');
+    for (let i = 0; i <= nx; i++) for (let j = 0; j <= na; j++) {
+      const x = -XL + (2 * XL) * i / nx, a = A0 + (A1 - A0) * j / na, s = a * RIN;
+      let d1 = 1e9, d2 = 1e9, best = null;
+      for (const sd of seeds) { const dx = (x - sd[0]) / 1.5, ds = s - sd[1]; const d = Math.sqrt(dx * dx + ds * ds); if (d < d1) { d2 = d1; d1 = d; best = sd; } else if (d < d2) d2 = d; }
+      const border = 1 - sstep(0.0, 0.05, d2 - d1);
+      const nuc = Math.exp(-(((x - best[0]) / 0.5) ** 2 + ((s - best[1]) / 0.22) ** 2));
+      const edge = sstep(0, 0.12, a - A0) * sstep(0, 0.12, A1 - a);
+      const rr = inner ? R - 0.07 * nuc * edge + 0.006 * border : R + 0.012 * fbm(x * 2, s * 2, 3);
+      pos.push(x, rr * Math.cos(a), rr * Math.sin(a));
+      const c = inner ? cA.clone().multiplyScalar(best[2] * (0.92 + 0.12 * fbm(x * 5, s * 5, 1))).lerp(cN, nuc * 0.7).lerp(cB, border * 0.85) : cO.clone().multiplyScalar(0.85 + 0.2 * fbm(x * 3, s * 3, 7));
+      col.push(c.r, c.g, c.b);
+    }
+    for (let i = 0; i < nx; i++) for (let j = 0; j < na; j++) { const a = i * (na + 1) + j, b = a + na + 1; idx.push(a, b, a + 1, b, b + 1, a + 1); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx); g.computeVertexNormals();
+    // orientar: interior mira al eje, exterior hacia afuera
+    const n = g.attributes.normal; const k = Math.floor(n.count / 2); const want = inner ? -1 : 1;
+    const radial = new THREE.Vector3(0, g.attributes.position.getY(k), g.attributes.position.getZ(k)).normalize();
+    if (Math.sign(new THREE.Vector3(n.getX(k), n.getY(k), n.getZ(k)).dot(radial)) !== want) { for (let q = 0; q < idx.length; q += 3) { const t = idx[q]; idx[q] = idx[q + 1]; idx[q + 1] = t; } g.setIndex(idx); g.computeVertexNormals(); }
+    return g;
+  }
+  const wallMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, transparent: true, opacity: 0.8, depthWrite: false });
+  const wallIn = new THREE.Mesh(wallSurface(RIN, true), wallMat); wallIn.receiveShadow = true; micro.add(wallIn);
+  const wallOut = new THREE.Mesh(wallSurface(ROUT, false), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, transparent: true, opacity: 0.85, depthWrite: false })); micro.add(wallOut);
+  // caras del corte (espesor de la pared)
+  const cutM = new THREE.MeshStandardMaterial({ color: '#6e4036', roughness: 0.8, side: THREE.DoubleSide });
+  [A0, A1].forEach((a) => { const g = new THREE.PlaneGeometry(2 * XL, ROUT - RIN + 0.02); const m = new THREE.Mesh(g, cutM);
+    m.rotation.x = a; m.position.set(0, ((RIN + ROUT) / 2) * Math.cos(a), ((RIN + ROUT) / 2) * Math.sin(a)); micro.add(m); });
+  // glóbulos rojos (disco bicóncavo, Evans–Fung), en fila como en un capilar
+  const rbcPts = []; { const R0 = 0.56; const h = (q) => 0.5 * R0 * Math.sqrt(Math.max(0, 1 - q * q)) * (0.207 + 2.003 * q * q - 1.123 * q ** 4) + 0.004;
+    for (let i = 0; i <= 40; i++) { const q = Math.sin((i / 40) * Math.PI / 2); rbcPts.push(new THREE.Vector2(q * R0, -h(q))); }
+    for (let i = 39; i >= 0; i--) { const q = Math.sin((i / 40) * Math.PI / 2); rbcPts.push(new THREE.Vector2(q * R0, h(q))); } }
+  const rbcG = new THREE.LatheGeometry(rbcPts, 64); rbcG.computeVertexNormals();
+  const rbcM = new THREE.MeshStandardMaterial({ color: '#8c2c24', roughness: 0.42, side: THREE.DoubleSide });
+  const X_P0 = -2.28, V_FLOW = 1.45, SPACING = 2.4;
+  const rbcs = []; for (let k = -7; k <= 7; k++) { const m = new THREE.Mesh(rbcG, rbcM); m.castShadow = true; micro.add(m); rbcs.push({ m, x0: X_P0 - 1.7 + k * SPACING, tilt: (r() - 0.5) * 0.35, spin: r() * 6, y: (r() - 0.5) * 0.08 }); }
+  // neurona piramidal de la corteza
+  const neuM = new THREE.MeshStandardMaterial({ color: '#c49a82', roughness: 0.55 });
+  const uDock = { value: new THREE.Vector3() }, uR = { value: 0 }, uAmp = { value: 0 };
+  neuM.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, { uDock, uR, uAmp });
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP;').replace('#include <project_vertex>', '#include <project_vertex>\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP; uniform vec3 uDock; uniform float uR; uniform float uAmp;')
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        float dd = distance(vWP, uDock);
+        float fill = (1.0 - smoothstep(uR - 0.5, uR, dd)) * 0.25;
+        float band = exp(-pow((dd - uR) / 0.14, 2.0)) * 0.55;
+        totalEmissiveRadiance += vec3(0.30, 0.42, 0.85) * (fill + band) * uAmp * exp(-dd * 0.55);`);
+  };
+  const NS = V([1.35, -3.75, -0.75]);
+  const somaG = new THREE.SphereGeometry(1, 64, 48);
+  { const p = somaG.attributes.position; for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i); const k = 1 - 0.55 * sstep(-0.2, 1, y); const n = 1 + 0.04 * fbm(x * 3, y * 3, z * 3); p.setXYZ(i, x * 0.4 * k * n, y * 0.55 * n, z * 0.4 * k * n); } somaG.computeVertexNormals(); }
+  const soma = new THREE.Mesh(somaG, neuM); soma.position.copy(NS); soma.castShadow = soma.receiveShadow = true; micro.add(soma);
+  const dend = (pts, r0, r1, capB = true) => { const t = taperTube(pts, (u) => lerp(r0, r1, Math.pow(u, 0.7)), { capA: false, capB, segs: 120, radial: 14 }); const m = new THREE.Mesh(t.geo, neuM); m.castShadow = m.receiveShadow = true; micro.add(m); return t.curve; };
+  const apical = dend([[1.35, -3.3, -0.75], [1.3, -2.8, -0.78], [1.15, -2.2, -0.9], [0.9, -1.75, -1.25], [0.45, -1.35, -1.75], [-0.3, -0.9, -2.3], [-1.3, -0.2, -2.9], [-2.4, 0.6, -3.3]], 0.13, 0.03);
+  dend([[0.9, -1.75, -1.25], [1.5, -1.5, -1.8], [2.4, -1.1, -2.2], [3.4, -0.4, -2.5]], 0.06, 0.022);
+  dend([[1.3, -2.8, -0.78], [1.9, -2.5, -0.6], [2.7, -2.3, -0.2], [3.6, -2.0, 0.1]], 0.05, 0.018);
+  dend([[1.0, -3.95, -0.7], [0.5, -4.3, -0.5], [-0.3, -4.7, -0.3], [-1.4, -5.0, -0.2]], 0.09, 0.025);
+  dend([[1.7, -3.95, -0.7], [2.3, -4.4, -0.6], [3.1, -4.8, -0.3], [4.2, -5.1, 0.0]], 0.09, 0.025);
+  dend([[1.3, -4.1, -0.95], [1.1, -4.7, -1.5], [0.8, -5.3, -2.2]], 0.08, 0.022);
+  dend([[1.4, -4.2, -0.72], [1.45, -5.2, -0.75], [1.5, -6.6, -0.8], [1.55, -8.5, -0.9]], 0.05, 0.035, false);   // axón
+  // astrocito con pies terminales apoyados sobre el capilar (barrera hematoencefálica)
+  const astM = new THREE.MeshStandardMaterial({ color: '#a88672', roughness: 0.6 });
+  const AS = V([-2.0, -2.75, -1.1]);
+  const ast = new THREE.Mesh(new THREE.SphereGeometry(0.26, 40, 30), astM); ast.position.copy(AS); ast.scale.set(1, 0.85, 0.95); ast.castShadow = true; micro.add(ast);
+  const footG = new THREE.SphereGeometry(1, 32, 16);
+  [[-3.1, Math.PI * 1.08], [-2.1, Math.PI * 1.24], [-1.1, Math.PI * 1.36], [-2.9, Math.PI * 1.45]].forEach(([fx, a]) => {
+    const n = new THREE.Vector3(0, Math.cos(a), Math.sin(a)); const E = new THREE.Vector3(fx, ROUT * n.y, ROUT * n.z);
+    const mid = AS.clone().lerp(E, 0.5).add(n.clone().multiplyScalar(0.35));
+    const t = taperTube([AS.toArray(), mid.toArray(), E.clone().addScaledVector(n, 0.05).toArray()], (u) => lerp(0.07, 0.035, u), { capA: false, capB: false, segs: 48, radial: 12 });
+    const pm = new THREE.Mesh(t.geo, astM); micro.add(pm);
+    const f = new THREE.Mesh(footG, astM); f.position.copy(E).addScaledVector(n, 0.02); f.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), n); f.scale.set(0.3, 0.035, 0.2); micro.add(f);
+  });
+  [[-3.2, -3.4, -0.4], [-2.6, -3.9, -1.8], [-1.2, -3.4, -0.4]].forEach((e) => { const mid = AS.clone().lerp(V(e), 0.5).add(new THREE.Vector3(0, -0.15, 0.1)); const t = taperTube([AS.toArray(), mid.toArray(), e], (u) => lerp(0.06, 0.012, u), { capA: false, segs: 40, radial: 10 }); micro.add(new THREE.Mesh(t.geo, astM)); });
+  // axones lejanos del neuropilo (salen de cuadro)
+  const axM = new THREE.MeshStandardMaterial({ color: '#5e4136', roughness: 0.7 });
+  for (let k = 0; k < 7; k++) { const z = -2.6 - k * 0.7, y0 = -5 + r() * 7; const pts = []; for (let i = 0; i <= 6; i++) pts.push([-20 + i * 6.7, y0 + (r() - 0.5) * 1.6, z + (r() - 0.5) * 0.8]);
+    const t = taperTube(pts, () => 0.03 + 0.03 * r(), { capA: false, capB: false, segs: 80, radial: 8 }); micro.add(new THREE.Mesh(t.geo, axM)); }
+
+  // punto de anclaje en la dendrita apical
+  const dockBase = apical.getPointAt(0.34); const DOCK = dockBase.clone().add(new THREE.Vector3(-0.55, 0.5, 0.65).normalize().multiplyScalar(0.3));
+  uDock.value.copy(dockBase);
+  const A_X = Math.PI * 1.1;
+
+  /* ---------------- timeline ---------------- */
+  tl.to('#fade', { opacity: 0, duration: 0.7, ease: 'appleOut' }, 0.12);
+  const pr = { a: 0, b: 0, c: 0, s: 0 };
+  const phos = { d: 0, o: 1 };
+  tl.to(pr, { s: 1, duration: 0.7, ease: 'appleOut' }, 0.45);
+  tl.to(pr, { a: 1, duration: 1.8, ease: 'apple' }, 0.45);
+  tl.to(pr, { b: 1, duration: 0.85, ease: 'apple' }, 2.25);
+  tl.to(phos, { d: 1, duration: 1.6, ease: 'appleOut' }, 3.12);
+  tl.to(phos, { o: 0, duration: 0.7, ease: 'appleIn' }, 3.85);
+  tl.to(pr, { c: 1, duration: 2.35, ease: 'apple' }, 4.55);
+
+  const cam = { ang: 0.62, rad: 2.5, h: 0.22, lx: 0, ly: 0.5, lz: 0, follow: 0 };
+  tl.to(cam, { ang: 0.42, rad: 0.6, h: 0.05, lx: 0.03, ly: 0.39, lz: 0.02, duration: 2.2, ease: 'apple' }, 0.1);
+  tl.to(cam, { follow: 1, rad: 0.21, ang: 0.3, h: 0.025, duration: 1.1, ease: 'apple' }, 2.2);
+  tl.to(cam, { ang: 0.2, duration: 1.25, ease: 'none' }, 3.3);
+  tl.to(cam, { rad: 0.36, ang: -0.3, h: -0.02, duration: 1.4, ease: 'apple' }, 4.55);
+  tl.to(cam, { rad: 0.13, ang: 0.15, h: 0.03, duration: 1.0, ease: 'appleIn' }, 6.0);
+  tl.to('#fade', { opacity: 1, duration: 0.38, ease: 'appleIn' }, 6.78);
+  tl.to('#fade', { opacity: 0, duration: 0.6, ease: 'appleOut' }, 7.2);
+
+  const part = { x: X_P0, rad: 0.66, dock: 0 };
+  tl.to(part, { x: X_P0 + 2.58, duration: 2.8, ease: 'sine.out' }, 7.2);
+  tl.to(part, { rad: 1.8, duration: 1.4, ease: 'apple' }, 9.3);
+  tl.to(part, { dock: 1, duration: 1.3, ease: 'apple' }, 10.45);
+  const mc = { ox: -4.6, oy: 0.55, oz: 4.3, lock: 1, tx: 0.6, ty: -1.75, tz: -0.8 };
+  tl.to(mc, { ox: -2.6, oy: -1.2, oz: 5.0, duration: 1.5, ease: 'apple' }, 9.15);
+  tl.to(mc, { lock: 0, ox: -4.6, oy: 0.4, oz: 8.6, duration: 2.8, ease: 'apple' }, 10.7);
+  tl.to(uAmp, { value: 1, duration: 0.6, ease: 'appleOut' }, 11.72);
+  tl.to(uR, { value: 2.6, duration: 1.8, ease: 'appleOut' }, 11.72);
+  tl.to('#fade', { opacity: 1, duration: 0.5, ease: 'appleIn' }, 13.35);
+
+  /* ---------------- sonido: pocos efectos, cada uno con motivo ---------------- */
+  M.sfx(0.1, 'whoosh', { dur: 2.2, peak: 0.45, dir: 1, gain: -5 });              // la cámara entra al abdomen
+  M.sfx(0.47, 'tap', { deg: 4, oct: 5, bright: 0.7, gain: -5 });                 // aparece la molécula
+  M.sfx(3.12, 'tick', { tone: 'glass', gain: -2 }).sfx(3.14, 'shimmer', { degs: [2, 4, 7], gain: -5 });   // se desprende el fosfato
+  M.sfx(4.55, 'whoosh', { dur: 2.3, peak: 0.45, dir: -1, gain: -5 });            // viaje por la sangre
+  M.sfx(6.8, 'whoosh', { dur: 0.7, peak: 0.6, dir: 1, gain: -7 });               // zambullida al capilar
+  M.sfx(9.85, 'grow', { dur: 0.6, density: 70, gain: -4 });                       // cruza el endotelio
+  M.sfx(11.72, 'swell', { dur: 1.1 }).sfx(11.72, 'impact', { weight: 0.7 });      // llega a la neurona
+  M.sfx(11.85, 'shimmer', { degs: [4, 7, 9], gain: -6 });
+
+  /* ---------------- por cuadro ---------------- */
+  const P = new THREE.Vector3(), T = new THREE.Vector3(), tmp = new THREE.Vector3();
+  M.onFrame((t) => {
+    const inBody = t < 7.0;
+    body.visible = inBody; micro.visible = !inBody;
+    if (inBody) {
+      scene.fog = null; key.castShadow = false;
+      if (pr.c > 0) pathC.getPointAt(Math.min(1, pr.c), P); else if (pr.b > 0) pathB.getPointAt(Math.min(1, pr.b), P); else pathA.getPointAt(pr.a, P);
+      mol.group.position.copy(P); mol.group.scale.setScalar(0.0056 * Math.max(0.0001, pr.s));
+      mol.group.rotation.set(0.4 + t * 0.25, t * 0.55, 0.2);
+      mol.phos.visible = phos.o > 0.01;
+      mol.phos.position.set(-1.2 * phos.d * 1.9, 1.9 * phos.d * 1.9, 0.6 * phos.d); mol.phos.rotation.z = phos.d * 0.9;
+      mol.warmMats.forEach((m) => (m.opacity = phos.o));
+      mol.light.intensity = 0.0012 * pr.s; mol.light.distance = 0.08;
+      T.set(lerp(cam.lx, P.x, cam.follow), lerp(cam.ly, P.y, cam.follow), lerp(cam.lz, P.z, cam.follow));
+      camera.position.set(T.x + Math.sin(cam.ang) * cam.rad, T.y + cam.h, T.z + Math.cos(cam.ang) * cam.rad);
+      camera.lookAt(T);
+    } else {
+      scene.fog = scene.fog || new THREE.FogExp2('#0a0706', 0.07); key.castShadow = true;
+      rbcs.forEach((b) => { let x = b.x0 + V_FLOW * (t - 7.2); x = ((x + XL - 1) % (2 * XL - 2) + (2 * XL - 2)) % (2 * XL - 2) - XL + 1;
+        b.m.position.set(x, b.y, -0.2); b.m.rotation.set(b.spin + t * 0.3, 0, Math.PI / 2 + b.tilt); });
+      const ex = new THREE.Vector3(part.x, part.rad * Math.cos(A_X), part.rad * Math.sin(A_X));
+      P.copy(ex).lerp(DOCK, part.dock);
+      if (part.dock > 0) P.y += Math.sin(part.dock * Math.PI) * 0.12;
+      mol.group.position.copy(P); mol.group.scale.setScalar(lerp(0.11, 0.08, part.dock)); mol.phos.visible = false;
+      mol.group.rotation.set(0.4 + t * 0.25 * (1 - part.dock * 0.6), t * 0.5 * (1 - part.dock * 0.6), 0.2);
+      mol.light.intensity = 0.35; mol.light.distance = 3;
+      T.set(lerp(mc.tx, P.x, mc.lock), lerp(mc.ty, P.y, mc.lock), lerp(mc.tz, P.z, mc.lock));
+      camera.position.set(T.x + mc.ox, T.y + mc.oy, T.z + mc.oz);
+      camera.lookAt(T);
+    }
+    S.render();
+  });
+});
+</script>
+</body>
+</html>
