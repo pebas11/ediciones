@@ -235,6 +235,9 @@ for (const mode of modes) {
     await page.evaluate((t) => window.__seek(t), t);
     const { list, bad } = await page.evaluate(PAGE_FN.inspect, SAFE);
     cues.push(`${fmtT(a)}–${fmtT(b)} quieto: ${list.map((x) => x.text).filter(Boolean).slice(0, 8).join(' · ')}`);
+    // economía de texto (skill motion-copy): ≤ 12 palabras y ≤ 3 bloques visibles a la vez
+    const words = list.map((x) => x.text.split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w)).length).reduce((p, c) => p + c, 0);
+    if (words > 12 || list.length > 3) seen.verbose = (seen.verbose || []).concat(`${words} palabras en ${list.length} bloques @${fmtT(t)}`);
     for (const x of list) {
       if (x.x0 < SAFE.x0 - 1 || x.x1 > SAFE.x1 + 1 || x.y0 < SAFE.y0 - 1 || x.y1 > SAFE.y1 + 1) seen.safe.add(`"${x.text}" [${Math.round(x.x0)},${Math.round(x.y0)}→${Math.round(x.x1)},${Math.round(x.y1)}] @${fmtT(t)}`);
       if (x.over) seen.over.add(`"${x.text}" sobresale ${x.over}px de su tarjeta @${fmtT(t)}`);
@@ -258,6 +261,7 @@ for (const mode of modes) {
   seen.safe.forEach((s) => W('fuera del margen seguro: ' + s));
   seen.small.forEach((s) => W('texto chico (<20px): ' + s));
   seen.tight.forEach((s) => W('máscara con line-height < 1.18 (puede cortar tildes): ' + s));
+  (seen.verbose || []).forEach((s) => W('demasiado texto a la vez (skill motion-copy): ' + s));
   if (!seen.over.size && !seen.overlap.size && !seen.safe.size) OK(`layout limpio en ${holds.length} tramos quietos`);
 
   if (mode === 'verde') {

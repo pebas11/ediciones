@@ -2,79 +2,40 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<title>H01 · Hongos mágicos: fruto y micelio (3D)</title>
+<title>H01 · Hongos mágicos (3D)</title>
 <link rel="stylesheet" href="../lib/theme.css">
 <link rel="stylesheet" href="../lib/fonts-spartan.css">
 <script type="importmap">{ "imports": { "three": "../node_modules/three/build/three.module.js", "three/addons/": "../node_modules/three/examples/jsm/" } }</script>
 <style>
-  :root { --bone: #F3EDE2; --caramel: #E0A15A; --blue: #6E9BFF; --lime: #C6F36B; --dim: rgba(243,237,226,0.62); }
+  /* Guion de color: cálido terroso (hongo, tierra) vs. UN acento frío (azul psilocibina: contraluz, azulado, micelio). */
+  :root { --bone: #F3EDE2; --caramel: #E3A560; --blue: #8FB0FF; --dim: rgba(243,237,226,0.66); }
+  body { background: #060504; }
   #gl { position: absolute; inset: 0; }
-  #grain { position: absolute; inset: -20px; opacity: 0.07; mix-blend-mode: overlay; pointer-events: none; }
-  #vig { position: absolute; inset: 0; background: radial-gradient(120% 100% at 60% 45%, transparent 55%, rgba(6,4,12,0.55) 100%); }
-
-  /* marco técnico */
-  .corner { position: absolute; width: 26px; height: 26px; border-color: rgba(243,237,226,0.5); border-style: solid; border-width: 0; }
-  .c1 { left: 64px; top: 56px; border-left-width: 1.5px; border-top-width: 1.5px; }
-  .c2 { right: 64px; top: 56px; border-right-width: 1.5px; border-top-width: 1.5px; }
-  .c3 { left: 64px; bottom: 56px; border-left-width: 1.5px; border-bottom-width: 1.5px; }
-  .c4 { right: 64px; bottom: 56px; border-right-width: 1.5px; border-bottom-width: 1.5px; }
-  #plate { position: absolute; right: 100px; top: 76px; font-family: var(--f-mono); font-size: 20px; letter-spacing: 0.14em; color: var(--dim); text-align: right; }
-
-  #kicker { position: absolute; left: 140px; top: 300px; font-family: var(--f-mono); font-size: 24px; letter-spacing: 0.22em; color: var(--caramel); white-space: nowrap; }
-  #title { position: absolute; left: 132px; top: 338px; font-family: var(--f-display); font-weight: 800; font-size: 176px; line-height: 1.16; letter-spacing: -0.035em; color: var(--bone); }
-  #title .w2 { color: var(--caramel); }
-  #sub { position: absolute; left: 140px; top: 776px; width: 640px; font-size: 36px; line-height: 1.3; color: var(--dim); }
-  #sub b { color: var(--bone); font-weight: 500; }
-
-  /* anotaciones sobre el modelo 3D */
-  #ann { position: absolute; inset: 0; overflow: visible; }
-  .lab { position: absolute; width: 380px; }
-  .lab .n { font-family: var(--f-mono); font-size: 20px; color: var(--caramel); letter-spacing: 0.1em; }
-  .lab .h { font-family: var(--f-display); font-weight: 700; font-size: 44px; line-height: 1.15; color: var(--bone); letter-spacing: -0.01em; }
-  .lab .d { font-size: 26px; line-height: 1.3; color: var(--dim); margin-top: 2px; }
-
-  /* beat 2 */
-  .sec { position: absolute; left: 140px; width: 620px; }
-  .sec .n { font-family: var(--f-mono); font-size: 22px; letter-spacing: 0.2em; }
-  .sec .h { font-family: var(--f-display); font-weight: 800; font-size: 84px; line-height: 1.12; letter-spacing: -0.03em; color: var(--bone); margin-top: 6px; }
-  .sec .d { font-size: 32px; line-height: 1.32; color: var(--dim); margin-top: 12px; }
-  #secUp { top: 150px; } #secUp .n { color: var(--caramel); }
-  #secDown { top: 620px; } #secDown .n { color: var(--lime); } #secDown .h em { font-style: normal; color: var(--lime); }
-  #cut { position: absolute; left: 0; right: 0; height: 1.5px; background: linear-gradient(90deg, transparent, rgba(243,237,226,0.7) 12%, rgba(243,237,226,0.7) 88%, transparent); }
-  #cutLbl { position: absolute; right: 110px; font-family: var(--f-mono); font-size: 20px; letter-spacing: 0.18em; color: var(--dim); }
-
-  /* beat 3 */
-  #stat { position: absolute; left: 140px; top: 290px; width: 760px; }
-  #stat .n { font-family: var(--f-mono); font-size: 22px; letter-spacing: 0.2em; color: var(--caramel); }
-  #stat .big { font-family: var(--f-display); font-weight: 900; font-size: 300px; line-height: 1.02; letter-spacing: -0.05em; color: var(--bone); margin: 8px 0 0 -12px; }
-  #stat .big .p { color: var(--caramel); }
-  #stat .d { font-size: 42px; line-height: 1.22; font-weight: 500; color: var(--bone); }
-  #stat .src { margin-top: 22px; font-family: var(--f-mono); font-size: 20px; letter-spacing: 0.06em; color: var(--dim); }
-  #fade { position: absolute; inset: 0; background: #06040c; opacity: 0; }
+  #grain { position: absolute; inset: -20px; opacity: 0.06; mix-blend-mode: overlay; pointer-events: none; }
+  #vig { position: absolute; inset: 0; background: radial-gradient(115% 100% at 62% 42%, transparent 50%, rgba(4,3,2,0.6) 100%); }
+  .t { position: absolute; left: 140px; font-family: var(--f-display); color: var(--bone); letter-spacing: -0.035em; line-height: 1.16; white-space: nowrap; }
+  #title { top: 560px; font-size: 196px; }
+  #title .a { font-weight: 800; display: block; }
+  #title .b { font-weight: 300; display: block; margin-top: -34px; color: var(--caramel); }
+  #l1 { top: 110px; width: 760px; white-space: normal; line-height: 1.2; font-size: 112px; font-weight: 700; }
+  #l2 { top: 110px; width: 800px; white-space: normal; line-height: 1.2; font-size: 112px; font-weight: 700; }
+  #l2 em { font-style: normal; color: var(--blue); }
+  #num { top: 250px; font-size: 330px; font-weight: 900; letter-spacing: -0.055em; line-height: 1.05; }
+  #num .p { color: var(--blue); font-weight: 600; }
+  #numL { top: 640px; line-height: 1.3; font-family: var(--f-body); font-size: 46px; font-weight: 500; letter-spacing: -0.01em; color: var(--dim); }
+  #fade { position: absolute; inset: 0; background: #060504; opacity: 0; }
 </style>
 </head>
 <body>
 <div id="world">
   <div id="gl"></div>
   <div id="vig"></div>
-  <svg id="ann" viewBox="0 0 1920 1080" width="1920" height="1080"></svg>
 
-  <div class="corner c1"></div><div class="corner c2"></div><div class="corner c3"></div><div class="corner c4"></div>
-  <div id="plate">LÁMINA 01 · PSILOCYBE CUBENSIS</div>
-
-  <div id="kicker">PSILOCYBE CUBENSIS — FIG. 01</div>
-  <div id="title"><div class="w1">Hongos</div><div class="w2">mágicos</div></div>
-  <div id="sub">Un organismo que <b>casi nunca vemos completo.</b></div>
-
-  <div class="lab" id="L1"><div class="n">01</div><div class="h">Sombrero</div><div class="d">Con un pico central (umbo)</div></div>
-  <div class="lab" id="L2"><div class="n">02</div><div class="h">Laminillas</div><div class="d">Liberan millones de esporas</div></div>
-  <div class="lab" id="L3"><div class="n">03</div><div class="h">Pie y anillo</div><div class="d">Se tiñe de azul al dañarse</div></div>
-
-  <div id="cut"></div><div id="cutLbl">NIVEL DEL SUELO</div>
-  <div class="sec" id="secUp"><div class="n">LO QUE VES</div><div class="h">El fruto</div><div class="d">Dura unos días: su trabajo es soltar esporas.</div></div>
-  <div class="sec" id="secDown"><div class="n">LO QUE NO VES</div><div class="h">El <em>micelio</em></div><div class="d">Una red de hilos que vive bajo tierra.</div></div>
-
-  <div id="stat"><div class="n" id="statK">HONGOS CON PSILOCIBINA</div><div class="big"><span class="p" id="statP">+</span><span id="statNum">0</span></div><div class="d" id="statTxt">especies conocidas</div><div class="src" id="statSrc">Fuente</div></div>
+  <div class="t" id="title"><span class="a">Hongos</span><span class="b">mágicos</span></div>
+  <div class="t" id="l1">Esto es solo<br>el fruto.</div>
+  <div class="t" id="l2">El organismo<br>vive <em>abajo</em>.</div>
+  <div class="t" id="num"><span class="p">+</span><span id="numV">0</span></div>
+  <div class="t" id="numL">especies alucinógenas de <i>Psilocybe</i></div>
 
   <canvas id="grain" width="512" height="512" style="width:1960px;height:1120px"></canvas>
   <div id="fade"></div>
@@ -87,42 +48,41 @@
 <script src="../lib/stage.js"></script>
 <script type="module">
 import { createStage3D, THREE, fbm } from '../lib/three-stage.mjs';
-import { buildMushroom } from '../lib/mushroom3d.mjs';
+import { buildMushroom, buildGrass } from '../lib/mushroom3d.mjs';
 
-// Dato del beat 3 (de la ficha verificada)
-const STAT = { prefix: '+', value: 200, text: 'especies de hongos producen psilocibina', src: 'Van Court et al., 2022 · Guzmán et al., 1998' };
+// Dato verificado (FICHA-HONGOS.md): "Más de 140 especies de Psilocybe son alucinógenas" — Guzmán 2005.
+const STAT = 140;
 
 M.scene({ duration: 14, push: 0 }, async (tl, M) => {
   const $ = (s) => document.querySelector(s);
   const r = M.rng(21);
 
-  /* ---------------- grano de película (estático, sobre todo) ---------------- */
   { const g = $('#grain').getContext('2d'); const im = g.createImageData(512, 512); const rn = M.rng(3);
     for (let i = 0; i < im.data.length; i += 4) { const v = 128 + (rn() - 0.5) * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
     g.putImageData(im, 0, 0); }
 
   /* ---------------- escena 3D ---------------- */
-  const S = createStage3D($('#gl'), { bgTop: '#0f0a1c', bgBottom: '#040308', bgGlow: '#2a1440', bloom: { strength: 0.38, radius: 0.5, threshold: 0.9 }, exposure: 1.05 });
+  const S = createStage3D($('#gl'), { bgTop: '#130f0c', bgBottom: '#050403', bgGlow: '#2c2017', bloom: { strength: 0.25, radius: 0.45, threshold: 0.94 }, exposure: 1.0, env: 0.2 });
   const { scene, camera, renderer } = S;
   renderer.localClippingEnabled = true;
-  scene.fog = new THREE.FogExp2('#08050f', 0.035);
+  scene.fog = new THREE.FogExp2('#090706', 0.035);
 
-  const m1 = buildMushroom({ seed: 1 });
-  const m2 = buildMushroom({ seed: 2, stemH: 1.25, capScale: 0.72 });
-  const m3 = buildMushroom({ seed: 3, stemH: 0.8, capScale: 0.5 });
+  // grupo de tres, como crecen: uno maduro, uno intermedio, uno joven
+  const m1 = buildMushroom({ seed: 1, age: 0.85 });
+  const m2 = buildMushroom({ seed: 2, stemH: 1.3, capScale: 0.8, age: 0.45 });
+  const m3 = buildMushroom({ seed: 3, stemH: 0.78, capScale: 0.62, age: 0.0 });
   m1.group.position.set(0.15, 0, 0.75);
-  m2.group.position.set(0.95, 0, 0.05); m2.group.rotation.set(0, 1.9, 0.12);
-  m3.group.position.set(-0.62, 0, 1.15); m3.group.rotation.set(0, -0.8, -0.16);
+  m2.group.position.set(0.95, 0, 0.05); m2.group.rotation.set(0, 1.9, 0.1);
+  m3.group.position.set(-0.62, 0, 1.15); m3.group.rotation.set(0, -0.8, -0.14);
   const shrooms = [m1, m2, m3];
   shrooms.forEach((m) => scene.add(m.group));
 
-  // luces: clave cálida, contraluces de color, relleno violeta
-  const key = new THREE.DirectionalLight('#ffd6a0', 2.4); key.position.set(-3, 5, 5); key.castShadow = true; key.shadow.mapSize.set(2048, 2048); key.shadow.radius = 5;
+  // luces: clave cálida lateral, contraluz FRÍO (separa la silueta del fondo), relleno neutro bajo
+  const key = new THREE.DirectionalLight('#ffdcae', 2.1); key.position.set(-4, 4.5, 4); key.castShadow = true; key.shadow.mapSize.set(2048, 2048); key.shadow.radius = 5;
   Object.assign(key.shadow.camera, { left: -5, right: 5, top: 5, bottom: -5 }); key.shadow.camera.updateProjectionMatrix(); scene.add(key);
-  const rimA = new THREE.DirectionalLight('#ff6cc4', 1.0); rimA.position.set(4, 2.5, -3); scene.add(rimA);
-  const rimB = new THREE.DirectionalLight('#7fd8ff', 0.9); rimB.position.set(-4, 1.8, -3.5); scene.add(rimB);
-  scene.add(new THREE.HemisphereLight('#5a4790', '#0b0711', 0.45));
-  const under = new THREE.PointLight('#c6f36b', 0, 5, 1.8); under.position.set(0.2, -1.0, 3.0); scene.add(under);
+  const rim = new THREE.DirectionalLight('#7fa2ff', 1.5); rim.position.set(3.5, 3, -4); scene.add(rim);
+  scene.add(new THREE.HemisphereLight('#3a3440', '#140d08', 0.4));
+  const under = new THREE.PointLight('#8fb0ff', 0, 5, 1.8); under.position.set(0.2, -1.0, 3.0); scene.add(under);
 
   /* ---------------- bloque de tierra (diorama en corte) ---------------- */
   const BW = 7.2, BD = 3.6, BH = 2.3, FZ = BD / 2;      // ancho, profundidad, alto; cara frontal en z = FZ
@@ -157,13 +117,15 @@ M.scene({ duration: 14, push: 0 }, async (tl, M) => {
   const right = new THREE.Mesh(strataFace(BD, BH, 9), faceMat); right.rotation.y = Math.PI / 2; right.position.set(BW / 2, -BH / 2, 0); soil.add(right);
   // piedritas incrustadas en el corte
   const pebGeo = new THREE.IcosahedronGeometry(1, 1);
-  const inset = new THREE.InstancedMesh(pebGeo, new THREE.MeshStandardMaterial({ color: '#6a5446', roughness: 0.9, flatShading: true }), 160);
+  const inset = new THREE.InstancedMesh(pebGeo, new THREE.MeshStandardMaterial({ color: '#4f3f35', roughness: 0.9, flatShading: true }), 160);
   { const mm = new THREE.Matrix4(), q = new THREE.Quaternion();
     for (let i = 0; i < 160; i++) { const s = 0.012 + Math.pow(r(), 3) * 0.07; q.setFromEuler(new THREE.Euler(r() * 3, r() * 3, r() * 3));
       mm.compose(new THREE.Vector3((r() - 0.5) * (BW - 0.2), -0.08 - r() * (BH - 0.15), FZ - s * 0.4), q, new THREE.Vector3(s, s * 0.7, s * 0.6)); inset.setMatrixAt(i, mm); } }
   soil.add(inset);
+  // pasto (como en las fotos de referencia: crecen en pastizales)
+  soil.add(buildGrass({ count: 1500, w: BW, d: BD, avoid: [[0.15, 0.75, 0.32], [0.95, 0.05, 0.28], [-0.62, 1.15, 0.26]] }));
   // piedritas en la superficie
-  const peb = new THREE.InstancedMesh(pebGeo, new THREE.MeshStandardMaterial({ color: '#54433b', roughness: 0.9, flatShading: true }), 70);
+  const peb = new THREE.InstancedMesh(pebGeo, new THREE.MeshStandardMaterial({ color: '#46382f', roughness: 0.9, flatShading: true }), 70);
   { const mm = new THREE.Matrix4(), q = new THREE.Quaternion();
     for (let i = 0; i < 70; i++) { const s = 0.015 + r() * 0.045; q.setFromEuler(new THREE.Euler(r() * 3, r() * 3, r() * 3));
       mm.compose(new THREE.Vector3((r() - 0.5) * (BW - 0.4), s * 0.2, (r() - 0.5) * (BD - 0.4)), q, new THREE.Vector3(s, s * 0.6, s * 0.9)); peb.setMatrixAt(i, mm); } }
@@ -178,7 +140,7 @@ M.scene({ duration: 14, push: 0 }, async (tl, M) => {
 
   /* ---------------- micelio: red fina sobre la cara del corte ---------------- */
   const hyphae = [];
-  const cols = ['#fff1d2', '#f7e6b6', '#ecefae', '#d6ecaa', '#bfe6c4', '#a9dcd2'];
+  const cols = ['#e9f0ff', '#cfdcff', '#b3c8ff', '#98b3ff', '#86a3f5', '#7a93e0'];
   function branch(p0, dir, len, depth, t0) {
     if (depth > 5 || len < 0.07) return;
     const pts = [p0.clone()]; let p = p0.clone(); const d = dir.clone();
@@ -214,7 +176,7 @@ M.scene({ duration: 14, push: 0 }, async (tl, M) => {
   });
   const tipGeo = new THREE.SphereGeometry(1, 10, 8);
   hyphae.filter((h, i) => h.depth >= 4 && i % 2 === 0).forEach((h) => {
-    const s = new THREE.Mesh(tipGeo, new THREE.MeshBasicMaterial({ color: '#fbffe8' }));
+    const s = new THREE.Mesh(tipGeo, new THREE.MeshBasicMaterial({ color: '#f2f6ff' }));
     s.position.copy(h.curve.getPointAt(1)); s.scale.setScalar(0.0001); soil.add(s);
     tl.to(s.scale, { x: 0.011, y: 0.011, z: 0.011, duration: 0.4, ease: M.spring(0.12) }, h.t0 + h.dur);
   });
@@ -231,97 +193,47 @@ M.scene({ duration: 14, push: 0 }, async (tl, M) => {
   const planeWire = new THREE.Plane(new THREE.Vector3(0, 1, 0), -scan.y);    // conserva y > scan
   shrooms.forEach((m) => { m.solids.forEach((s) => (s.material.clippingPlanes = [planeSolid])); m.wireMat.clippingPlanes = [planeWire]; });
   const ringGeo = new THREE.RingGeometry(1.25, 1.265, 128); ringGeo.rotateX(-Math.PI / 2);
-  const scanRing = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: '#8fe8ff', transparent: true, opacity: 0.9, side: THREE.DoubleSide }));
+  const scanRing = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: '#9db8ff', transparent: true, opacity: 0.9, side: THREE.DoubleSide }));
   scene.add(scanRing);
   tl.to(scan, { y: 3.0, duration: 2.1, ease: 'apple' }, 0.35);
 
   /* ---------------- cámara ---------------- */
-  const cam = { ang: -0.5, rad: 7.6, y: 1.5, lx: 0.25, ly: 1.22, lz: 0.6, shift: -300 };
-  tl.to(cam, { ang: -0.24, duration: 4.8, ease: 'apple' }, 0);
-  // beat 2: se aleja y baja para mostrar el corte del suelo (diorama)
-  tl.to(cam, { ang: -0.1, rad: 11.4, y: 1.2, lx: 0.9, ly: -0.25, lz: 0.6, shift: -420, duration: 1.8, ease: 'apple' }, 4.5);
-  // beat 3: gira un poco y deja lugar al dato a la izquierda
-  tl.to(cam, { ang: 0.1, rad: 11.0, y: 1.5, lx: 0.9, ly: 0.05, shift: -640, duration: 1.6, ease: 'apple' }, 9.35);
-  tl.to(cam, { ang: 0.24, duration: 3.6, ease: 'none' }, 10.95);
-  tl.to(under, { intensity: 2.2, duration: 2.5, ease: 'appleOut' }, 6.2);
+  const cam = { ang: -0.42, rad: 7.0, y: 0.95, lx: 0.3, ly: 1.5, lz: 0.6, shift: -420 };
+  tl.to(cam, { ang: -0.2, rad: 6.7, duration: 4.6, ease: 'apple' }, 0);
+  // beat 2: se aleja y muestra el suelo en corte
+  tl.to(cam, { ang: -0.08, rad: 11.4, y: 1.2, lx: 0.9, ly: -0.25, lz: 0.6, shift: -420, duration: 1.9, ease: 'apple' }, 4.3);
+  // beat 3: deja lugar al número
+  tl.to(cam, { ang: 0.1, rad: 11.0, y: 1.5, lx: 0.9, ly: 0.05, shift: -640, duration: 1.6, ease: 'apple' }, 9.3);
+  tl.to(cam, { ang: 0.22, duration: 3.7, ease: 'none' }, 10.9);
+  tl.to(under, { intensity: 2.0, duration: 2.5, ease: 'appleOut' }, 6.2);
 
-  /* ---------------- anotaciones (líneas que siguen al 3D) ---------------- */
-  const svg = $('#ann'); const NS = 'http://www.w3.org/2000/svg';
-  const mkL = () => { const l = document.createElementNS(NS, 'polyline'); l.setAttribute('fill', 'none'); l.setAttribute('stroke', 'rgba(243,237,226,0.75)'); l.setAttribute('stroke-width', '1.5'); svg.appendChild(l); const d = document.createElementNS(NS, 'circle'); d.setAttribute('r', '5'); d.setAttribute('fill', '#E0A15A'); svg.appendChild(d); return { l, d }; };
-  const ANN = [
-    { el: $('#L1'), a: m1.anchors.umbo, pos: [1520, 190], t: 2.0 },
-    { el: $('#L2'), a: m1.anchors.gills, pos: [1520, 440], t: 2.45 },
-    { el: $('#L3'), a: m1.anchors.stem, pos: [1520, 640], t: 2.9 },
-  ].map((o) => ({ ...o, ...mkL(), p: { v: 0 } }));
-  ANN.forEach((o) => {
-    gsap.set(o.el, { left: o.pos[0], top: o.pos[1] });
-    tl.to(o.p, { v: 1, duration: 0.7, ease: 'appleOut' }, o.t);
-    M.textIn(o.el.querySelector('.h'), o.t + 0.25, { type: 'words', dur: 0.6, ease: 'appleOut' });
-    M.textIn(o.el.querySelector('.n'), o.t + 0.2, { type: 'words', dur: 0.5, ease: 'appleOut' });
-    M.textIn(o.el.querySelector('.d'), o.t + 0.4, { type: 'words', dur: 0.6, stagger: 0.03, ease: 'appleOut' });
-    tl.to(o.p, { v: 0, duration: 0.45, ease: 'appleIn' }, 4.3);
-    tl.to(o.el, { opacity: 0, y: -10, duration: 0.4, ease: 'appleIn' }, 4.3);
-  });
+  /* ---------------- texto (skill motion-copy: 14 palabras en toda la escena) ---------------- */
+  const tA = M.textIn($('#title .a'), 0.9, { dur: 1.0, stagger: 0.04, ease: 'appleOut' });
+  const tB = M.textIn($('#title .b'), 1.25, { dur: 1.0, stagger: 0.04, ease: 'appleOut' });
+  M.textOut(tA, 3.95, { stagger: 0.015 }); M.textOut(tB, 4.0, { stagger: 0.015 });
 
-  /* ---------------- tipografía ---------------- */
-  const k1 = M.textIn($('#kicker'), 0.3, { type: 'words', dur: 0.7, ease: 'appleOut' });
-  const t1 = M.textIn($('#title .w1'), 0.45, { dur: 0.9, stagger: 0.035, ease: 'appleOut' });
-  const t2 = M.textIn($('#title .w2'), 0.7, { dur: 0.9, stagger: 0.035, ease: 'appleOut' });
-  const sb = M.textIn($('#sub'), 1.3, { type: 'words', dur: 0.7, stagger: 0.035, ease: 'appleOut' });
-  tl.from('.corner', { opacity: 0, scale: 0.6, duration: 0.6, stagger: 0.06, ease: 'appleOut' }, 0.2);
-  const pl = M.textIn($('#plate'), 0.6, { type: 'words', dur: 0.6, ease: 'appleOut' });
-  M.textOut(k1, 4.2, { type: 'words' }); M.textOut(t1, 4.25, { stagger: 0.015 }); M.textOut(t2, 4.3, { stagger: 0.015 }); M.textOut(sb, 4.2, { type: 'words', stagger: 0.01 });
+  const l1 = M.textIn($('#l1'), 6.0, { type: 'words', dur: 0.8, stagger: 0.06, ease: 'appleOut' });
+  M.textOut(l1, 7.55, { type: 'words', stagger: 0.02 });
+  const l2 = M.textIn($('#l2'), 7.85, { type: 'words', dur: 0.8, stagger: 0.06, ease: 'appleOut' });
+  M.textOut(l2, 9.15, { type: 'words', stagger: 0.02 });
 
-  // beat 2
-  const cutY = { v: 1200 };
-  const sU = [M.textIn($('#secUp .n'), 6.0, { type: 'words', dur: 0.6, ease: 'appleOut' }), M.textIn($('#secUp .h'), 6.1, { type: 'words', dur: 0.8, ease: 'appleOut' }), M.textIn($('#secUp .d'), 6.35, { type: 'words', dur: 0.7, stagger: 0.03, ease: 'appleOut' })];
-  const sD = [M.textIn($('#secDown .n'), 7.0, { type: 'words', dur: 0.6, ease: 'appleOut' }), M.textIn($('#secDown .h'), 7.1, { type: 'words', dur: 0.8, ease: 'appleOut' }), M.textIn($('#secDown .d'), 7.35, { type: 'words', dur: 0.7, stagger: 0.03, ease: 'appleOut' })];
-  tl.fromTo('#cut', { scaleX: 0 }, { scaleX: 1, duration: 1.0, ease: 'apple' }, 5.8);
-  const cl = M.textIn($('#cutLbl'), 6.2, { type: 'words', dur: 0.6, ease: 'appleOut' });
-  [...sU, ...sD].forEach((sp, i) => M.textOut(sp, 9.0 + (i % 3) * 0.03, { type: 'words', stagger: 0.01 }));
-  M.textOut(cl, 9.05, { type: 'words' });
-  tl.to('#cut', { scaleX: 0, duration: 0.5, ease: 'appleIn' }, 9.1);
-
-  // beat 3
-  $('#statNum').textContent = '0'; $('#statP').textContent = STAT.prefix; $('#statTxt').textContent = STAT.text; $('#statSrc').textContent = STAT.src;
-  const s1 = M.textIn($('#statK'), 9.95, { type: 'words', dur: 0.6, ease: 'appleOut' });
-  tl.from('#stat .big', { yPercent: 30, opacity: 0, duration: 0.9, ease: 'appleOut' }, 10.05);
-  M.counter($('#statNum'), { from: 0, to: STAT.value, at: 10.1, dur: 1.5, ease: 'expo.out' });
-  const s2 = M.textIn($('#statTxt'), 10.45, { type: 'words', dur: 0.7, stagger: 0.03, ease: 'appleOut' });
-  const s3 = M.textIn($('#statSrc'), 10.8, { type: 'words', dur: 0.6, stagger: 0.02, ease: 'appleOut' });
-  tl.to('#stat', { opacity: 0, y: -16, duration: 0.5, ease: 'appleIn' }, 13.05);
-  tl.to(['.corner', '#plate'], { opacity: 0, duration: 0.4, ease: 'appleIn' }, 13.2);
+  tl.from('#num', { yPercent: 18, opacity: 0, duration: 0.9, ease: 'appleOut' }, 10.0);
+  M.counter($('#numV'), { from: 0, to: STAT, at: 10.05, dur: 1.5, ease: 'expo.out' });
+  const nl = M.textIn($('#numL'), 10.6, { type: 'words', dur: 0.7, stagger: 0.05, ease: 'appleOut' });
+  tl.to(['#num', '#numL'], { opacity: 0, y: -14, duration: 0.5, ease: 'appleIn' }, 13.0);
   tl.to('#fade', { opacity: 1, duration: 0.55, ease: 'appleIn' }, 13.3);
 
   /* ---------------- por cuadro ---------------- */
-  const tmp = new THREE.Vector3();
   M.onFrame(() => {
-    // escaneo
     planeSolid.constant = scan.y; planeWire.constant = -scan.y;
-    const scanning = scan.y > -0.1 && scan.y < 2.95;
-    scanRing.visible = scanning; scanRing.position.y = scan.y;
+    scanRing.visible = scan.y > -0.1 && scan.y < 2.95; scanRing.position.y = scan.y;
     shrooms.forEach((m) => m.wires.forEach((w) => (w.visible = scan.y < 2.95)));
-    // micelio
     hyphae.forEach((h) => h.geo.setDrawRange(0, Math.floor(h.total * h.prog.v / 3) * 3));
-    pulses.forEach(({ s, h, pr }) => { if (pr.on && pr.u > 0 && pr.u < 1) { s.position.copy(h.curve.getPointAt(pr.u)); s.scale.setScalar(0.03); } else s.scale.setScalar(0.0001); });
-    // cámara (con desplazamiento de lente para dejar lugar al texto)
+    pulses.forEach(({ s, h, pr }) => { if (pr.on && pr.u > 0 && pr.u < 1) { s.position.copy(h.curve.getPointAt(pr.u)); s.scale.setScalar(0.028); } else s.scale.setScalar(0.0001); });
     camera.position.set(Math.sin(cam.ang) * cam.rad, cam.y, Math.cos(cam.ang) * cam.rad);
     camera.lookAt(cam.lx, cam.ly, cam.lz);
     camera.setViewOffset(1920, 1080, cam.shift, 0, 1920, 1080);
     S.render();
-    // anotaciones
-    ANN.forEach((o) => {
-      const p = S.project(o.a);
-      const lx = o.pos[0] - 24, ly = o.pos[1] + 44;
-      const mx = p.x + (lx - p.x) * 0.55;
-      const v = o.p.v;
-      const ex = p.x + (lx - p.x) * v, ey = p.y + (ly - p.y) * Math.min(1, v * 1.6);
-      o.l.setAttribute('points', v > 0.001 ? `${p.x.toFixed(1)},${p.y.toFixed(1)} ${(p.x + (mx - p.x) * Math.min(1, v * 1.6)).toFixed(1)},${ey.toFixed(1)} ${ex.toFixed(1)},${ey.toFixed(1)}` : '');
-      o.d.setAttribute('cx', p.x.toFixed(1)); o.d.setAttribute('cy', p.y.toFixed(1)); o.d.setAttribute('r', (5 * Math.min(1, v * 3)).toFixed(2));
-    });
-    // línea de corte: proyección del nivel del suelo al frente
-    tmp.set(BW / 2, 0, FZ); const pc = S.project(tmp);
-    $('#cut').style.top = pc.y.toFixed(1) + 'px'; $('#cutLbl').style.top = (pc.y - 34).toFixed(1) + 'px';
   });
 });
 </script>

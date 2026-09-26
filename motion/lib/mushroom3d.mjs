@@ -48,7 +48,7 @@ export function buildMushroom({ seed = 1, stemH = 1.75, capScale = 1, age = 0.8 
         c.multiplyScalar(1 + streak);
         // restos del velo: manchitas pálidas cerca del borde
         const v = noise3(cx * 22 + S, r * 22, cz * 22);
-        const vt = L(0.28, 0.58);                       // jóvenes: más motas del velo, en todo el sombrero
+        const vt = L(0.4, 0.62);                       // jóvenes: más motas del velo, en todo el sombrero
         if (t > L(0.25, 0.8) && v > vt) c.lerp(veil, Math.min(0.85, (v - vt) * 4));
         // azulado (oxidación de la psilocina) cerca del borde, en manchas
         const b = fbm(cx * 3.1 + 40 + S, r * 2, cz * 3.1);
@@ -59,7 +59,7 @@ export function buildMushroom({ seed = 1, stemH = 1.75, capScale = 1, age = 0.8 
     capGeo.setAttribute('color', new THREE.BufferAttribute(col, 3));
     capGeo.computeVertexNormals();
   }
-  const capMat = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.46, clearcoat: 0.35, clearcoatRoughness: 0.45, sheen: 0.55, sheenRoughness: 0.55, sheenColor: C('#ffd08f') });
+  const capMat = new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide, vertexColors: true, roughness: 0.52, clearcoat: 0.18, clearcoatRoughness: 0.55, sheen: 0.55, sheenRoughness: 0.55, sheenColor: C('#ffd08f') });
   const cap = new THREE.Mesh(capGeo, capMat);
   cap.castShadow = true; cap.receiveShadow = true;
 
@@ -94,16 +94,19 @@ export function buildMushroom({ seed = 1, stemH = 1.75, capScale = 1, age = 0.8 
   const sp = [];
   const SR = L(0.15, 0.105);  // pie grueso (≈ 1/4–1/3 del sombrero), según fotos de referencia
   const stemR = (t) => SR * (0.86 + 0.28 * t) + 0.035 * Math.pow(Math.max(0, t - 0.8) / 0.2, 2) - SR * 0.5 * Math.pow(Math.max(0, t - 0.965) / 0.035, 2);
-  for (let i = 0; i <= 90; i++) { const t = i / 90; sp.push(new THREE.Vector2(Math.max(0.001, stemR(t)), -t * stemH)); }
+  // el pie sube 0,22 dentro del sombrero (queda oculto): nunca puede haber un hueco entre pie y sombrero
+  const IN = 0.16 * capScale;
+  sp.push(new THREE.Vector2(0.001, IN), new THREE.Vector2(SR * 0.92, IN), new THREE.Vector2(SR * 0.95, IN * 0.4));
+  for (let i = 0; i <= 90; i++) { const t = i / 90; const apex = 0.1 * SR * Math.max(0, 1 - t / 0.06); sp.push(new THREE.Vector2(Math.max(0.001, stemR(t) + apex), -t * stemH)); }
   sp.push(new THREE.Vector2(SR * 0.9, -stemH - 0.12), new THREE.Vector2(0.001, -stemH - 0.14)); // entra en la tierra
   const stemGeo = new THREE.LatheGeometry(sp, 96);
   const bend = (t) => ({ x: 0.1 * Math.sin(Math.PI * t * 1.2) - 0.06 * t * t, z: 0.06 * Math.sin(Math.PI * t * 0.7) });
   {
     const p = stemGeo.attributes.position, col = new Float32Array(p.count * 3);
-    const cream = C('#F2EEE6'), warm = C('#E8DCC4'), blue = C('#3E6FD6'), dirt = C('#8A6A4E');
+    const cream = C('#E4DDD1'), warm = C('#DCCDB2'), blue = C('#3E6FD6'), dirt = C('#8A6A4E');
     for (let i = 0; i < p.count; i++) {
       let x = p.getX(i), y = p.getY(i), z = p.getZ(i);
-      const t = Math.min(1, -y / stemH), phi = Math.atan2(z, x);
+      const t = Math.max(0, Math.min(1, -y / stemH)), phi = Math.atan2(z, x);
       const fib = 1 + 0.03 * fbm(Math.cos(phi) * 7 + S, y * 9, Math.sin(phi) * 7) + 0.03 * noise3(phi * 44, y * 1.2, S);
       x *= fib; z *= fib;
       const b = bend(t); x += b.x; z += b.z;
@@ -120,7 +123,7 @@ export function buildMushroom({ seed = 1, stemH = 1.75, capScale = 1, age = 0.8 
     stemGeo.setAttribute('color', new THREE.BufferAttribute(col, 3));
     stemGeo.computeVertexNormals();
   }
-  const stem = new THREE.Mesh(stemGeo, new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.62, sheen: 0.8, sheenRoughness: 0.4, sheenColor: C('#ffffff') }));
+  const stem = new THREE.Mesh(stemGeo, new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide, vertexColors: true, roughness: 0.7, sheen: 0.5, sheenRoughness: 0.5, sheenColor: C('#f4ece0') }));
   stem.castShadow = true; stem.receiveShadow = true;
 
   /* ------------------------------ anillo (velo) ------------------------------ */
@@ -148,8 +151,9 @@ export function buildMushroom({ seed = 1, stemH = 1.75, capScale = 1, age = 0.8 
   const stemGroup = new THREE.Group();
   stemGroup.add(stem, ring);
   stemGroup.position.y = stemH;             // base del pie en y = 0
-  capGroup.position.set(0, stemH - 0.045 + L(0.06, 0), 0);
-  capGroup.rotation.set(0.05, 0.3, -0.07);
+  // la cara inferior del sombrero (en r≈pie) apoya exactamente sobre la punta del pie
+  capGroup.position.set(0, stemH - yUnder(Math.min(0.9 * R, SR / capScale)) * capScale - 0.01, 0);
+  capGroup.rotation.set(0.03, 0.3, -0.04);
   group.add(stemGroup, capGroup);
 
   // puntos de anclaje para anotaciones
