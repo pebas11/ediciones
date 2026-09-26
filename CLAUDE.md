@@ -2,6 +2,7 @@
 
 Motion graphics explicativos para videos que el usuario edita en CapCut. El usuario escribe en español rioplatense; en pantalla va español neutro.
 
+- **Leer primero `motion/BITACORA.md`** (estado, pendientes, preferencias).
 - Todo el trabajo de animación está en `motion/`. Para cualquier pedido de animación usá la skill `motion-graphics`: tiene el proceso, los comandos y el presupuesto de tokens.
 - Antes de escribir una escena, leé `motion/docs/RULES.md` (reglas técnicas) y `motion/docs/APPLE-MOTION.md` (curvas, duraciones, tipografía).
 - Revisá primero con `node qa.mjs <escena>`, que no gasta imágenes. Mirá imágenes solo para juzgar el diseño, con hojas de 16 cuadros y recortes.
