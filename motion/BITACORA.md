@@ -69,6 +69,12 @@ Son 5 animaciones útiles como B-roll para narración, **sin ningún texto en pa
 - El render y el sonido los hace el orquestador.
 - Reutilizar `three-stage.mjs`, la iluminación de h01 y el modelador de moléculas de h02 (`scenes/h02-quimica.html`) para p05.
 
+### Serie 4: IA en 2D, sin 3D (pedido del 26/09). EN CURSO
+- Brief: `BRIEF-IA.md`.
+- Escenas: a01-agi (Bauhaus), a02-recursiva (tinta y zoom infinito), a03-tipos-ia (30 s, diagramas vivos).
+- Workflow `serie-ia`, run wf_f1ee457b-218: construir → criticar → corregir.
+- Después: render con `/tmp/claude-0/batch.sh a01-agi a02-recursiva a03-tipos-ia` (si se perdió, ver comandos arriba), versión ENTREGA, envío y commit.
+
 ## Infra hecha en esta sesión (para no rehacerla)
 - **`render.mjs`:**
   - 3 Chromium en paralelo con captura CDP. FONDO sale en JPEG.
