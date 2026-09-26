@@ -114,12 +114,48 @@
     car.start(t0); mod.start(t0); car.stop(t1); mod.stop(t1);
     return car;
   }
-  /** salida de un preset: nivel → paneo → bus (+ envío a reverb) */
-  function out(ctx, g, node, { pan = 0, verb = 0, bus = 'sfx', level = 1 } = {}) {
+  /** Suma con orden fijo. Chromium suma las conexiones de una entrada en un orden que varía de
+      render a render (conjunto de punteros) y la suma en coma flotante no es asociativa: con 3+
+      conexiones el resultado cambia en los bits bajos (y en FM/filtros la diferencia crece). Con
+      a lo sumo 2 conexiones por entrada (a+b = b+a exacto) el render es idéntico bit a bit.
+      REGLA: nunca conectar más de 2 nodos a la misma entrada; usar sum(). */
+  function sum(ctx, nodes, dest) {
+    nodes = nodes.filter(Boolean);
+    if (!nodes.length) return null;
+    let acc = nodes[0];
+    for (let i = 1; i < nodes.length; i++) { const g = G(ctx, 1); acc.connect(g); nodes[i].connect(g); acc = g; }
+    if (dest) acc.connect(dest);
+    return acc;
+  }
+  /** Paneo sin StereoPannerNode (medido: StereoPanner + un filtro aguas abajo da renders que
+      difieren entre corridas). Mono → estéreo con ley de potencia constante; `stereo: true` =
+      la entrada ya es estéreo → balance. pan: número (−1..1) o [desde, hasta, t0, t1] (movimiento). */
+  function pan2(ctx, node, pan = 0, stereo = false) {
+    const m = ctx.createChannelMerger(2), gl = G(ctx, 1), gr = G(ctx, 1);
+    if (stereo) {
+      const sp = ctx.createChannelSplitter(2); node.connect(sp); sp.connect(gl, 0); sp.connect(gr, 1);
+      const q = clamp(typeof pan === 'number' ? pan : 0, -1, 1);
+      gl.gain.value = q > 0 ? 1 - q : 1; gr.gain.value = q < 0 ? 1 + q : 1;
+    } else {
+      node.connect(gl); node.connect(gr);
+      const L = (q) => Math.cos((clamp(q, -1, 1) + 1) * Math.PI / 4), Rg = (q) => Math.sin((clamp(q, -1, 1) + 1) * Math.PI / 4);
+      if (typeof pan === 'number') { gl.gain.value = L(pan); gr.gain.value = Rg(pan); }
+      else {
+        const [a, b, t0, t1] = pan;
+        gl.gain.value = L(a); gr.gain.value = Rg(a);
+        gl.gain.setValueCurveAtTime(curve((u) => L(a + (b - a) * u), 256), t0, t1 - t0);
+        gr.gain.setValueCurveAtTime(curve((u) => Rg(a + (b - a) * u), 256), t0, t1 - t0);
+      }
+    }
+    gl.connect(m, 0, 0); gr.connect(m, 0, 1);
+    return m;
+  }
+  /** salida de un preset: nivel → paneo → bus (+ envío a reverb). Los buses se cablean con sum() al final. */
+  function out(ctx, g, node, { pan = 0, verb = 0, bus = 'sfx', level = 1, stereo = false } = {}) {
     const v = G(ctx, level); node.connect(v);
-    const p = ctx.createStereoPanner(); p.pan.value = clamp(pan, -1, 1); v.connect(p);
-    p.connect(g[bus]);
-    if (verb > 0) { const s = G(ctx, verb); p.connect(s); s.connect(g.send); }
+    const p = pan2(ctx, v, pan, stereo);
+    g.ins[bus].push(p);
+    if (verb > 0) { const s = G(ctx, verb); p.connect(s); g.ins.send.push(s); }
     return p;
   }
   function tanhCurve(k) { const n = 2048, c = new Float32Array(n), nk = Math.tanh(k); for (let i = 0; i < n; i++) { const x = (i / (n - 1)) * 2 - 1; c[i] = Math.tanh(k * x) / nk; } return c; }
@@ -167,28 +203,36 @@
     return hp;
   }
   function graph(ctx, A, seed) {
-    const mix = G(ctx, dB(A.gain || 0));
-    mix.connect(master(ctx, ctx.destination));
-    // reverb
-    const send = G(ctx, 1);
-    const conv = ctx.createConvolver(); conv.normalize = false; conv.buffer = makeIR(ctx, A.reverb || {}, seed);
-    const rhp = BQ(ctx, 'highpass', 220, 0.6), rhs = BQ(ctx, 'highshelf', 6500, 0.707, -5);
-    const ret = G(ctx, dB(A.reverb?.gain ?? -4));
-    send.connect(conv); conv.connect(rhp); rhp.connect(rhs); rhs.connect(ret); ret.connect(mix);
-    // efectos
-    const sfx = G(ctx, 1), sfxHp = BQ(ctx, 'highpass', 32, 0.707);
-    sfx.connect(sfxHp); sfxHp.connect(mix);
-    // cama: hueco para la voz (2,8 kHz) y sin retumbe
-    const bed = G(ctx, 1), bedHp = BQ(ctx, 'highpass', 45, 0.707), pocket = BQ(ctx, 'peaking', 2800, 0.8, A.pocket ?? -4);
-    bed.connect(bedHp); bedHp.connect(pocket); pocket.connect(mix);
-    return { mix, send, sfx, bed };
+    const ins = { sfx: [], bed: [], send: [] };
+    /** se llama después de programar todos los cues: cablea buses → reverb / EQ → master */
+    const finalize = () => {
+      const mix = G(ctx, dB(A.gain || 0));
+      mix.connect(master(ctx, ctx.destination));
+      const parts = [];
+      // reverb
+      if (ins.send.length) {
+        const conv = ctx.createConvolver(); conv.normalize = false; conv.buffer = makeIR(ctx, A.reverb || {}, seed);
+        const rhp = BQ(ctx, 'highpass', 220, 0.6), rhs = BQ(ctx, 'highshelf', 6500, 0.707, -5);
+        const ret = G(ctx, dB(A.reverb?.gain ?? -4));
+        sum(ctx, ins.send, conv); conv.connect(rhp); rhp.connect(rhs); rhs.connect(ret); parts.push(ret);
+      }
+      // efectos
+      if (ins.sfx.length) { const hp = BQ(ctx, 'highpass', 32, 0.707); sum(ctx, ins.sfx, hp); parts.push(hp); }
+      // cama: hueco para la voz (2,8 kHz) y sin retumbe
+      if (ins.bed.length) {
+        const hp = BQ(ctx, 'highpass', 45, 0.707), pocket = BQ(ctx, 'peaking', 2800, 0.8, A.pocket ?? -4);
+        sum(ctx, ins.bed, hp); hp.connect(pocket); parts.push(pocket);
+      }
+      sum(ctx, parts, mix);
+    };
+    return { ins, finalize };
   }
 
   /* ------------------------------ presets ------------------------------
      LEVEL = nivel calibrado de cada preset (dB). Medido aislado (sin cama), queda en
      loudness momentáneo aprox.: cama −30 LUFS · tick −31 · tap −27 · scan/grow −28 ·
      whoosh/shimmer −25 · swell/riser −23 · impact −21. `gain` de cada cue suma a esto. */
-  const LEVEL = { bed: -21, tick: -14, tap: -17, impact: -9, whoosh: -12, shimmer: -17, scan: -12, grow: -3, riser: -14, swell: -17 };
+  const LEVEL = { bed: -37, tick: -14, tap: -21, impact: -18, whoosh: -6.5, shimmer: -28.5, scan: -6.4, grow: -1.8, riser: -15.2, swell: -13 };
 
   // Cómo se interpreta `at` en cada preset (anchor por defecto): 'start' | 'end' | 'peak' (solo whoosh)
   const ANCHOR = { riser: 'end', swell: 'end' };
@@ -202,7 +246,9 @@
     const tr = semis((p.pitch || 0) + J(0.7));
     const glass = p.tone === 'glass';
     const n = Math.round(0.014 * SR), buf = ctx.createBuffer(1, n, SR), d = buf.getChannelData(0);
-    for (let i = 0; i < n; i++) d[i] = (R() * 2 - 1) * Math.exp(-i / (0.0009 * SR));
+    // excitador: pulso de medio seno (0,25 ms, energía constante → nivel parejo entre ticks) + un poco de ruido
+    const np = Math.round(0.00025 * SR);
+    for (let i = 0; i < n; i++) d[i] = (i < np ? Math.sin(Math.PI * i / np) : 0) + 0.3 * (R() * 2 - 1) * Math.exp(-i / (0.0006 * SR));
     const s = src(ctx, buf);
     const click = BQ(ctx, 'bandpass', 3600 * tr, 0.9), body = BQ(ctx, 'bandpass', (glass ? 2700 : 1350) * tr, glass ? 40 : 18);
     const cg = G(ctx, 0.35), bg = G(ctx, glass ? 5 : 3.2), mix = G(ctx, dB(LEVEL.tick + (p.gain || 0) + J(1.2)));
@@ -220,13 +266,14 @@
     const mix = G(ctx, dB(LEVEL.tap + (p.gain || 0) + J(0.8)));
     const amp = G(ctx, 0);
     amp.gain.setValueAtTime(0, t); amp.gain.linearRampToValueAtTime(1, t + 0.004); amp.gain.setTargetAtTime(0, t + 0.004, dur / 5);
-    fm(ctx, t, t1, f, { ratio: 1, index: 1.1 * bright, indexEnd: 0.06, tau: 0.06 }).connect(amp); amp.connect(mix);
+    fm(ctx, t, t1, f, { ratio: 1, index: 1.1 * bright, indexEnd: 0.06, tau: 0.06 }).connect(amp);
     const o4 = osc(ctx, 'sine', f * 3.99), a4 = G(ctx, 0);
     a4.gain.setValueAtTime(0, t); a4.gain.linearRampToValueAtTime(0.2 * bright, t + 0.003); a4.gain.setTargetAtTime(0, t + 0.003, 0.035);
-    o4.connect(a4); a4.connect(mix); o4.start(t); o4.stop(t + 0.4);
+    o4.connect(a4); o4.start(t); o4.stop(t + 0.4);
     const ns = src(ctx, noiseBuf(ctx, 0.03, R, 'white')), nbp = BQ(ctx, 'bandpass', Math.min(9000, f * 2), 1.5), na = G(ctx, 0);
     na.gain.setValueAtTime(0.12, t); na.gain.setTargetAtTime(0, t, 0.005);
-    ns.connect(nbp); nbp.connect(na); na.connect(mix); ns.start(t);
+    ns.connect(nbp); nbp.connect(na); ns.start(t);
+    sum(ctx, [amp, a4, na], mix);
     const lp = BQ(ctx, 'lowpass', 5200, 0.707); mix.connect(lp);
     out(ctx, g, lp, { pan: (p.pan || 0) + J(0.1), verb: p.verb ?? 0.22 });
   };
@@ -280,9 +327,7 @@
       bp.frequency.exponentialRampToValueAtTime(fLo * 1.8 * br, t + d);
       const env = G(ctx, 0); env.gain.setValueCurveAtTime(curve(shape, 512, level * lvl), t, d);
       s.connect(bp); bp.connect(env); s.start(t); s.stop(t + d + 0.02);
-      const pn = out(ctx, g, env, { pan: 0, verb: p.verb ?? 0.14 });
-      pn.pan.setValueAtTime(clamp((p.pan || 0) - dir * wd + panOff, -1, 1), t);
-      pn.pan.linearRampToValueAtTime(clamp((p.pan || 0) + dir * wd + panOff, -1, 1), t + d);
+      out(ctx, g, env, { pan: [(p.pan || 0) - dir * wd + panOff, (p.pan || 0) + dir * wd + panOff, t, t + d], verb: p.verb ?? 0.14 });
       return s;
     };
     layer(240, 2300, 1.1, 1, -0.08);
@@ -299,8 +344,8 @@
   P.shimmer = (ctx, g, t, p, R, K, J, span) => {
     const degs = p.degs ?? [4, 7, 9], oct = p.oct ?? 5, d = span.d, spread = p.spread ?? 0.05;
     const lvl = dB(LEVEL.shimmer + (p.gain || 0));
-    const bus = G(ctx, lvl), lp = BQ(ctx, 'lowpass', 9000, 0.707); bus.connect(lp);
-    out(ctx, g, lp, { pan: p.pan || 0, verb: p.verb ?? 0.42 });
+    const bus = G(ctx, lvl), lp = BQ(ctx, 'lowpass', 9000, 0.707), parts = []; bus.connect(lp);
+    out(ctx, g, lp, { pan: p.pan || 0, verb: p.verb ?? 0.42, stereo: true });
     degs.forEach((dg, i) => {
       const f = mtof(degMidi(K, dg, oct)) * semis(p.pitch || 0) * cents(J(4));
       const t0 = t + i * spread + Math.abs(J(0.006)), t1 = t0 + d * 1.6;
@@ -309,12 +354,13 @@
         const a = G(ctx, 0);
         a.gain.setValueAtTime(0, t0); a.gain.linearRampToValueAtTime(lv / Math.pow(i + 1, 0.35), t0 + 0.003); a.gain.setTargetAtTime(0, t0 + 0.003, d / 4.5);
         fm(ctx, t0, t1, f, { ratio: 3.5, index: 0.65, indexEnd: 0.04, tau: 0.25, detune: det }).connect(a);
-        const pn = ctx.createStereoPanner(); pn.pan.value = pan; a.connect(pn); pn.connect(bus);
+        parts.push(pan2(ctx, a, pan));
       });
     });
     const sp = src(ctx, noiseBuf(ctx, 0.6, R, 'white')), hp = BQ(ctx, 'highpass', 7500, 0.707), sa = G(ctx, 0);
     sa.gain.setValueAtTime(0, t); sa.gain.linearRampToValueAtTime(0.05, t + 0.02); sa.gain.setTargetAtTime(0, t + 0.02, 0.12);
-    sp.connect(hp); hp.connect(sa); sa.connect(bus); sp.start(t);
+    sp.connect(hp); hp.connect(sa); sp.start(t);
+    sum(ctx, [...parts, sa], bus);
   };
 
   /** Scan: barrido delicado. Ruido por pasa-banda estrecho que sube (from→to) mientras cruza
@@ -331,9 +377,7 @@
     const o = osc(ctx, 'sine', from / 2), og = G(ctx, p.tone ?? 0.05);
     o.frequency.setValueAtTime(from / 2, t); o.frequency.exponentialRampToValueAtTime(to / 2, t + d);
     o.connect(og); og.connect(env); o.start(t); o.stop(t + d + 0.02);
-    const pn = out(ctx, g, env, { pan: 0, verb: p.verb ?? 0.2 });
-    pn.pan.setValueAtTime(clamp((p.pan || 0) - dir * wd, -1, 1), t);
-    pn.pan.linearRampToValueAtTime(clamp((p.pan || 0) + dir * wd, -1, 1), t + d);
+    out(ctx, g, env, { pan: [(p.pan || 0) - dir * wd, (p.pan || 0) + dir * wd, t, t + d], verb: p.verb ?? 0.2 });
   };
 
   /** Grow: crepitar orgánico fino (granular). Proceso de Poisson de micro-resonancias amortiguadas
@@ -366,7 +410,7 @@
     const rs = src(ctx, noiseBuf(ctx, d + 0.05, R, 'pink')), rbp = BQ(ctx, 'bandpass', 2200 * br, 0.7), ra = G(ctx, 0);
     ra.gain.setValueCurveAtTime(curve(env, 256, 0.05 * (p.body ?? 1)), t, d);
     rs.connect(rbp); rbp.connect(ra); ra.connect(mix); rs.start(t); rs.stop(t + d + 0.02);
-    out(ctx, g, mix, { pan: 0, verb: p.verb ?? 0.12 });
+    out(ctx, g, mix, { pan: 0, verb: p.verb ?? 0.12, stereo: true });
   };
 
   /** Riser: tensión hacia un momento. Ruido que abre + par de senos desafinados que suben `semis`.
@@ -378,20 +422,21 @@
     const bus = G(ctx, 0);
     bus.gain.setValueCurveAtTime(curve((u) => Math.pow(u, 2.4), 512, lvl), t0, d);
     bus.gain.setTargetAtTime(0, t1, 0.03);
+    const parts = [], oscs = [];
     [-0.45, 0.45].forEach((pan) => {
       const s = src(ctx, noiseBuf(ctx, d + 0.3, R, 'pink')), lp = BQ(ctx, 'lowpass', 250 * br, 1.4);
       lp.frequency.setValueAtTime(250 * br, t0); lp.frequency.exponentialRampToValueAtTime(6500 * br, t1);
-      const pn = ctx.createStereoPanner(); pn.pan.value = pan;
-      s.connect(lp); lp.connect(pn); pn.connect(bus); s.start(t0); s.stop(t1 + 0.3);
+      s.connect(lp); parts.push(pan2(ctx, lp, pan)); s.start(t0); s.stop(t1 + 0.3);
     });
     const tg = G(ctx, 0); tg.gain.setValueCurveAtTime(curve((u) => Math.pow(u, 1.6), 256, 0.22), t0, d);
-    const tlp = BQ(ctx, 'lowpass', 1800, 0.707); tg.connect(tlp); tlp.connect(bus);
+    const tlp = BQ(ctx, 'lowpass', 1800, 0.707); tg.connect(tlp); parts.push(tlp);
     [0, 4].forEach((dg) => [-7, 7].forEach((det) => {
       const f = mtof(degMidi(K, dg, p.oct ?? 3)) * semis(p.pitch || 0) * cents(det);
       const o = osc(ctx, 'sine', f); o.frequency.setValueAtTime(f, t0); o.frequency.exponentialRampToValueAtTime(f * up, t1);
-      o.connect(tg); o.start(t0); o.stop(t1 + 0.3);
+      oscs.push(o); o.start(t0); o.stop(t1 + 0.3);
     }));
-    out(ctx, g, bus, { pan: p.pan || 0, verb: p.verb ?? 0.3 });
+    sum(ctx, oscs, tg); sum(ctx, parts, bus);
+    out(ctx, g, bus, { pan: p.pan || 0, verb: p.verb ?? 0.3, stereo: true });
   };
 
   /** Swell: crescendo tonal "en reversa" (acorde de la tonalidad) que desemboca en `at`. */
@@ -405,16 +450,17 @@
     const lp = BQ(ctx, 'lowpass', 350, 0.6);
     lp.frequency.setValueAtTime(350, t0); lp.frequency.exponentialRampToValueAtTime(2800 * (p.bright ?? 1), t1);
     lp.connect(bus);
-    const pans = [-0.4, 0.4, -0.2, 0.2, 0];
+    const pans = [-0.4, 0.4, -0.2, 0.2, 0], parts = [];
     degs.forEach((dg, i) => {
       const f = mtof(degMidi(K, dg, oct)) * semis(p.pitch || 0);
       [[0, 1], [5, 0.6]].forEach(([det, lv]) => {
         const c = fm(ctx, t0, t1 + 0.4, f, { ratio: 1, index: 0.25, indexEnd: 0.9, tau: d / 2, detune: det });
-        const a = G(ctx, lv / degs.length), pn = ctx.createStereoPanner(); pn.pan.value = pans[i % pans.length] * (det ? -1 : 1);
-        c.connect(a); a.connect(pn); pn.connect(lp);
+        const a = G(ctx, lv / degs.length);
+        c.connect(a); parts.push(pan2(ctx, a, pans[i % pans.length] * (det ? -1 : 1)));
       });
     });
-    out(ctx, g, bus, { pan: p.pan || 0, verb: p.verb ?? 0.5 });
+    sum(ctx, parts, lp);
+    out(ctx, g, bus, { pan: p.pan || 0, verb: p.verb ?? 0.5, stereo: true });
   };
 
   /** Bed: cama ambiental cálida y evolutiva. Pedal de tónica + voces que alternan entre dos
@@ -437,12 +483,12 @@
     const fi = Math.min(fin, d * 0.45), fo = Math.min(fout, d * 0.45);
     env.gain.setValueCurveAtTime(curve((u) => Math.pow(Math.sin(0.5 * Math.PI * u), 2), 256, lvl), t, fi);
     env.gain.setValueCurveAtTime(curve((u) => Math.pow(Math.cos(0.5 * Math.PI * u), 2), 256, lvl), t + d - fo, fo);
-    out(ctx, g, env, { pan: 0, verb: p.verb ?? 0.32, bus: 'bed' });
+    out(ctx, g, env, { pan: 0, verb: p.verb ?? 0.32, bus: 'bed', stereo: true });
     // filtro que deriva
     const lp = BQ(ctx, 'lowpass', 1100 * (p.bright ?? 1), 0.6);
     const flfo = osc(ctx, 'sine', 0.055), flg = G(ctx, 320 * (p.bright ?? 1));
     flfo.connect(flg); flg.connect(lp.frequency); flfo.start(t); flfo.stop(t + d);
-    lp.connect(env);
+    const envIn = [lp], voices = [];
     // corridas por nota (una nota común entre voicings sigue sonando: no se cruza consigo misma)
     const runs = [], active = new Map();
     const nSeg = Math.max(1, Math.ceil((d - xf) / cycle));           // no arrancar un acorde en los últimos segundos
@@ -461,14 +507,14 @@
       vg.gain.setValueAtTime(lvV, b0 - down); vg.gain.linearRampToValueAtTime(0, b0);
       const br = G(ctx, 1), lfo = osc(ctx, 'sine', 0.045 + 0.05 * R()), lg = G(ctx, 0.28);
       lfo.connect(lg); lg.connect(br.gain); lfo.start(t); lfo.stop(b0 + 0.05);
-      const pn = ctx.createStereoPanner(); pn.pan.value = [-0.35, 0.3, -0.15, 0.4, 0][r.i % 5];
       [-4, 4].forEach((c) => { const o = osc(ctx, padWave, f * cents(c + J(1))); o.connect(vg); o.start(a0); o.stop(b0 + 0.02); });
-      vg.connect(br); br.connect(pn); pn.connect(lp);
+      vg.connect(br); voices.push(pan2(ctx, br, [-0.35, 0.3, -0.15, 0.4, 0][r.i % 5]));
     });
+    sum(ctx, voices, lp);
     // pedal sub
     if ((p.sub ?? 0.35) > 0) {
       const o = osc(ctx, 'sine', mtof(degMidi(K, 0, oct - 1)) * semis(p.pitch || 0)), sg = G(ctx, p.sub ?? 0.35);
-      o.connect(sg); sg.connect(env); o.start(t); o.stop(t + d);
+      o.connect(sg); envIn.push(sg); o.start(t); o.stop(t + d);
     }
     // aire: dos ruidos rosa decorrelados, banda alta ancha, respiración lenta
     if ((p.air ?? 1) > 0) {
@@ -476,18 +522,30 @@
         const s = src(ctx, noiseBuf(ctx, d, R, 'pink')), bp = BQ(ctx, 'bandpass', 4200, 0.45), ag = G(ctx, 0.05 * (p.air ?? 1));
         const lfo = osc(ctx, 'sine', 0.07 + 0.03 * i), lg = G(ctx, 0.015 * (p.air ?? 1));
         lfo.connect(lg); lg.connect(ag.gain); lfo.start(t); lfo.stop(t + d);
-        const pn = ctx.createStereoPanner(); pn.pan.value = pan;
-        s.connect(bp); bp.connect(ag); ag.connect(pn); pn.connect(env); s.start(t); s.stop(t + d);
+        s.connect(bp); bp.connect(ag); envIn.push(pan2(ctx, ag, pan)); s.start(t); s.stop(t + d);
       });
     }
+    sum(ctx, envIn, env);
   };
 
   /* ------------------------------ render ------------------------------ */
+  /* Determinismo: Chromium desconecta un nodo cuando el recolector de basura se lleva su objeto JS
+     (p. ej. fuentes ya terminadas y lo que cuelga de ellas), y eso ocurre en momentos variables
+     durante el render → colas cortadas en cuadros distintos (diferencias de −70 a −90 dB entre
+     renders). Retener todos los nodos hasta que termina el render lo vuelve bit a bit idéntico. */
+  const NODE_MAKERS = ['createGain', 'createBiquadFilter', 'createOscillator', 'createBufferSource', 'createChannelMerger',
+    'createChannelSplitter', 'createWaveShaper', 'createConvolver', 'createDynamicsCompressor', 'createConstantSource', 'createDelay'];
+  function keepAlive(ctx) {
+    const keep = (ctx.__keep = []);
+    for (const m of NODE_MAKERS) { const f = ctx[m].bind(ctx); ctx[m] = (...a) => { const n = f(...a); keep.push(n); return n; }; }
+  }
+
   let latency = null;
   /** Latencia del compresor (pre-delay de lookahead) medida con un impulso, para compensarla. */
   async function measureLatency() {
     if (latency !== null) return latency;
     const n = 4800, ctx = new OfflineAudioContext(1, n, SR);
+    keepAlive(ctx);
     const b = ctx.createBuffer(1, n, SR); b.getChannelData(0)[100] = 0.01;
     const s = src(ctx, b); s.connect(master(ctx, ctx.destination)); s.start(0);
     const r = (await ctx.startRendering()).getChannelData(0);
@@ -507,6 +565,7 @@
     const frames = Math.round(duration * SR);
     const total = frames + Math.round(PAD * SR) + lat + 64;
     const ctx = new OfflineAudioContext(2, total, SR);
+    keepAlive(ctx);
     padWave = null;
     const seed = audio.seed ?? 1;
     const K = makeKey(audio.key || 'D', audio.mode || 'major');
@@ -525,7 +584,9 @@
       const s0 = t0 + PAD, span = { t0: s0, t1: s0 + d, d };
       fn(ctx, g, span.t0, c, R, K, J, span);
     }
+    g.finalize();
     const buf = await ctx.startRendering();
+    ctx.__keep.length = 0;
     const off = Math.round(PAD * SR) + lat;
     const left = buf.getChannelData(0).slice(off, off + frames), right = buf.getChannelData(1).slice(off, off + frames);
     // fundidos de seguridad (5 ms al inicio, 30 ms al final) para que no haya clics en los bordes
