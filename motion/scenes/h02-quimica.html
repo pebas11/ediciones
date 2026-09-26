@@ -1,0 +1,519 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>H02 · De psilocibina a psilocina (moléculas 3D)</title>
+<link rel="stylesheet" href="../lib/theme.css">
+<link rel="stylesheet" href="../lib/fonts-spartan.css">
+<script type="importmap">{ "imports": { "three": "../node_modules/three/build/three.module.js", "three/addons/": "../node_modules/three/examples/jsm/" } }</script>
+<style>
+  :root { --bone: #F3EDE2; --cyan: #7FD8FF; --caramel: #E0A15A; --dim: rgba(243,237,226,0.62); }
+  #gl { position: absolute; inset: 0; }
+  #grain { position: absolute; inset: -20px; opacity: 0.07; mix-blend-mode: overlay; pointer-events: none; }
+  #vig { position: absolute; inset: 0; background: radial-gradient(120% 100% at 62% 45%, transparent 55%, rgba(6,4,12,0.55) 100%); }
+
+  /* marco técnico */
+  .corner { position: absolute; width: 26px; height: 26px; border-color: rgba(243,237,226,0.5); border-style: solid; border-width: 0; }
+  .c1 { left: 64px; top: 56px; border-left-width: 1.5px; border-top-width: 1.5px; }
+  .c2 { right: 64px; top: 56px; border-right-width: 1.5px; border-top-width: 1.5px; }
+  .c3 { left: 64px; bottom: 56px; border-left-width: 1.5px; border-bottom-width: 1.5px; }
+  .c4 { right: 64px; bottom: 56px; border-right-width: 1.5px; border-bottom-width: 1.5px; }
+  #plate { position: absolute; right: 100px; top: 76px; font-family: var(--f-mono); font-size: 22px; letter-spacing: 0.14em; color: var(--dim); text-align: right; white-space: nowrap; }
+
+  /* leyenda de elementos (código de color de la lámina) */
+  #legend { position: absolute; left: 140px; top: 948px; display: flex; gap: 30px; font-family: var(--f-mono); font-size: 22px; letter-spacing: 0.14em; color: var(--dim); white-space: nowrap; }
+  #legend .it { display: flex; align-items: center; gap: 10px; }
+  #legend .dot { width: 14px; height: 14px; border-radius: 50%; }
+
+  /* columna editorial izquierda */
+  .kick { position: absolute; left: 140px; top: 292px; font-family: var(--f-mono); font-size: 24px; letter-spacing: 0.22em; color: var(--cyan); white-space: nowrap; }
+  #title { position: absolute; left: 130px; top: 330px; font-family: var(--f-display); font-weight: 800; font-size: 164px; line-height: 1.2; letter-spacing: -0.04em; color: var(--bone); white-space: nowrap; }
+  #title span { display: inline-block; }
+  #spec { position: absolute; left: 140px; top: 540px; font-family: var(--f-mono); font-size: 28px; line-height: 1.3; letter-spacing: 0.04em; color: var(--dim); white-space: nowrap; }
+  #spec sub { font-size: 0.68em; vertical-align: -0.28em; line-height: 0; }
+  #fmask { display: inline-grid; overflow: hidden; vertical-align: top; line-height: 1.3; }
+  #fmask > span { grid-area: 1 / 1; color: var(--bone); }
+  #spec .sep { margin: 0 14px; }
+  .sub { position: absolute; left: 140px; top: 612px; width: 620px; font-size: 36px; line-height: 1.3; color: var(--dim); }
+  .sub b { color: var(--bone); font-weight: 500; }
+  #tag { position: absolute; left: 140px; top: 740px; display: flex; align-items: center; gap: 16px; font-family: var(--f-mono); font-size: 24px; letter-spacing: 0.2em; color: var(--cyan); white-space: nowrap; }
+  #tag i { display: block; width: 44px; height: 1.5px; background: var(--cyan); transform-origin: 0 50%; }
+  #src { position: absolute; left: 140px; top: 800px; font-family: var(--f-mono); font-size: 22px; letter-spacing: 0.06em; color: var(--dim); white-space: nowrap; }
+
+  /* beat 3 */
+  #head3 { position: absolute; left: 136px; top: 330px; width: 660px; font-family: var(--f-display); font-weight: 800; font-size: 96px; line-height: 1.2; letter-spacing: -0.035em; color: var(--bone); }
+  #head3 em { font-style: normal; color: var(--cyan); }
+  #sub3 { top: 720px; width: 600px; }
+
+  /* anotaciones sobre el 3D */
+  #ann { position: absolute; inset: 0; overflow: visible; }
+  .lab { position: absolute; width: 360px; }
+  .lab .n { font-family: var(--f-mono); font-size: 22px; color: var(--cyan); letter-spacing: 0.1em; }
+  .lab .h { font-family: var(--f-display); font-weight: 700; font-size: 42px; line-height: 1.2; color: var(--bone); letter-spacing: -0.01em; }
+  .lab .d { font-size: 28px; line-height: 1.3; color: var(--dim); margin-top: 2px; }
+  .lab.warm .n { color: var(--caramel); }
+  #phosLbl { position: absolute; font-family: var(--f-mono); font-size: 24px; letter-spacing: 0.2em; color: var(--caramel); white-space: nowrap; }
+  .name { position: absolute; text-align: center; width: 420px; }
+  .name .h { font-family: var(--f-display); font-weight: 700; font-size: 46px; line-height: 1.2; color: var(--bone); letter-spacing: -0.015em; }
+  .name .d { font-family: var(--f-mono); font-size: 22px; letter-spacing: 0.16em; color: var(--dim); margin-top: 4px; white-space: nowrap; }
+  .name .d b { color: var(--caramel); font-weight: 400; }
+  #core { position: absolute; font-family: var(--f-mono); font-size: 22px; letter-spacing: 0.2em; color: var(--cyan); white-space: nowrap; }
+  #fade { position: absolute; inset: 0; background: #06040c; opacity: 0; }
+</style>
+</head>
+<body>
+<div id="world">
+  <div id="gl"></div>
+  <div id="vig"></div>
+  <svg id="ann" viewBox="0 0 1920 1080" width="1920" height="1080"></svg>
+
+  <div class="corner c1"></div><div class="corner c2"></div><div class="corner c3"></div><div class="corner c4"></div>
+  <div id="plate">LÁMINA 02 · QUÍMICA</div>
+  <div id="legend"></div>
+
+  <!-- beat 1 / 2 -->
+  <div class="kick" id="k1">QUÍMICA — FIG. 02</div>
+  <div class="kick" id="k2">EN EL CUERPO</div>
+  <div id="title"><span id="tA">Psiloci</span><span id="tB">bi</span><span id="tC">na</span></div>
+  <div id="spec"><span id="fmask"><span id="fA"></span><span id="fB"></span></span><span class="sep">·</span><span id="mass"></span></div>
+  <div class="sub" id="sub1">La molécula que fabrica el hongo.</div>
+  <div class="sub" id="sub2">Una enzima le quita el fosfato.</div>
+  <div id="tag"><i></i><span id="tagTxt">LA FORMA ACTIVA</span></div>
+  <div id="src"></div>
+
+  <div class="lab" id="L1"><div class="n">01</div><div class="h">Núcleo indol</div><div class="d">Dos anillos fusionados</div></div>
+  <div class="lab" id="L2"><div class="n">02</div><div class="h">Cadena con amina</div><div class="d">Termina en un nitrógeno</div></div>
+  <div class="lab warm" id="L3"><div class="n">03</div><div class="h">Grupo fosfato</div><div class="d">Unido en la posición 4</div></div>
+  <div class="lab warm" id="L4"><div class="n">04</div><div class="h">Hidroxilo (OH)</div><div class="d">Queda en lugar del fosfato</div></div>
+  <div id="phosLbl">FOSFATO</div>
+
+  <!-- beat 3 -->
+  <div class="kick" id="k3">PSILOCINA Y SEROTONINA</div>
+  <div id="head3">Casi la misma forma que la <em>serotonina</em></div>
+  <div class="sub" id="sub3">Por eso puede activar sus receptores.</div>
+  <div class="name" id="nA"><div class="h">Psilocina</div><div class="d">OH EN POSICIÓN <b>4</b></div></div>
+  <div class="name" id="nB"><div class="h">Serotonina</div><div class="d">OH EN POSICIÓN <b>5</b></div></div>
+  <div id="core">NÚCLEO INDOL COMÚN</div>
+
+  <canvas id="grain" width="512" height="512" style="width:1960px;height:1120px"></canvas>
+  <div id="fade"></div>
+</div>
+
+<script src="../node_modules/gsap/dist/gsap.min.js"></script>
+<script src="../node_modules/gsap/dist/SplitText.min.js"></script>
+<script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
+<script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
+<script src="../lib/stage.js"></script>
+<script type="module">
+import { createStage3D, THREE } from '../lib/three-stage.mjs';
+
+/* ============================================================================
+   DATA — todo lo que es dato en pantalla sale de acá.
+   No existe todavía FICHA-HONGOS.md: cada cifra queda marcada para verificar.
+   ============================================================================ */
+const DATA = {
+  psilocibina: { formula: 'C<sub>12</sub>H<sub>17</sub>N<sub>2</sub>O<sub>4</sub>P', masa: 284.25 },   // VERIFICAR: fórmula y masa molar (g/mol) · PubChem CID 10624 · 4-fosforiloxi-N,N-dimetiltriptamina (Passie et al., 2002)
+  psilocina:   { formula: 'C<sub>12</sub>H<sub>16</sub>N<sub>2</sub>O', masa: 204.27 },               // VERIFICAR: fórmula y masa molar (g/mol) · PubChem CID 4980 · 4-hidroxi-N,N-dimetiltriptamina
+  serotonina:  { formula: 'C<sub>10</sub>H<sub>12</sub>N<sub>2</sub>O', posOH: 5 },                   // VERIFICAR: 5-hidroxitriptamina (5-HT) · PubChem CID 5202
+  posFosfato: 4,                                                                                         // VERIFICAR: el fosfato (y luego el OH) va en la posición 4 del indol
+  enzima: 'fosfatasa alcalina',                                                                          // VERIFICAR: desfosforilación → psilocina, la forma activa (Dinis-Oliveira, 2017)
+  fuente: 'Passie et al., 2002 · Dinis-Oliveira, 2017',                                                 // VERIFICAR: Addict Biol 7(4):357 · Drug Metab Rev 49(1):84
+};
+
+M.scene({ duration: 15, push: 0 }, async (tl, M) => {
+  const $ = (s) => document.querySelector(s);
+
+  /* ---------------- grano de película ---------------- */
+  { const g = $('#grain').getContext('2d'); const im = g.createImageData(512, 512); const rn = M.rng(5);
+    for (let i = 0; i < im.data.length; i += 4) { const v = 128 + (rn() - 0.5) * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+    g.putImageData(im, 0, 0); }
+
+  /* ---------------- escenario 3D ---------------- */
+  const S = createStage3D($('#gl'), { bgTop: '#0f0a1c', bgBottom: '#040308', bgGlow: '#1c1f48', bloom: { strength: 0.32, radius: 0.5, threshold: 0.9 }, exposure: 1.05, env: 0.35 });
+  const { scene, camera } = S;
+  scene.fog = new THREE.FogExp2('#08050f', 0.05);
+
+  // luces de estudio: clave cálida, dos contraluces de color, hemisférica violeta
+  const key = new THREE.DirectionalLight('#ffd9ae', 2.5); key.position.set(-3, 6, 5); key.castShadow = true;
+  key.shadow.mapSize.set(2048, 2048); key.shadow.radius = 6; key.shadow.bias = -0.0004; key.shadow.normalBias = 0.01;
+  Object.assign(key.shadow.camera, { left: -4, right: 7, top: 5, bottom: -4, near: 0.5, far: 20 }); key.shadow.camera.updateProjectionMatrix();
+  scene.add(key);
+  const rimC = new THREE.DirectionalLight('#7fd8ff', 1.25); rimC.position.set(4, 2.2, -4); scene.add(rimC);
+  const rimW = new THREE.DirectionalLight('#e0a15a', 0.8); rimW.position.set(-4.5, 1.2, -3); scene.add(rimW);
+  scene.add(new THREE.HemisphereLight('#5a4790', '#0b0711', 0.55));
+
+  // piso: solo recibe sombra + grilla milimetrada muy tenue (mesa de lámina)
+  const FLOOR_Y = -1.3;
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.ShadowMaterial({ color: '#000000', opacity: 0.42 }));
+  floor.rotation.x = -Math.PI / 2; floor.position.y = FLOOR_Y; floor.receiveShadow = true; scene.add(floor);
+  const grid = new THREE.GridHelper(24, 96, '#f3ede2', '#f3ede2');
+  grid.material.transparent = true; grid.material.opacity = 0.05; grid.material.depthWrite = false; grid.position.y = FLOOR_Y + 0.001; scene.add(grid);
+  const grid2 = new THREE.GridHelper(24, 24, '#f3ede2', '#f3ede2');
+  grid2.material.transparent = true; grid2.material.opacity = 0.08; grid2.material.depthWrite = false; grid2.position.y = FLOOR_Y + 0.002; scene.add(grid2);
+
+  /* ---------------- geometría molecular (Å) ---------------- */
+  const V = (x, y, z = 0) => new THREE.Vector3(x, y, z);
+  const D2R = Math.PI / 180;
+  // NeRF: ubica D unido a C con |CD| = len, ángulo B-C-D = ang, diedro A-B-C-D = dih
+  function place(A, B, C, len, ang, dih) {
+    const a = ang * D2R, d = dih * D2R;
+    const bc = C.clone().sub(B).normalize();
+    const n = B.clone().sub(A).cross(bc).normalize();
+    const m = n.clone().cross(bc);
+    return C.clone().addScaledVector(bc, -len * Math.cos(a)).addScaledVector(m, len * Math.sin(a) * Math.cos(d)).addScaledVector(n, len * Math.sin(a) * Math.sin(d));
+  }
+  const radial = (p, c, len) => p.clone().add(p.clone().sub(c).normalize().multiplyScalar(len));
+  const rot2 = (v, deg) => { const a = deg * D2R; return V(v.x * Math.cos(a) - v.y * Math.sin(a), v.x * Math.sin(a) + v.y * Math.cos(a)); };
+  // indol: hexágono y pentágono regulares (120° / 108°), lado 1,40 Å
+  const b = 1.40, hh = b * Math.sqrt(3) / 2, Rp = b / (2 * Math.sin(Math.PI / 5)), ap = Rp * Math.cos(Math.PI / 5);
+  const HEX = V(-hh, 0), PEN = V(ap, 0);
+  const RING = { C3a: V(0, b / 2), C7a: V(0, -b / 2), C4: V(-hh, b), C5: V(-2 * hh, b / 2), C6: V(-2 * hh, -b / 2), C7: V(-hh, -b),
+    C3: V(ap + Rp * Math.cos(0.4 * Math.PI), Rp * Math.sin(0.4 * Math.PI)), C2: V(ap + Rp, 0), N1: V(ap + Rp * Math.cos(-0.4 * Math.PI), Rp * Math.sin(-0.4 * Math.PI)) };
+  const RING_BONDS = [['C3a', 'C7a', 2], ['C3a', 'C4', 1], ['C4', 'C5', 2], ['C5', 'C6', 1], ['C6', 'C7', 2], ['C7', 'C7a', 1], ['C7a', 'N1', 1], ['N1', 'C2', 1], ['C2', 'C3', 2], ['C3', 'C3a', 1]];
+
+  // triptamina: psilocibina (4-OPO3H2, NMe2), psilocina (4-OH, NMe2), serotonina (5-OH, NH2)
+  function tryptamine({ phos = false, oh4 = false, oh5 = false, nMe = true }) {
+    const A = [], B = [], ix = {};
+    const add = (id, el, p, f, extra = {}) => { ix[id] = A.length; A.push({ id, el, p, f: (f || p).clone(), ...extra }); };
+    const addH = (id, par, p, extra = {}) => { const pa = A[ix[par]]; add(id, 'H', p, pa.f.clone().add(p.clone().sub(pa.p)), { par, ...extra }); bond(par, id, 1, { h: true, ...extra }); };
+    const bond = (a, c, o = 1, extra = {}) => B.push({ a: ix[a], b: ix[c], o, ...extra });
+    for (const [k, p] of Object.entries(RING)) add(k, k[0], p, null, { ring: true });
+    RING_BONDS.forEach(([a, c, o]) => bond(a, c, o, { ring: true }));
+    // cadena etilamina (perpendicular al plano del indol, anti)
+    const Cb = radial(RING.C3, PEN, 1.5);
+    const u = Cb.clone().sub(RING.C3).normalize();
+    const Ca = place(RING.C3a, RING.C3, Cb, 1.53, 113, 105);
+    const Nm = place(RING.C3, Cb, Ca, 1.47, 111, 180);
+    const CaF = Cb.clone().addScaledVector(rot2(u, -60), 1.5), NmF = CaF.clone().addScaledVector(u, 1.5);
+    add('Cb', 'C', Cb); add('Ca', 'C', Ca, CaF); add('Nam', 'N', Nm, NmF);
+    bond('C3', 'Cb'); bond('Cb', 'Ca'); bond('Ca', 'Nam');
+    if (nMe) {
+      [[170, -60], [-70, 60]].forEach(([dih, fr], k) => {
+        const id = 'Me' + k; add(id, 'C', place(Cb, Ca, Nm, 1.46, 110, dih), NmF.clone().addScaledVector(rot2(u, fr), 1.5)); bond('Nam', id);
+        [60, 180, -60].forEach((d, j) => addH(id + 'H' + j, id, place(Ca, Nm, A[ix[id]].p, 1.09, 109.5, d)));
+      });
+    } else {
+      [170, -70].forEach((dih, k) => addH('NH' + k, 'Nam', place(Cb, Ca, Nm, 1.01, 109, dih)));
+    }
+    [-15, -135].forEach((d, j) => addH('CbH' + j, 'Cb', place(RING.C3a, RING.C3, Cb, 1.09, 109.5, d)));
+    [60, -60].forEach((d, j) => addH('CaH' + j, 'Ca', place(RING.C3, Cb, Ca, 1.09, 109.5, d)));
+    // hidrógenos aromáticos y N–H
+    addH('H2', 'C2', radial(RING.C2, PEN, 1.08)); addH('H1', 'N1', radial(RING.N1, PEN, 1.01));
+    ['C6', 'C7'].forEach((c) => addH('H' + c, c, radial(RING[c], HEX, 1.08)));
+    // posición 4
+    if (phos || oh4) {
+      const O4 = radial(RING.C4, HEX, 1.37); add('O4', 'O', O4); bond('C4', 'O4');
+      const P = place(RING.C3a, RING.C4, O4, 1.6, 120, -150);
+      addH('HO4', 'O4', place(RING.C3a, RING.C4, O4, 0.97, 109, -150), { late: true });     // aparece al perder el fosfato
+      if (phos) {
+        const PF = O4.clone().addScaledVector(rot2(V(0, 1), 60), 1.5);
+        add('P', 'P', P, PF, { grp: 'phos' }); bond('O4', 'P', 1, { grp: 'phos', cut: true });
+        [[60, 1.48, 'Od', -30], [180, 1.57, 'Oh1', 60], [-60, 1.57, 'Oh2', 150]].forEach(([dih, len, id, fr]) => {
+          add(id, 'O', place(RING.C4, O4, P, len, 109.5, dih), PF.clone().addScaledVector(rot2(V(0, 1), fr), 1.5), { grp: 'phos' });
+          bond('P', id, id === 'Od' ? 2 : 1, { grp: 'phos' });
+          if (id !== 'Od') addH(id + 'H', id, place(O4, P, A[ix[id]].p, 0.97, 109, 180), { grp: 'phos' });
+        });
+      }
+    } else addH('H4', 'C4', radial(RING.C4, HEX, 1.08));
+    // posición 5
+    if (oh5) { const O5 = radial(RING.C5, HEX, 1.37); add('O5', 'O', O5); bond('C5', 'O5'); addH('HO5', 'O5', place(RING.C4, RING.C5, O5, 0.97, 109, 180)); }
+    else addH('H5', 'C5', radial(RING.C5, HEX, 1.08));
+    return { A, B, ix };
+  }
+
+  /* ---------------- materiales ---------------- */
+  const EL = { C: { r: 0.36, c: '#3a3544' }, H: { r: 0.21, c: '#ebe4d8' }, N: { r: 0.37, c: '#7FD8FF' }, O: { r: 0.36, c: '#E0A15A' }, P: { r: 0.47, c: '#b97a38' } };
+  const phys = (c, o = {}) => new THREE.MeshPhysicalMaterial({ color: c, roughness: 0.3, metalness: 0, clearcoat: 0.7, clearcoatRoughness: 0.22, ...o });
+  const BONE = new THREE.Color('#efe8dc'), STICK = new THREE.Color('#9c95a4');
+  const sphGeo = new THREE.SphereGeometry(1, 44, 30);
+  const cylGeo = new THREE.CylinderGeometry(1, 1, 1, 20, 1, true);
+  const UP = V(0, 1, 0), ZL = V(0, 0, 1);
+
+  function buildMolecule(spec, { offset }) {
+    const { A, B, ix } = tryptamine(spec);
+    const g = new THREE.Group(); g.scale.setScalar(0.25); scene.add(g);
+    const mats = {
+      C: phys(EL.C.c), Cring: phys(EL.C.c), H: phys(EL.H.c, { roughness: 0.42, clearcoat: 0.4 }),
+      N: phys(EL.N.c, { roughness: 0.26 }), Nring: phys(EL.N.c, { roughness: 0.26 }), O: phys(EL.O.c, { roughness: 0.28 }),
+      P: phys(EL.P.c, { metalness: 0.35, roughness: 0.3, transparent: true }), Op: phys(EL.O.c, { roughness: 0.28, transparent: true }), Hp: phys(EL.H.c, { roughness: 0.42, transparent: true }),
+      bond: phys(STICK, { roughness: 0.36, clearcoat: 0.4 }), bondRing: phys(STICK, { roughness: 0.36, clearcoat: 0.4 }), bondP: phys(STICK, { roughness: 0.36, transparent: true }),
+    };
+    const matFor = (a) => a.grp === 'phos' ? (a.el === 'P' ? mats.P : a.el === 'O' ? mats.Op : mats.Hp)
+      : a.ring ? (a.el === 'N' ? mats.Nring : mats.Cring) : mats[a.el];
+    A.forEach((a) => {
+      a.p.sub(offset); a.f.sub(offset); a.cur = a.p.clone();
+      a.mesh = new THREE.Mesh(sphGeo, matFor(a)); a.mesh.castShadow = true; a.mesh.receiveShadow = true; g.add(a.mesh);
+      a.show = { v: 0 };
+    });
+    B.forEach((bd) => {
+      const m = bd.grp === 'phos' ? mats.bondP : bd.ring ? mats.bondRing : mats.bond;
+      bd.cyl = Array.from({ length: (bd.o === 2 ? 2 : 1) * (bd.cut ? 2 : 1) }, () => { const c = new THREE.Mesh(cylGeo, m); c.castShadow = true; c.receiveShadow = true; g.add(c); return c; });
+      bd.g = { v: 0 };
+    });
+    // relleno translúcido del indol (se enciende en el beat 3)
+    const ringIds = ['C4', 'C5', 'C6', 'C7', 'C7a', 'N1', 'C2', 'C3', 'C3a'];
+    const shp = new THREE.Shape(ringIds.map((k) => { const p = A[ix[k]].p; return new THREE.Vector2(p.x, p.y); }));
+    const fill = new THREE.Mesh(new THREE.ShapeGeometry(shp), new THREE.MeshBasicMaterial({ color: '#7fd8ff', transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false }));
+    g.add(fill);
+    const center = new THREE.Object3D(); { const c = V(); ringIds.forEach((k) => c.add(A[ix[k]].p)); center.position.copy(c.divideScalar(ringIds.length)); } g.add(center);
+    const hexC = new THREE.Object3D(); hexC.position.copy(HEX).sub(offset); g.add(hexC);
+    return { A, B, ix, g, mats, fill, center, hexC, at: (id) => A[ix[id]], inf: { v: 1 }, phos: { d: 0, rot: 0, fade: 1 }, glow: { v: 0 } };
+  }
+
+  // centroide de los átomos pesados de la psilocibina → origen (mismo corrimiento para la serotonina: los indoles quedan alineados)
+  const probe = tryptamine({ phos: true });
+  const offset = V(); { let n = 0; probe.A.forEach((a) => { if (a.el !== 'H') { offset.add(a.p); n++; } }); offset.divideScalar(n); }
+  const mA = buildMolecule({ phos: true, nMe: true }, { offset });
+  const mB = buildMolecule({ oh5: true, nMe: false }, { offset });
+  mB.g.position.set(3.1, 0, 0);
+
+  /* ---------------- construcción de la psilocibina: fórmula plana → modelo 3D ---------------- */
+  const heavy = (m) => m.A.filter((a) => a.el !== 'H');
+  function bfs(m, root) {
+    const depth = new Map([[m.ix[root], 0]]), q = [m.ix[root]];
+    while (q.length) { const i = q.shift(); m.B.forEach((bd) => { if (bd.h) return; const j = bd.a === i ? bd.b : bd.b === i ? bd.a : -1; if (j >= 0 && !depth.has(j)) { depth.set(j, depth.get(i) + 1); q.push(j); } }); }
+    return depth;
+  }
+  const T_DRAW = 0.45, DT = 0.085, T_INF = 1.85;
+  {
+    const dep = bfs(mA, 'C7a');
+    mA.inf.v = 0;
+    heavy(mA).forEach((a) => { const i = mA.A.indexOf(a); const t = T_DRAW + dep.get(i) * DT + (i === mA.ix.C7a ? 0 : 0.2);
+      tl.to(a.show, { v: 1, duration: 0.3, ease: M.spring(0.1) }, t); });
+    mA.B.filter((bd) => !bd.h).forEach((bd) => { if (dep.get(bd.a) > dep.get(bd.b)) [bd.a, bd.b] = [bd.b, bd.a];
+      tl.to(bd.g, { v: 1, duration: 0.26, ease: 'appleOut' }, T_DRAW + dep.get(bd.a) * DT); });
+    tl.to(mA.inf, { v: 1, duration: 1.35, ease: 'apple' }, T_INF);
+    mA.A.filter((a) => a.el === 'H' && !a.late).forEach((a, k) => tl.to(a.show, { v: 1, duration: 0.4, ease: M.spring(0.12) }, T_INF + 0.55 + k * 0.022));
+  }
+
+  /* ---------------- beat 2: pierde el fosfato ---------------- */
+  const T_CUT = 6.05;
+  const cutBond = mA.B.find((bd) => bd.cut); cutBond.k = { v: 0 };
+  tl.to(cutBond.k, { v: 1, duration: 0.45, ease: 'appleOut' }, T_CUT);
+  tl.to(mA.phos, { d: 7.5, rot: 1.25, duration: 3.0, ease: 'power2.in' }, T_CUT + 0.1);
+  tl.to(mA.phos, { fade: 0, duration: 0.8, ease: 'appleIn' }, T_CUT + 1.9);
+  const spark = new THREE.Mesh(sphGeo, new THREE.MeshBasicMaterial({ color: '#ffffff' })); spark.scale.setScalar(0.0001); mA.g.add(spark);
+  const sp = { v: 0 }; tl.to(sp, { v: 1, duration: 0.14, ease: 'appleOut' }, T_CUT); tl.to(sp, { v: 0, duration: 0.35, ease: 'appleIn' }, T_CUT + 0.14);
+  const HO4 = mA.at('HO4');
+  tl.to(HO4.show, { v: 1, duration: 0.55, ease: M.spring(0.15) }, T_CUT + 0.9);
+  const phosDir = V(-0.35, 1, -0.55).normalize(), phosAxis = V(0.4, 0.3, 0.87).normalize(), phosPivot = mA.at('P').p.clone();
+  const qTmp = new THREE.Quaternion();
+
+  /* ---------------- beat 3: serotonina al lado ---------------- */
+  const T_SER = 10.35;
+  {
+    const dep = bfs(mB, 'C7a');
+    heavy(mB).forEach((a) => { const i = mB.A.indexOf(a); tl.to(a.show, { v: 1, duration: 0.36, ease: M.spring(0.1) }, T_SER + dep.get(i) * 0.06); });
+    mB.B.filter((bd) => !bd.h).forEach((bd) => { if (dep.get(bd.a) > dep.get(bd.b)) [bd.a, bd.b] = [bd.b, bd.a]; tl.to(bd.g, { v: 1, duration: 0.3, ease: 'appleOut' }, T_SER + dep.get(bd.a) * 0.06); });
+    mB.A.filter((a) => a.el === 'H').forEach((a, k) => tl.to(a.show, { v: 1, duration: 0.4, ease: M.spring(0.12) }, T_SER + 0.55 + k * 0.02));
+  }
+  const T_GLOW = 11.5;
+  [mA, mB].forEach((m) => tl.to(m.glow, { v: 1, duration: 0.9, ease: 'apple' }, T_GLOW));
+  const turn = { a: 0 };
+  tl.to(turn, { a: -0.35, duration: 1.4, ease: 'apple' }, 10.0);
+  tl.to(turn, { a: 0.1, duration: 3.6, ease: 'none' }, 11.4);
+
+  /* ---------------- cámara ---------------- */
+  const cam = { ang: 0, rad: 7.4, h: 0.35, lx: 0, ly: 0.02, lz: 0, shift: -330 };
+  // beat 1: frontal (como la fórmula del libro) → órbita que revela el volumen
+  tl.to(cam, { ang: -0.55, h: 1.0, rad: 7.0, duration: 2.2, ease: 'apple' }, T_INF - 0.1);
+  tl.to(cam, { ang: -0.68, duration: 2.0, ease: 'none' }, T_INF + 2.1);
+  // beat 2: se acerca al punto de corte, sigue un poco al fosfato y vuelve
+  const o4w = V(); mA.g.updateMatrixWorld(); mA.g.localToWorld(o4w.copy(mA.at('O4').p));
+  tl.to(cam, { ang: -0.42, h: 0.75, rad: 5.4, lx: o4w.x * 0.7, ly: o4w.y * 0.6, lz: o4w.z * 0.7, shift: -300, duration: 1.4, ease: 'apple' }, 4.95);
+  tl.to(cam, { ly: o4w.y * 0.6 + 0.12, duration: 1.6, ease: 'apple' }, 6.35);
+  tl.to(cam, { ang: -0.3, h: 0.7, rad: 6.6, lx: 0, ly: 0.05, lz: 0, shift: -330, duration: 1.6, ease: 'apple' }, 7.7);
+  // beat 3: se abre y se corre para mostrar las dos moléculas
+  tl.to(cam, { ang: 0, h: 0.8, rad: 10.2, lx: 1.55, ly: 0.12, lz: 0, shift: -250, duration: 1.8, ease: 'apple' }, 9.85);
+  tl.to(cam, { rad: 9.8, duration: 3.3, ease: 'none' }, 11.65);
+
+  /* ---------------- tipografía ---------------- */
+  // leyenda
+  const LEG = [['C', EL.C.c, 'CARBONO'], ['H', EL.H.c, 'H'], ['N', EL.N.c, 'N'], ['O', EL.O.c, 'O'], ['P', EL.P.c, 'P']];
+  $('#legend').innerHTML = LEG.map(([k, c]) => `<span class="it" data-el="${k}"><span class="dot" style="background:${k === 'C' ? '#6a6377' : c}"></span>${k}</span>`).join('');
+  tl.from('#legend .it', { opacity: 0, y: 10, duration: 0.5, stagger: 0.06, ease: 'appleOut' }, 2.6);
+  tl.to('#legend [data-el="P"]', { opacity: 0.25, duration: 0.5, ease: 'apple' }, T_CUT + 1.2);
+
+  tl.from('.corner', { opacity: 0, scale: 0.6, duration: 0.6, stagger: 0.06, ease: 'appleOut' }, 0.2);
+  const pl = M.textIn($('#plate'), 0.6, { type: 'words', dur: 0.6, ease: 'appleOut' });
+
+  const k1 = M.textIn($('#k1'), 0.3, { type: 'words', dur: 0.7, ease: 'appleOut' });
+  const tA = M.textIn($('#tA'), 0.45, { dur: 0.9, stagger: 0.035, ease: 'appleOut' });
+  const tB = M.textIn($('#tB'), 0.45 + 7 * 0.035, { dur: 0.9, stagger: 0.035, ease: 'appleOut' });
+  const tC = M.textIn($('#tC'), 0.45 + 9 * 0.035, { dur: 0.9, stagger: 0.035, ease: 'appleOut' });
+  $('#fA').innerHTML = DATA.psilocibina.formula; $('#fB').innerHTML = DATA.psilocina.formula;
+  M.counter($('#mass'), { from: DATA.psilocibina.masa, to: DATA.psilocina.masa, decimals: 2, suffix: ' g/mol', at: T_CUT + 0.25, dur: 1.3, ease: 'power2.out' });
+  tl.fromTo('#spec', { clipPath: 'inset(0% 100% 0% 0%)' }, { clipPath: 'inset(0% 0% 0% 0%)', duration: 0.9, ease: 'appleOut' }, 1.2);
+  gsap.set('#fB', { yPercent: 110 });
+  const s1 = M.textIn($('#sub1'), 1.45, { type: 'words', dur: 0.7, stagger: 0.035, ease: 'appleOut' });
+
+  // beat 2
+  M.textOut(k1, 4.75, { type: 'words' }); M.textOut(s1, 4.75, { type: 'words', stagger: 0.012 });
+  const k2 = M.textIn($('#k2'), 5.15, { type: 'words', dur: 0.6, ease: 'appleOut' });
+  const s2 = M.textIn($('#sub2'), 5.3, { type: 'words', dur: 0.7, stagger: 0.035, ease: 'appleOut' });
+  tl.to('#tB', { color: '#E0A15A', duration: 0.4, ease: 'apple' }, T_CUT - 0.35);
+  M.textOut(tB, T_CUT + 0.15, { stagger: 0.03, dur: 0.45 });
+  const wB = $('#tB').getBoundingClientRect().width;
+  tl.to('#tC', { x: -wB, duration: 0.75, ease: 'apple' }, T_CUT + 0.4);
+  tl.to('#fA', { yPercent: -110, duration: 0.45, ease: 'appleIn' }, T_CUT + 0.25);
+  tl.to('#fB', { yPercent: 0, duration: 0.6, ease: 'appleOut' }, T_CUT + 0.55);
+  tl.fromTo('#tag i', { scaleX: 0 }, { scaleX: 1, duration: 0.5, ease: 'appleOut' }, T_CUT + 1.25);
+  const tg = M.textIn($('#tagTxt'), T_CUT + 1.35, { type: 'words', dur: 0.6, ease: 'appleOut' });
+  $('#src').textContent = DATA.fuente;
+  const sr = M.textIn($('#src'), T_CUT + 1.6, { type: 'words', dur: 0.6, stagger: 0.02, ease: 'appleOut' });
+
+  // salida beat 2
+  const T_OUT2 = 9.6;
+  M.textOut(k2, T_OUT2, { type: 'words' }); M.textOut(tA, T_OUT2, { stagger: 0.015 }); M.textOut(tC, T_OUT2 + 0.1, { stagger: 0.015 });
+  M.textOut(s2, T_OUT2, { type: 'words', stagger: 0.01 }); M.textOut(tg, T_OUT2 + 0.05, { type: 'words' }); M.textOut(sr, T_OUT2 + 0.05, { type: 'words', stagger: 0.01 });
+  tl.to('#tag i', { scaleX: 0, duration: 0.35, ease: 'appleIn' }, T_OUT2);
+  tl.to('#spec', { clipPath: 'inset(0% 0% 0% 100%)', duration: 0.5, ease: 'appleIn' }, T_OUT2);
+
+  // beat 3
+  const k3 = M.textIn($('#k3'), 10.2, { type: 'words', dur: 0.6, ease: 'appleOut' });
+  const h3 = M.textIn($('#head3'), 10.3, { type: 'words', dur: 0.8, stagger: 0.05, ease: 'appleOut' });
+  const s3 = M.textIn($('#sub3'), 11.0, { type: 'words', dur: 0.7, stagger: 0.035, ease: 'appleOut' });
+  const nA = [M.textIn($('#nA .h'), 11.0, { type: 'words', dur: 0.6, ease: 'appleOut' }), M.textIn($('#nA .d'), 11.15, { type: 'words', dur: 0.6, stagger: 0.03, ease: 'appleOut' })];
+  const nB = [M.textIn($('#nB .h'), 11.1, { type: 'words', dur: 0.6, ease: 'appleOut' }), M.textIn($('#nB .d'), 11.25, { type: 'words', dur: 0.6, stagger: 0.03, ease: 'appleOut' })];
+  const cr = M.textIn($('#core'), T_GLOW + 0.35, { type: 'words', dur: 0.6, ease: 'appleOut' });
+  const T_END = 14.05;
+  M.textOut(k3, T_END, { type: 'words' }); M.textOut(h3, T_END, { type: 'words', stagger: 0.02 }); M.textOut(s3, T_END, { type: 'words', stagger: 0.01 });
+  [...nA, ...nB].forEach((sp2) => M.textOut(sp2, T_END + 0.05, { type: 'words', stagger: 0.01 })); M.textOut(cr, T_END, { type: 'words' });
+  M.textOut(pl, T_END + 0.1, { type: 'words' });
+  tl.to('#legend', { opacity: 0, duration: 0.4, ease: 'appleIn' }, T_END);
+  tl.to('.corner', { opacity: 0, duration: 0.4, ease: 'appleIn' }, T_END + 0.2);
+  tl.to('#fade', { opacity: 1, duration: 0.55, ease: 'appleIn' }, T_END + 0.3);
+
+  /* ---------------- anotaciones (líneas finas que siguen al 3D) ---------------- */
+  const svg = $('#ann'); const NS = 'http://www.w3.org/2000/svg';
+  const mkPath = (stroke = 'rgba(243,237,226,0.75)') => { const l = document.createElementNS(NS, 'polyline'); l.setAttribute('fill', 'none'); l.setAttribute('stroke', stroke); l.setAttribute('stroke-width', '1.5'); svg.appendChild(l); return l; };
+  const mkDot = (fill) => { const d = document.createElementNS(NS, 'circle'); d.setAttribute('r', '0'); d.setAttribute('fill', fill); svg.appendChild(d); return d; };
+  const ANN = [
+    { el: $('#L1'), a: mA.hexC, pos: [1440, 760], t: 2.75, out: 4.7, dot: '#7FD8FF' },
+    { el: $('#L2'), a: mA.at('Nam').mesh, pos: [1500, 250], t: 3.1, out: 4.7, dot: '#7FD8FF' },
+    { el: $('#L3'), a: mA.at('P').mesh, pos: [760, 130], t: 3.45, out: 4.7, dot: '#E0A15A', left: true },
+    { el: $('#L4'), a: mA.at('O4').mesh, pos: [760, 150], t: T_CUT + 1.15, out: T_OUT2, dot: '#E0A15A', left: true },
+  ].map((o) => ({ ...o, l: mkPath(), d: mkDot(o.dot), p: { v: 0 } }));
+  ANN.forEach((o) => {
+    gsap.set(o.el, { left: o.pos[0], top: o.pos[1] });
+    tl.to(o.p, { v: 1, duration: 0.7, ease: 'appleOut' }, o.t);
+    M.textIn(o.el.querySelector('.n'), o.t + 0.2, { type: 'words', dur: 0.5, ease: 'appleOut' });
+    M.textIn(o.el.querySelector('.h'), o.t + 0.25, { type: 'words', dur: 0.6, ease: 'appleOut' });
+    M.textIn(o.el.querySelector('.d'), o.t + 0.4, { type: 'words', dur: 0.6, stagger: 0.03, ease: 'appleOut' });
+    tl.to(o.p, { v: 0, duration: 0.45, ease: 'appleIn' }, o.out);
+    tl.to(o.el, { opacity: 0, y: -10, duration: 0.4, ease: 'appleIn' }, o.out);
+  });
+  // etiqueta que acompaña al fosfato que se va
+  const phosL = { l: mkPath('rgba(224,161,90,0.8)'), p: { v: 0 } };
+  const pf = M.textIn($('#phosLbl'), T_CUT + 0.55, { type: 'words', dur: 0.5, ease: 'appleOut' });
+  tl.to(phosL.p, { v: 1, duration: 0.5, ease: 'appleOut' }, T_CUT + 0.4);
+  tl.to(phosL.p, { v: 0, duration: 0.4, ease: 'appleIn' }, T_CUT + 2.0);
+  tl.to('#phosLbl', { opacity: 0, duration: 0.4, ease: 'appleIn' }, T_CUT + 2.0);
+  // beat 3: corchete que une los dos núcleos indol
+  const coreL = { l: mkPath('rgba(127,216,255,0.85)'), dA: mkDot('#7FD8FF'), dB: mkDot('#7FD8FF'), p: { v: 0 } };
+  tl.to(coreL.p, { v: 1, duration: 0.8, ease: 'appleOut' }, T_GLOW + 0.1);
+  tl.to(coreL.p, { v: 0, duration: 0.45, ease: 'appleIn' }, T_END);
+
+  /* ---------------- por cuadro ---------------- */
+  const tmp = V(), tmp2 = V(), dir = V(), side = V(), cA = V(), cB = V();
+  const cyan = new THREE.Color('#7fd8ff'), dark = new THREE.Color(EL.C.c), black = new THREE.Color('#000000');
+  function updateMol(m) {
+    const inf = m.inf.v;
+    // fosfato: se separa, gira y se desvanece
+    qTmp.setFromAxisAngle(phosAxis, m.phos.rot);
+    m.A.forEach((a) => {
+      a.cur.lerpVectors(a.f, a.p, inf);
+      if (a.grp === 'phos' && m.phos.d > 0) a.cur.sub(phosPivot).applyQuaternion(qTmp).add(phosPivot).addScaledVector(phosDir, m.phos.d);
+      a.mesh.position.copy(a.cur);
+      let s;
+      if (a.el === 'H') s = EL.H.r * a.show.v;
+      else if (a.el === 'C') s = (0.03 + (EL.C.r - 0.03) * inf) * a.show.v;          // en la fórmula plana, el carbono es solo la unión de las líneas
+      else s = EL[a.el].r * (0.62 + 0.38 * inf) * a.show.v;                          // N, O, P: nodos de color desde el principio
+      if (a.grp === 'phos' && m.phos.fade < 0.01) s = 0;
+      a.mesh.scale.setScalar(Math.max(1e-4, s)); a.mesh.visible = s > 1e-3;
+    });
+    const rr = 0.03 + (0.12 - 0.03) * inf;
+    m.B.forEach((bd) => {
+      const A0 = m.A[bd.a].cur, A1 = m.A[bd.b].cur;
+      const g = bd.h ? m.A[bd.b].show.v : bd.g.v;
+      const hide = g < 0.002 || (bd.grp === 'phos' && m.phos.fade < 0.01);
+      dir.subVectors(A1, A0); const len = dir.length(); dir.normalize();
+      side.crossVectors(dir, ZL); if (side.lengthSq() < 1e-4) side.set(1, 0, 0); side.normalize();
+      const dbl = bd.o === 2, r = bd.h ? 0.085 * Math.min(1, inf * 1.5) : dbl ? rr * 0.62 : rr, off = dbl ? 0.06 + 0.06 * inf : 0;
+      // segmentos: [desde, hasta] como fracción del largo
+      let segs = [[0, g]];
+      if (bd.cut && bd.k) { const k = bd.k.v; segs = k > 0 ? [[0, 0.5 * (1 - k)], [1 - 0.5 * (1 - k), 1]] : [[0, g], [0, 0]]; }
+      let ci = 0;
+      segs.forEach(([u0, u1]) => {
+        (dbl ? [-1, 1] : [0]).forEach((sgn) => {
+          const c = bd.cyl[ci++]; const l = (u1 - u0) * len;
+          if (hide || l < 1e-3) { c.visible = false; return; }
+          c.visible = true;
+          tmp.copy(A0).addScaledVector(dir, len * (u0 + u1) / 2).addScaledVector(side, off * sgn);
+          c.position.copy(tmp); c.quaternion.setFromUnitVectors(UP, dir); c.scale.set(r, l, r);
+        });
+      });
+    });
+    // materiales: tinta de lámina (plano) → modelo físico (3D)
+    [m.mats.C, m.mats.Cring].forEach((mt) => mt.color.copy(BONE).lerp(dark, inf));
+    [m.mats.bond, m.mats.bondRing, m.mats.bondP].forEach((mt) => { mt.color.copy(BONE).lerp(STICK, inf); mt.emissive.copy(BONE); mt.emissiveIntensity = 0.55 * (1 - inf); });
+    [m.mats.C, m.mats.Cring].forEach((mt) => { mt.emissive.copy(BONE); mt.emissiveIntensity = 0.55 * (1 - inf); });
+    [m.mats.P, m.mats.Op, m.mats.Hp, m.mats.bondP].forEach((mt) => { mt.opacity = m.phos.fade; mt.depthWrite = m.phos.fade > 0.99; });
+    // núcleo indol común (beat 3)
+    const gl = m.glow.v;
+    [m.mats.Cring, m.mats.Nring, m.mats.bondRing].forEach((mt) => { if (inf >= 1) { mt.emissive.copy(cyan); mt.emissiveIntensity = 0.55 * gl; } });
+    m.fill.material.opacity = 0.2 * gl;
+    m.g.rotation.y = turn.a;
+  }
+
+  const setLine = (l, pts) => l.setAttribute('points', pts ? pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ') : '');
+  M.onFrame(() => {
+    updateMol(mA); updateMol(mB);
+    const spv = sp.v; spark.visible = spv > 0.01; spark.scale.setScalar(Math.max(1e-4, 0.3 * spv));
+    { const o4 = mA.at('O4').cur, P = mA.at('P').p; spark.position.copy(o4).lerp(P, 0.5); }
+    // cámara (órbita alrededor del punto de mira + desplazamiento de lente para la columna de texto)
+    camera.position.set(cam.lx + Math.sin(cam.ang) * cam.rad, cam.ly + cam.h, cam.lz + Math.cos(cam.ang) * cam.rad);
+    camera.lookAt(cam.lx, cam.ly, cam.lz);
+    camera.setViewOffset(1920, 1080, cam.shift, 0, 1920, 1080);
+    camera.updateMatrixWorld();
+    S.render();
+    // anotaciones numeradas
+    ANN.forEach((o) => {
+      const p = S.project(o.a), v = o.p.v;
+      if (v < 0.001) { setLine(o.l, null); o.d.setAttribute('r', '0'); return; }
+      const lx = o.left ? o.pos[0] + o.el.offsetWidth * 0 + 380 : o.pos[0] - 24, ly = o.pos[1] + 44;
+      const ex = p.x + (lx - p.x) * v, ey = p.y + (ly - p.y) * Math.min(1, v * 1.6);
+      const mx = p.x + (lx - p.x) * 0.55;
+      setLine(o.l, [[p.x, p.y], [p.x + (mx - p.x) * Math.min(1, v * 1.6), ey], [ex, ey]]);
+      o.d.setAttribute('cx', p.x.toFixed(1)); o.d.setAttribute('cy', p.y.toFixed(1)); o.d.setAttribute('r', (5 * Math.min(1, v * 3)).toFixed(2));
+    });
+    // fosfato
+    { const p = S.project(mA.at('P').mesh), v = phosL.p.v;
+      const lx = p.x - 150, ly = p.y - 70;
+      $('#phosLbl').style.left = (lx - 150).toFixed(1) + 'px'; $('#phosLbl').style.top = (ly - 34).toFixed(1) + 'px';
+      setLine(phosL.l, v > 0.001 ? [[p.x, p.y], [p.x + (lx - p.x) * v, p.y + (ly - p.y) * v], [lx + (lx - 150 - lx) * Math.max(0, v * 2 - 1), ly]] : null); }
+    // beat 3: nombres bajo cada molécula y corchete del núcleo común
+    { const a = S.project(mA.center), c = S.project(mB.center);
+      const nAel = $('#nA'), nBel = $('#nB');
+      tmp2.set(0, FLOOR_Y + 0.35, 0); const fy = S.project(tmp2).y;
+      nAel.style.left = (a.x - 210).toFixed(1) + 'px'; nAel.style.top = (a.y + 170).toFixed(1) + 'px';
+      nBel.style.left = (c.x - 210).toFixed(1) + 'px'; nBel.style.top = (c.y + 170).toFixed(1) + 'px';
+      const v = coreL.p.v, yb = Math.min(a.y, c.y) - 190;
+      const mid = (a.x + c.x) / 2;
+      if (v > 0.001) {
+        const k = Math.min(1, v * 1.8), k2 = Math.max(0, v * 1.8 - 0.8);
+        setLine(coreL.l, [[a.x + (mid - a.x) * k2, yb], [a.x, yb], [a.x, a.y - (a.y - yb) * (1 - k) - 0], [a.x, a.y]].slice(0, 4).reverse().concat([]));
+        // corchete: sube de cada núcleo y se une arriba en el centro
+        const pts = [[a.x, a.y], [a.x, a.y + (yb - a.y) * k], [a.x + (mid - a.x) * k2, yb + (a.y - a.y)]];
+        const ptsB = [[c.x, c.y], [c.x, c.y + (yb - c.y) * k], [c.x + (mid - c.x) * k2, yb]];
+        setLine(coreL.l, [...pts, ...ptsB.reverse()]);
+        coreL.dA.setAttribute('cx', a.x.toFixed(1)); coreL.dA.setAttribute('cy', a.y.toFixed(1)); coreL.dA.setAttribute('r', (5 * Math.min(1, v * 3)).toFixed(2));
+        coreL.dB.setAttribute('cx', c.x.toFixed(1)); coreL.dB.setAttribute('cy', c.y.toFixed(1)); coreL.dB.setAttribute('r', (5 * Math.min(1, v * 3)).toFixed(2));
+      } else { setLine(coreL.l, null); coreL.dA.setAttribute('r', '0'); coreL.dB.setAttribute('r', '0'); }
+      const cw = $('#core').offsetWidth; $('#core').style.left = (mid - cw / 2).toFixed(1) + 'px'; $('#core').style.top = (yb - 44).toFixed(1) + 'px';
+    }
+  });
+});
+</script>
+</body>
+</html>
