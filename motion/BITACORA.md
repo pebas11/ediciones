@@ -38,7 +38,7 @@
 - Datos: solo de `FICHA-HONGOS.md` (verificada en PubMed). Brief: `BRIEF-HONGOS.md` (v3).
 - **h01-hongos: TERMINADA.** Tiene 3D del hongo (`lib/mushroom3d.mjs`), diorama de suelo con micelio y sonido.
   - Renders: `renders/h01-hongos_FONDO.mp4` (55 MB), `_ENTREGA.mp4` (23 MB) y `_AUDIO.wav`. Ya enviada al usuario.
-- **h02-quimica, h03-receptor, h04-redes, h05-ciencia: EN CURSO.**
+- **h02-quimica, h03-receptor, h04-redes, h05-ciencia: CONSTRUIDAS Y CORREGIDAS (crítico + fix).** Falta: sonido + render + ENTREGA (agente lanzado el 26/09; si se corta, repetir: cues como h01 + `/tmp/claude-0/batch.sh` o comandos de arriba).
   - Workflow `hongos-escenas-v3`: constructor → crítico → corrección.
   - Al 26/09 ya estaban construidas las cuatro y h02 iba por la etapa de crítica.
   - Falta:

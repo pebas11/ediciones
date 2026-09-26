@@ -160,7 +160,7 @@ M.scene({ duration: 15.0, push: 0, audio: { key: 'D', mode: 'lydian', bed: { cyc
   }
   // señal: filete azul incrustado en la cara superior. Brilla solo cerca de la cabeza; lo recorrido queda tenue.
   const SIG_Z = LZ + 0.11, SIG_Y = BEAM_H + 0.003, HOT = 2.2;
-  const BLUE = new THREE.Color('#7fa2ff').multiplyScalar(0.62);          // ≈ #7fa2ff en pantalla después de ACES
+  const BLUE = new THREE.Color('#7fa2ff').multiplyScalar(0.8);           // ≈ #7fa2ff en pantalla después de ACES
   const sigGeo = new THREE.BoxGeometry(1, 0.006, 0.018); sigGeo.translate(0.5, 0, 0);
   const sigDim = new THREE.Mesh(sigGeo, new THREE.MeshBasicMaterial({ color: BLUE.clone().multiplyScalar(0.3) }));
   const sigHot = new THREE.Mesh(sigGeo, new THREE.MeshBasicMaterial({ color: BLUE }));
@@ -302,7 +302,7 @@ M.scene({ duration: 15.0, push: 0, audio: { key: 'D', mode: 'lydian', bed: { cyc
     tl.fromTo(p.word.position, { y: yy - 0.08 }, { y: yy, duration: 0.6, ease: 'appleOut' }, tIn[i] + 0.1);
     tl.to(p.word.material, { opacity: 0.88, duration: 0.5, ease: 'appleOut' }, tIn[i] + 0.1);
     // al pasar al siguiente, se apaga mientras baja
-    tl.to([p.year.material, p.word.material], { opacity: 0, duration: 0.4, ease: 'appleIn' }, tOut[i] + 0.05);
+    tl.to([p.year.material, p.word.material], { opacity: 0, duration: 0.3, ease: 'appleIn' }, tOut[i]);   // nunca dos hitos con texto a la vez
     tl.to(p.on, { face: 0.4, duration: 0.4, ease: 'appleIn' }, tOut[i]);
   });
 
