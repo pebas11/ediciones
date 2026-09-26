@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>H04 · Redes (3D)</title>
+<link rel="stylesheet" href="../lib/theme.css">
+<link rel="stylesheet" href="../lib/fonts-spartan.css">
+<script type="importmap">{ "imports": { "three": "../node_modules/three/build/three.module.js", "three/addons/": "../node_modules/three/examples/jsm/" } }</script>
+<style>
+  /* Guion de color (v3): red en tonos cálidos terrosos por módulo; el azul psilocibina SOLO para lo activo:
+     las conexiones entre módulos, los pulsos y la cifra clave (374). */
+  :root { --bone: #F3EDE2; --caramel: #E3A560; --blue: #8FB0FF; --dim: rgba(243,237,226,0.66); }
+  body { background: #060504; }
+  #gl { position: absolute; inset: 0; }
+  #grain { position: absolute; inset: -20px; opacity: 0.06; mix-blend-mode: overlay; pointer-events: none; }
+  #vig { position: absolute; inset: 0; background: radial-gradient(120% 100% at 50% 40%, transparent 52%, rgba(4,3,2,0.62) 100%); }
+  .t { position: absolute; width: 820px; text-align: center; font-family: var(--f-display); color: var(--bone); letter-spacing: -0.035em; line-height: 1.2; white-space: nowrap; }
+  .colA { left: 118px; }
+  .colB { left: 978px; }
+  /* rótulos: contraste de peso 300 (línea de base) contra 800 (la condición que importa) */
+  #lA { top: 770px; font-size: 128px; font-weight: 300; }
+  #lB { top: 770px; font-size: 128px; font-weight: 800; }
+  /* cifras */
+  #nums .n { position: absolute; top: 648px; font-size: 272px; font-weight: 900; letter-spacing: -0.055em; line-height: 1.05; }
+  #nA { color: rgba(243,237,226,0.62); left: 169px; }
+  #nB { left: 935px; color: var(--blue); }
+  #cap { top: 894px; left: 550px; width: 820px; font-family: var(--f-body); font-size: 56px; font-weight: 500; letter-spacing: -0.01em; line-height: 1.25; color: var(--dim); }
+  #fade { position: absolute; inset: 0; background: #060504; opacity: 0; }
+</style>
+</head>
+<body>
+<div id="world">
+  <div id="gl"></div>
+  <div id="vig"></div>
+
+  <div class="t colA" id="lA">Placebo</div>
+  <div class="t colB" id="lB">Psilocibina</div>
+  <div id="nums"><span class="t n colA" id="nA">0</span><span class="t n colB" id="nB">0</span></div>
+  <div class="t" id="cap">conexiones fuertes</div>
+
+  <canvas id="grain" width="512" height="512" style="width:1960px;height:1120px"></canvas>
+  <div id="fade"></div>
+</div>
+
+<script src="../node_modules/gsap/dist/gsap.min.js"></script>
+<script src="../node_modules/gsap/dist/SplitText.min.js"></script>
+<script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
+<script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
+<script src="../lib/stage.js"></script>
+<script type="module">
+import { createStage3D, THREE } from '../lib/three-stage.mjs';
+
+// Dato verificado (FICHA-HONGOS.md, sección 4): "Conexiones fuertes: 374 con psilocibina frente a 165 con placebo;
+// solo 29 compartidas (esquema simplificado)." — Petri et al. 2014, J R Soc Interface, PMID 25401177.
+const N_PSI = 374, N_PLA = 165, N_SHARED = 29;
+// El dibujo respeta las proporciones de Petri: 80 tubos (placebo) → 181 (psilocibina), 14 compartidos.
+const E_PLA = 80, E_PSI = Math.round(E_PLA * N_PSI / N_PLA), E_SH = Math.round(E_PLA * N_SHARED / N_PLA);
+
+M.scene({ duration: 14, push: 0 }, async (tl, M) => {
+  const $ = (s) => document.querySelector(s);
+
+  { const g = $('#grain').getContext('2d'); const im = g.createImageData(512, 512); const rn = M.rng(3);
+    for (let i = 0; i < im.data.length; i += 4) { const v = 128 + (rn() - 0.5) * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+    g.putImageData(im, 0, 0); }
+
+  /* ---------------- escenario (misma luz que h01) ---------------- */
+  const S = createStage3D($('#gl'), { bgTop: '#130f0c', bgBottom: '#050403', bgGlow: '#2c2017', bloom: { strength: 0.25, radius: 0.45, threshold: 0.94 }, exposure: 1.0, env: 0.2 });
+  const { scene, camera } = S;
+  scene.fog = new THREE.FogExp2('#090706', 0.03);
+
+  const key = new THREE.DirectionalLight('#ffdcae', 2.1); key.position.set(-4, 4.5, 4); key.castShadow = true; key.shadow.mapSize.set(2048, 2048); key.shadow.radius = 4; key.shadow.bias = -0.0004;
+  Object.assign(key.shadow.camera, { left: -5, right: 5, top: 4, bottom: -4 }); key.shadow.camera.updateProjectionMatrix(); scene.add(key);
+  const rim = new THREE.DirectionalLight('#7fa2ff', 1.5); rim.position.set(3.5, 3, -4); scene.add(rim);
+  scene.add(new THREE.HemisphereLight('#3a3440', '#140d08', 0.4));
+
+  /* ---------------- disposición de nodos (la misma en las dos redes: mismas regiones, otro cableado) ---------------- */
+  const r = M.rng(404);
+  const MODS = 6, PER = 14;
+  // tonos cálidos bien distintos por módulo (tono y valor): caramelo, hueso, terracota, mostaza, arena, tierra
+  const MOD_COL = ['#E3A560', '#EFE4D2', '#C4613D', '#D2A73A', '#BFA88A', '#9A6343'];
+  const modDir = [[0.95, 0.35, 0.25], [-0.9, 0.3, 0.35], [0.15, 0.95, -0.35], [-0.25, -0.75, 0.6], [0.55, -0.55, -0.7], [-0.6, 0.05, -0.85]]
+    .map((d) => new THREE.Vector3(...d).normalize());
+  const nodes = [];
+  modDir.forEach((d, m) => {
+    const c = d.clone().multiplyScalar(0.86);
+    const mine = [];
+    nodes.push({ p: c.clone(), m, rad: 0.082, hub: true }); mine.push(nodes[nodes.length - 1]);
+    let guard = 0;
+    while (mine.length < PER && guard++ < 5000) {
+      const q = new THREE.Vector3(r() * 2 - 1, r() * 2 - 1, r() * 2 - 1);
+      if (q.length() > 1) continue;
+      const p = c.clone().addScaledVector(q, 0.52);
+      const rad = 0.032 + r() * 0.024;
+      if (mine.some((o) => o.p.distanceTo(p) < o.rad + rad + 0.085)) continue;
+      if (nodes.some((o) => o.m !== m && o.p.distanceTo(p) < o.rad + rad + 0.16)) continue;
+      const n = { p, m, rad, hub: false }; nodes.push(n); mine.push(n);
+    }
+  });
+  nodes.forEach((n, i) => (n.i = i));
+
+  /* ---------------- aristas ---------------- */
+  const key2 = (a, b) => (a < b ? a + '-' + b : b + '-' + a);
+  // árbol generador mínimo por módulo: conexiones cortas, sin nodos sueltos
+  function mstModule(m) {
+    const ids = nodes.filter((n) => n.m === m).map((n) => n.i);
+    const inT = new Set([ids[0]]); const out = [];
+    while (inT.size < ids.length) {
+      let best = null;
+      for (const a of inT) for (const b of ids) if (!inT.has(b)) { const d = nodes[a].p.distanceTo(nodes[b].p); if (!best || d < best[2]) best = [a, b, d]; }
+      inT.add(best[1]); out.push([best[0], best[1]]);
+    }
+    return out;
+  }
+  // una curva "libre": no pasa por dentro de ningún otro nodo
+  function clearCurve(curve, a, b, tubeR) {
+    for (let k = 1; k < 20; k++) {
+      const p = curve.getPoint(k / 20);
+      for (const n of nodes) { if (n.i === a || n.i === b) continue; if (p.distanceTo(n.p) < n.rad + tubeR + 0.035) return false; }
+    }
+    return true;
+  }
+  function makeCurve(a, b, kind, tubeR) {
+    const A = nodes[a].p, B = nodes[b].p;
+    if (kind === 'intra') {
+      const c = new THREE.LineCurve3(A.clone(), B.clone());
+      if (clearCurve(c, a, b, tubeR)) return c;
+      const mid = A.clone().add(B).multiplyScalar(0.5); const off = mid.clone().normalize().multiplyScalar(0.09);
+      for (const s of [1, -1]) { const q = new THREE.QuadraticBezierCurve3(A.clone(), mid.clone().addScaledVector(off, s), B.clone()); if (clearCurve(q, a, b, tubeR)) return q; }
+      return null;
+    }
+    // arcos que se abren hacia afuera: no se amontonan todos en el centro de la nube
+    const mid = A.clone().add(B).multiplyScalar(0.5);
+    const side = new THREE.Vector3().crossVectors(B.clone().sub(A), mid.lengthSq() > 1e-4 ? mid : new THREE.Vector3(0, 1, 0)).normalize();
+    const outv = mid.length() > 0.3 ? mid.clone().normalize() : side.clone();
+    // el vértice del arco se acerca a una esfera de radio ~1,2: la red queda redonda (sin puntas)
+    const len = A.distanceTo(B), jit = (rx() - 0.5) * 0.2, ml = mid.length();
+    for (const [f, sd] of [[0.38, jit], [0.22, jit], [0.55, -jit], [0.1, jit * 2], [0.38, 0.2], [0.38, -0.2]]) {
+      const apex = outv.clone().multiplyScalar(ml + (1.18 - ml) * f).addScaledVector(side, sd * len * 0.5);
+      const ctrl = apex.multiplyScalar(2).sub(mid);
+      const q = new THREE.QuadraticBezierCurve3(A.clone(), ctrl, B.clone());
+      if (clearCurve(q, a, b, tubeR)) return q;
+    }
+    return null;
+  }
+
+  // PLACEBO: solo dentro de cada módulo
+  const R_IN = 0.0085, R_X = 0.0055;
+  const rx = M.rng(5);
+  const pla = [];
+  for (let m = 0; m < MODS; m++) mstModule(m).forEach(([a, b]) => { const c = makeCurve(a, b, 'intra', R_IN); if (c) pla.push({ a, b, m, kind: 'intra', curve: c }); });
+  while (pla.length < E_PLA) {   // completa con la conexión corta que falte
+    let best = null;
+    for (const x of nodes) for (const y of nodes) {
+      if (x.i >= y.i || x.m !== y.m || pla.some((e) => key2(e.a, e.b) === key2(x.i, y.i))) continue;
+      const d = x.p.distanceTo(y.p); if (!best || d < best[2]) best = [x.i, y.i, d];
+    }
+    const c = makeCurve(best[0], best[1], 'intra', R_IN); pla.push({ a: best[0], b: best[1], m: nodes[best[0]].m, kind: 'intra', curve: c || new THREE.LineCurve3(nodes[best[0]].p, nodes[best[1]].p) });
+  }
+  pla.length = E_PLA;
+
+  // PSILOCIBINA: pocas compartidas con placebo, algunas internas nuevas y muchas ENTRE módulos (azul)
+  const rp = M.rng(77);
+  const psi = [];
+  const has = (a, b) => psi.some((e) => key2(e.a, e.b) === key2(a, b));
+  const shuffled = pla.slice().sort(() => rp() - 0.5);
+  shuffled.slice(0, E_SH).forEach((e) => psi.push({ ...e, shared: true }));
+  // internas nuevas (cortas, que no estaban en placebo)
+  const plaKeys = new Set(pla.map((e) => key2(e.a, e.b)));
+  let guard = 0;
+  while (psi.length < E_SH + 24 && guard++ < 6000) {
+    const x = nodes[Math.floor(rp() * nodes.length)], y = nodes[Math.floor(rp() * nodes.length)];
+    if (x.i === y.i || x.m !== y.m || plaKeys.has(key2(x.i, y.i)) || has(x.i, y.i) || x.p.distanceTo(y.p) > 0.5) continue;
+    const c = makeCurve(x.i, y.i, 'intra', R_IN); if (c) psi.push({ a: x.i, b: y.i, m: x.m, kind: 'intra', curve: c });
+  }
+  // entre módulos: primero garantiza que ningún nodo quede sin conexión, después completa
+  const deg = new Map(); const bump = (i) => deg.set(i, (deg.get(i) || 0) + 1);
+  psi.forEach((e) => { bump(e.a); bump(e.b); });
+  const tryInter = (a) => {
+    for (let t = 0; t < 60; t++) {
+      const y = nodes[Math.floor(rp() * nodes.length)];
+      if (y.m === nodes[a].m || has(a, y.i)) continue;
+      const c = makeCurve(a, y.i, 'inter', R_X); if (c) { psi.push({ a, b: y.i, kind: 'inter', curve: c }); bump(a); bump(y.i); return true; }
+    }
+    return false;
+  };
+  nodes.forEach((n) => { if (!deg.get(n.i)) tryInter(n.i); });
+  guard = 0;
+  while (psi.length < E_PSI && guard++ < 3000) {
+    // los centros de módulo (hubs) concentran más conexiones largas
+    const pick = rp() < 0.35 ? nodes.filter((n) => n.hub)[Math.floor(rp() * MODS)] : nodes[Math.floor(rp() * nodes.length)];
+    tryInter(pick.i);
+  }
+  const nInter = psi.filter((e) => e.kind === 'inter').length;
+  console.log(`[h04] nodos ${nodes.length} · placebo ${pla.length} · psilocibina ${psi.length} (inter ${nInter}, compartidas ${E_SH})`);
+
+  /* ---------------- construcción de las dos redes ---------------- */
+  const SEP = 2.5, NSC = 1.42;
+  const sphereGeo = new THREE.SphereGeometry(1, 28, 18);
+  const nets = [];
+  function buildNet(edges, x) {
+    const g = new THREE.Group(); g.position.set(x, 0, 0); g.rotation.set(0.12, 0, 0); g.scale.setScalar(NSC); scene.add(g);
+    const spin = new THREE.Group(); g.add(spin);
+    const lvl = { v: 1 };
+    const nMats = MOD_COL.map((c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.42, metalness: 0 }));
+    const nBase = MOD_COL.map((c) => new THREE.Color(c));
+    const eMats = MOD_COL.map((c) => new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(0.62) }));
+    const eBase = eMats.map((mm) => mm.color.clone());
+    const xMat = new THREE.MeshBasicMaterial({ color: '#86a6f0', transparent: true, opacity: 0.78, depthWrite: false });
+    const xBase = xMat.color.clone();
+    const nodeMeshes = nodes.map((n) => {
+      const s = new THREE.Mesh(sphereGeo, nMats[n.m]); s.position.copy(n.p); s.scale.setScalar(0.0001);
+      s.castShadow = true; s.receiveShadow = true; spin.add(s); return s;
+    });
+    const tubes = edges.map((e) => {
+      const geo = new THREE.TubeGeometry(e.curve, e.kind === 'inter' ? 28 : 8, e.kind === 'inter' ? R_X : R_IN, 6, false);
+      const mesh = new THREE.Mesh(geo, e.kind === 'inter' ? xMat : eMats[e.m]);
+      geo.setDrawRange(0, 0); spin.add(mesh);
+      return { e, geo, total: geo.index.count, prog: { v: 0 } };
+    });
+    const net = { g, spin, lvl, nMats, nBase, eMats, eBase, xMat, xBase, nodeMeshes, tubes };
+    nets.push(net); return net;
+  }
+  const NA = buildNet(pla, -SEP), NB = buildNet(psi, SEP);
+
+  // aparición de los nodos (las dos redes a la vez; la derecha queda en espera, atenuada)
+  NB.lvl.v = 0.26;
+  [NA, NB].forEach((N) => N.nodeMeshes.forEach((s, i) => {
+    const n = nodes[i];
+    tl.to(s.scale, { x: n.rad, y: n.rad, z: n.rad, duration: 0.7, ease: M.spring(0.12) }, 0.12 + n.m * 0.09 + (n.hub ? 0 : 0.12 + (i % PER) * 0.035));
+  }));
+  // beat 1: cableado placebo, módulo por módulo
+  { const cnt = new Array(MODS).fill(0);
+    NA.tubes.forEach((T) => tl.to(T.prog, { v: 1, duration: 0.5, ease: 'appleOut' }, 0.95 + T.e.m * 0.17 + (cnt[T.e.m]++) * 0.04)); }
+  // beat 2: la red de la derecha se enciende; primero lo interno, después las conexiones entre módulos
+  tl.to(NB.lvl, { v: 1, duration: 0.8, ease: 'apple' }, 4.4);
+  tl.to(NA.lvl, { v: 0.5, duration: 0.8, ease: 'apple' }, 4.4);
+  const inB = NB.tubes.filter((T) => T.e.kind === 'intra'), xB = NB.tubes.filter((T) => T.e.kind === 'inter');
+  inB.forEach((T, i) => tl.to(T.prog, { v: 1, duration: 0.5, ease: 'appleOut' }, 4.75 + i * 0.03));
+  xB.forEach((T, i) => tl.to(T.prog, { v: 1, duration: 0.7, ease: 'appleOut' }, 5.3 + (i / xB.length) * 1.3));
+  // beat 3: las dos en valor parejo para comparar
+  tl.to(NA.lvl, { v: 0.9, duration: 0.9, ease: 'apple' }, 9.2);
+
+  // pulsos: señal que viaja por algunas conexiones azules
+  const pulseGeo = new THREE.SphereGeometry(1, 12, 8);
+  const pulses = [];
+  { const rq = M.rng(9);
+    for (let k = 0; k < 34; k++) {
+      const T = xB[Math.floor(rq() * xB.length)];
+      const s = new THREE.Mesh(pulseGeo, new THREE.MeshBasicMaterial({ color: '#f2f6ff' })); s.scale.setScalar(0.0001); NB.spin.add(s);
+      const pr = { u: 0, on: 0 }; const st = 7.0 + rq() * 5.4, dur = 0.7 + rq() * 0.4, rev = rq() < 0.5;
+      tl.set(pr, { on: 1 }, st); tl.to(pr, { u: 1, duration: dur, ease: 'none' }, st); tl.set(pr, { on: 0 }, st + dur);
+      pulses.push({ s, T, pr, rev });
+    } }
+
+  // giro lento de las dos redes, sincronizado. La velocidad baja en cada tramo quieto (la narración entra
+  // sobre una imagen calma) y sube un poco mientras algo se construye. Tabla integrada: determinista.
+  const SPEED = [[0, 0.1], [2.4, 0.1], [2.9, 0.03], [4.3, 0.03], [4.8, 0.08], [6.9, 0.08], [7.4, 0.015], [9.1, 0.015], [9.5, 0.06], [10.7, 0.06], [11.2, 0.015], [12.9, 0.015], [13.3, 0.03], [14.2, 0.03]];
+  const vel = (t) => { for (let i = 1; i < SPEED.length; i++) if (t <= SPEED[i][0]) { const [a, va] = SPEED[i - 1], [b, vb] = SPEED[i]; return va + (vb - va) * (t - a) / (b - a); } return SPEED[SPEED.length - 1][1]; };
+  const ANG = new Float32Array(14201); for (let i = 1; i < ANG.length; i++) ANG[i] = ANG[i - 1] + 0.0005 * (vel((i - 1) / 1000) + vel(i / 1000));
+  const spinAt = (t) => { const x = Math.max(0, Math.min(14.2, t)) * 1000, i = Math.min(ANG.length - 2, Math.floor(x)); return -0.35 + ANG[i] + (ANG[i + 1] - ANG[i]) * (x - i); };
+
+  /* ---------------- cámara ---------------- */
+  const cam = { ang: -0.03, rad: 12.6, dr: 0, y: 1.5, ly: -0.62, sy: 0 };
+  tl.to(cam, { ang: 0.03, rad: 12.3, duration: 14, ease: 'none' }, 0);
+  // beat 3: sube las redes para dejar lugar a las cifras
+  tl.to(cam, { sy: 80, ly: -0.72, duration: 1.2, ease: 'apple' }, 9.15);
+  tl.to(cam, { dr: 1.8, duration: 1.2, ease: 'apple' }, 9.15);
+
+  /* ---------------- texto (skill motion-copy: 6 palabras en toda la escena) ---------------- */
+  const tA = M.textIn($('#lA'), 1.2, { dur: 1.0, stagger: 0.04, ease: 'appleOut' });
+  tl.to('#lA', { opacity: 0.5, duration: 0.8, ease: 'apple' }, 4.4);
+  const tB = M.textIn($('#lB'), 4.6, { dur: 1.0, stagger: 0.035, ease: 'appleOut' });
+  M.textOut(tA, 9.15, { stagger: 0.015 }); M.textOut(tB, 9.2, { stagger: 0.015 });
+
+  tl.from('#nA', { yPercent: 16, opacity: 0, duration: 0.9, ease: 'appleOut' }, 9.65);
+  tl.from('#nB', { yPercent: 16, opacity: 0, duration: 0.9, ease: 'appleOut' }, 9.75);
+  M.counter($('#nA'), { from: 0, to: N_PLA, at: 9.7, dur: 1.4, ease: 'expo.out' });
+  M.counter($('#nB'), { from: 0, to: N_PSI, at: 9.8, dur: 1.4, ease: 'expo.out' });
+  M.textIn($('#cap'), 10.4, { type: 'words', dur: 0.7, stagger: 0.06, ease: 'appleOut' });
+  tl.to(['#nums', '#cap'], { opacity: 0, y: -14, duration: 0.5, ease: 'appleIn' }, 12.9);
+  tl.to('#fade', { opacity: 1, duration: 0.5, ease: 'appleIn' }, 13.15);
+
+  window.__h04 = { S, nets, nodes, THREE };
+  /* ---------------- por cuadro ---------------- */
+  const tmp = new THREE.Color();
+  M.onFrame((t) => {
+    nets.forEach((N) => {
+      N.spin.rotation.y = spinAt(t);
+      const k = N.lvl.v;
+      N.nMats.forEach((mm, i) => mm.color.copy(tmp.copy(N.nBase[i]).multiplyScalar(k)));
+      N.eMats.forEach((mm, i) => mm.color.copy(tmp.copy(N.eBase[i]).multiplyScalar(k)));
+      N.xMat.color.copy(tmp.copy(N.xBase).multiplyScalar(k));
+      N.tubes.forEach((T) => T.geo.setDrawRange(0, Math.floor(T.total * T.prog.v / 6) * 6));
+    });
+    pulses.forEach(({ s, T, pr, rev }) => {
+      if (pr.on && pr.u > 0 && pr.u < 1 && T.prog.v >= 1) { s.position.copy(T.e.curve.getPoint(rev ? 1 - pr.u : pr.u)); s.scale.setScalar(0.024); }
+      else s.scale.setScalar(0.0001);
+    });
+    camera.position.set(Math.sin(cam.ang) * (cam.rad + cam.dr), cam.y, Math.cos(cam.ang) * (cam.rad + cam.dr));
+    camera.lookAt(0, cam.ly, 0);
+    camera.setViewOffset(1920, 1080, 0, cam.sy, 1920, 1080);
+    S.render();
+  });
+});
+</script>
+</body>
+</html>

@@ -14,9 +14,9 @@
   #grain { position: absolute; inset: -20px; opacity: 0.06; mix-blend-mode: overlay; pointer-events: none; }
   #vig { position: absolute; inset: 0; background: radial-gradient(115% 100% at 62% 42%, transparent 50%, rgba(4,3,2,0.6) 100%); }
   .t { position: absolute; left: 140px; font-family: var(--f-display); color: var(--bone); letter-spacing: -0.035em; line-height: 1.25; white-space: nowrap; }
-  #name { top: 452px; font-size: 172px; font-weight: 800; }
+  #name { top: 540px; font-size: 168px; font-weight: 800; }
   #name span { display: inline-block; }
-  #prima { top: 318px; font-size: 150px; }
+  #prima { top: 372px; font-size: 150px; }
   #prima .a { display: block; font-weight: 300; }
   #prima .b { display: block; font-weight: 800; margin-top: -30px; }
   #fade { position: absolute; inset: 0; background: #060504; opacity: 0; }
@@ -65,9 +65,9 @@ M.scene({ duration: 14, push: 0 }, async (tl, M) => {
   key.shadow.mapSize.set(2048, 2048); key.shadow.radius = 5; key.shadow.bias = -0.0005; key.shadow.normalBias = 0.03;
   Object.assign(key.shadow.camera, { left: -12, right: 12, top: 12, bottom: -14, near: 1, far: 60 }); key.shadow.camera.updateProjectionMatrix();
   scene.add(key); scene.add(key.target);
-  const rim = new THREE.DirectionalLight('#7fa2ff', 1.5); rim.position.set(10.5, 9, -12); scene.add(rim);
+  const rim = new THREE.DirectionalLight('#7fa2ff', 2.0); rim.position.set(13, 7, -9); scene.add(rim);
   scene.add(new THREE.HemisphereLight('#3a3440', '#140d08', 0.4));
-  const act = new THREE.PointLight('#7fa2ff', 0, 16, 2); act.position.set(1.2, 1.6, -3.2); scene.add(act);
+  const act = new THREE.PointLight('#7fa2ff', 0, 16, 2); act.position.set(0.5, 1.0, -5.5); scene.add(act);
 
   /* ---------------- geometría molecular (Å, coordenadas 2D estándar + leve Z) ---------------- */
   const V = (x, y, z = 0) => new THREE.Vector3(x, y, z);
@@ -128,13 +128,25 @@ M.scene({ duration: 14, push: 0 }, async (tl, M) => {
   }
 
   /* ---------------- materiales ---------------- */
-  const EL = { C: { r: 0.36, c: '#a0958b' }, N: { r: 0.37, c: '#b4c4e4' }, O: { r: 0.37, c: '#E3A560' }, P: { r: 0.47, c: '#d98a2e' } };
-  const STICK = '#cfc5b8';
+  const EL = { C: { r: 0.38, c: '#b3a79a' }, N: { r: 0.39, c: '#b9c7e3' }, O: { r: 0.39, c: '#E3A560' }, P: { r: 0.5, c: '#d98a2e' } };
+  const STICK = '#d6ccbf';
   const phys = (c, o = {}) => new THREE.MeshPhysicalMaterial({ color: c, roughness: 0.34, metalness: 0, clearcoat: 0.6, clearcoatRoughness: 0.25, ...o });
+  // contraluz azul por material (Fresnel): la molécula "se enciende" sin teñir su color base
+  const RIM_SRC = { value: new THREE.Color('#7fa2ff') };
+  function withRim(mat) {
+    mat.userData.rim = { value: 0 };
+    mat.onBeforeCompile = (sh) => {
+      sh.uniforms.uRim = mat.userData.rim; sh.uniforms.uRimCol = RIM_SRC;
+      sh.fragmentShader = 'uniform float uRim;\nuniform vec3 uRimCol;\n' + sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        float frz = 1.0 - clamp(dot(normalize(normal), normalize(vViewPosition)), 0.0, 1.0);
+        totalEmissiveRadiance += uRimCol * uRim * pow(frz, 2.6);`);
+    };
+    return mat;
+  }
   const sphGeo = new THREE.SphereGeometry(1, 48, 32);
   const cylGeo = new THREE.CylinderGeometry(1, 1, 1, 22, 1, false);
   const UP = V(0, 1, 0), ZL = V(0, 0, 1);
-  const BLUE = new THREE.Color('#7fa2ff');
+  const BLUE = new THREE.Color('#7fa2ff'), STICK_C = new THREE.Color(STICK), STICK_B = new THREE.Color('#7fa0ea');
 
   function buildMolecule(spec, pos) {
     const { A, B, ix } = tryptamine(spec);
@@ -142,7 +154,7 @@ M.scene({ duration: 14, push: 0 }, async (tl, M) => {
     const phosG = new THREE.Group(); g.add(phosG);                  // el fosfato se mueve como un bloque
     A.forEach((a) => {
       a.p.sub(ORIGIN);
-      a.mat = phys(EL[a.el].c, a.el === 'P' ? { roughness: 0.3, metalness: 0.15 } : {});
+      a.mat = withRim(phys(EL[a.el].c, a.el === 'P' ? { roughness: 0.3, metalness: 0.15 } : {}));
       if (a.grp === 'phos') a.mat.transparent = true;
       a.mesh = new THREE.Mesh(sphGeo, a.mat); a.mesh.position.copy(a.p); a.mesh.castShadow = a.mesh.receiveShadow = true;
       (a.grp === 'phos' ? phosG : g).add(a.mesh);
@@ -160,10 +172,10 @@ M.scene({ duration: 14, push: 0 }, async (tl, M) => {
     const ringPts = PERIM.map((k) => { const p = A[ix[k]].p; return new THREE.Vector2(p.x, p.y); });
     const ol = outline(ringPts, 0.8);
     const curve = new THREE.CatmullRomCurve3(ol.map((p) => V(p.x, p.y, -0.55)), true, 'centripetal');
-    const tubeGeo = new THREE.TubeGeometry(curve, 240, 0.05, 8, true);
+    const tubeGeo = new THREE.TubeGeometry(curve, 240, 0.045, 8, true);
     const tube = new THREE.Mesh(tubeGeo, new THREE.MeshBasicMaterial({ color: '#b3c8ff', toneMapped: false }));
-    const haloGeo = new THREE.TubeGeometry(curve, 240, 0.16, 8, true);
-    const halo = new THREE.Mesh(haloGeo, new THREE.MeshBasicMaterial({ color: '#7fa2ff', transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
+    const haloGeo = new THREE.TubeGeometry(curve, 240, 0.14, 8, true);
+    const halo = new THREE.Mesh(haloGeo, new THREE.MeshBasicMaterial({ color: '#7fa2ff', transparent: true, opacity: 0.13, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
     const fill = new THREE.Mesh(new THREE.ShapeGeometry(new THREE.Shape(ol)), new THREE.MeshBasicMaterial({ color: '#7fa2ff', transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }));
     fill.position.z = -0.6;
     [tube, halo].forEach((m) => { m.geometry.setDrawRange(0, 0); g.add(m); }); g.add(fill);
@@ -178,63 +190,60 @@ M.scene({ duration: 14, push: 0 }, async (tl, M) => {
   // construcción: los átomos aparecen en orden de enlaces desde C7a; cada varilla crece desde un átomo ya visible
   function grow(m, t0, dt) {
     const dep = heavyBFS(m, 'C7a');
-    m.A.forEach((a, i) => tl.to(a.show, { v: 1, duration: 0.42, ease: M.spring(0.12) }, t0 + dep.get(i) * dt));
+    m.A.forEach((a, i) => tl.to(a.show, { v: 1, duration: 0.36, ease: M.spring(0.1) }, t0 + dep.get(i) * dt));
     m.B.forEach((bd) => { if (dep.get(bd.a) > dep.get(bd.b)) [bd.a, bd.b] = [bd.b, bd.a];
-      tl.to(bd.g, { v: 1, duration: dt * 1.4, ease: 'appleOut' }, t0 + dep.get(bd.a) * dt + dt * 0.2); });
+      tl.to(bd.g, { v: 1, duration: dt, ease: 'none' }, t0 + dep.get(bd.a) * dt + 0.07); });   // sale de un átomo ya visible y llega cuando aparece el siguiente
     return dep;
   }
 
-  const D = 7.4;                                            // separación vertical psilocina / serotonina (beat 3)
   const mA = buildMolecule({ phos: true }, V(0, 0, 0));
-  const mB = buildMolecule({ oh5: true, nMe: false }, V(0, -D, 0));
+  const mB = buildMolecule({ oh5: true, nMe: false }, V(3.0, -5.6, 0));   // en diagonal, sin tocarse
 
   /* ---------------- beat 1: psilocibina se arma y rota ---------------- */
-  grow(mA, 0.2, 0.085);
+  grow(mA, 0.2, 0.12);
 
   /* ---------------- beat 2: pierde el fosfato → psilocina (activa, azul) ---------------- */
   const T_CUT = 5.0;
   const cutB = mA.B.find((bd) => bd.cut); cutB.k = { v: 0 };
   const phos = { d: 0, rot: 0, fade: 1 };
   tl.to(cutB.k, { v: 1, duration: 0.5, ease: 'appleOut' }, T_CUT);
-  tl.to(phos, { d: 9, rot: 1.1, duration: 2.6, ease: 'power2.in' }, T_CUT + 0.05);
-  tl.to(phos, { fade: 0, duration: 0.9, ease: 'appleIn' }, T_CUT + 1.5);
+  tl.to(phos, { d: 9, rot: 1.1, duration: 2.3, ease: 'power2.in' }, T_CUT + 0.05);
+  tl.to(phos, { fade: 0, duration: 0.8, ease: 'appleIn' }, T_CUT + 1.4);
   const P0 = mA.at('P').p.clone(), phosDir = V(-0.55, 0.45, -0.7).normalize(), phosAxis = V(0.3, 0.2, 0.93).normalize();
-  // chispa cálida en el punto de corte
-  const spark = new THREE.Mesh(sphGeo, new THREE.MeshBasicMaterial({ color: '#ffe2bd', toneMapped: false })); spark.scale.setScalar(1e-4); mA.g.add(spark);
-  spark.position.copy(mA.at('O4').p).lerp(P0, 0.5);
-  const sp = { v: 0 }; tl.to(sp, { v: 1, duration: 0.12, ease: 'appleOut' }, T_CUT); tl.to(sp, { v: 0, duration: 0.4, ease: 'appleIn' }, T_CUT + 0.12);
+  // destello cálido en los dos átomos del enlace que se corta (sin piezas sueltas)
+  const flash = { v: 0 }; tl.to(flash, { v: 1, duration: 0.14, ease: 'appleOut' }, T_CUT); tl.to(flash, { v: 0, duration: 0.6, ease: 'appleIn' }, T_CUT + 0.14);
+  const WARM = new THREE.Color('#ffb46a');
   // onda de activación desde el O4 recién liberado
   const depAct = heavyBFS(mA, 'O4'); let maxD = 0; depAct.forEach((v, i) => { if (mA.A[i].grp !== 'phos') maxD = Math.max(maxD, v); });
   const wave = { w: 0 };
   tl.to(wave, { w: 1, duration: 1.3, ease: 'apple' }, T_CUT + 0.7);
   tl.to(mA.glow, { v: 1, duration: 1.3, ease: 'apple' }, T_CUT + 0.7);
-  tl.to(act, { intensity: 55, duration: 1.4, ease: 'apple' }, T_CUT + 0.8);
-  tl.to(rim, { intensity: 2.4, duration: 1.4, ease: 'apple' }, T_CUT + 0.8);
-
+  tl.to(act, { intensity: 30, duration: 1.4, ease: 'apple' }, T_CUT + 0.8);
+  
   /* ---------------- beat 3: junto a la serotonina, núcleo indol común ---------------- */
-  const T3 = 9.15;
-  tl.to(mA.glow, { v: 0.25, duration: 1.0, ease: 'apple' }, T3);
+  const T3 = 8.95;
+  tl.to(mA.glow, { v: 0, duration: 1.0, ease: 'apple' }, T3);
   tl.to(act, { intensity: 0, duration: 1.0, ease: 'apple' }, T3);
-  tl.to(rim, { intensity: 1.5, duration: 1.0, ease: 'apple' }, T3);
-  grow(mB, T3 + 0.35, 0.075);
-  const T_CORE = 10.7;
+  grow(mB, T3 + 0.35, 0.1);
+  const T_CORE = T3 + 1.4;
   [mA, mB].forEach((m) => {
-    tl.to(m.contour, { v: 1, duration: 1.2, ease: 'apple' }, T_CORE);
-    tl.to(m.core, { v: 1, duration: 0.9, ease: 'apple' }, T_CORE + 0.3);
+    tl.to(m.contour, { v: 1, duration: 1.15, ease: 'apple' }, T_CORE);
+    tl.to(m.core, { v: 1, duration: 0.9, ease: 'apple' }, T_CORE + 0.2);
   });
 
   // rotación lenta (misma orientación para las dos moléculas)
   const spin = { a: -0.5 };
-  tl.to(spin, { a: 0.1, duration: 9.0, ease: 'none' }, 0);
+  tl.to(spin, { a: 0.1, duration: T3, ease: 'none' }, 0);
   tl.to(spin, { a: -0.28, duration: 1.4, ease: 'apple' }, T3);
   tl.to(spin, { a: 0.02, duration: 3.5, ease: 'none' }, T3 + 1.4);
 
   /* ---------------- cámara ---------------- */
-  const cam = { ang: -0.1, el: 0.16, rad: 27.5, lx: 0.4, ly: 1.7, lz: 0, shift: -440 };
-  tl.to(cam, { ang: 0.04, rad: 26.0, duration: 4.8, ease: 'apple' }, 0);
-  tl.to(cam, { ang: 0.1, rad: 24.8, lx: 0.9, ly: 1.4, duration: 4.0, ease: 'apple' }, 4.8);
-  tl.to(cam, { ang: 0, el: 0.1, rad: 45, lx: 0.7, ly: 1.7 - D / 2 - 0.3, shift: -520, duration: 1.7, ease: 'apple' }, T3);
-  tl.to(cam, { rad: 43.5, duration: 3.2, ease: 'none' }, T3 + 1.7);
+  const cam = { ang: -0.1, el: 0.16, rad: 23.6, lx: 0.4, ly: 0.75, lz: 0, shift: -420 };
+  tl.to(cam, { ang: 0.04, rad: 22.6, duration: 4.8, ease: 'apple' }, 0);
+  tl.to(cam, { ang: 0.1, rad: 21.4, lx: 0.9, ly: 0.45, duration: 2.6, ease: 'apple' }, 4.8);
+  tl.to(cam, { ang: 0.14, rad: 21.0, duration: T3 - 7.4, ease: 'none' }, 7.4);
+  tl.to(cam, { ang: 0, el: 0.1, rad: 37, lx: 0.7, ly: -2.15, shift: -334, duration: 1.7, ease: 'apple' }, T3);
+  tl.to(cam, { rad: 36, duration: 3.2, ease: 'none' }, T3 + 1.7);
 
   /* ---------------- texto (skill motion-copy: 6 palabras en total) ---------------- */
   const nA = M.textIn($('#nA'), 0.9, { dur: 1.0, stagger: 0.035, ease: 'appleOut' });
@@ -244,7 +253,7 @@ M.scene({ duration: 14, push: 0 }, async (tl, M) => {
   tl.to('#nB', { color: '#E3A560', duration: 0.35, ease: 'apple' }, T_CUT - 0.45);
   M.textOut(nB, T_CUT + 0.1, { stagger: 0.04, dur: 0.45 });
   const wB = $('#nB').getBoundingClientRect().width;
-  tl.to('#nC', { x: -wB, duration: 0.8, ease: 'apple' }, T_CUT + 0.35);
+  tl.to('#nC', { x: -wB, duration: 0.8, ease: 'apple' }, T_CUT + 0.22);
   tl.to(['#nA', '#nC'], { color: '#8FB0FF', duration: 0.9, ease: 'apple' }, T_CUT + 0.75);
   M.textOut(nA, T3 - 0.2, { stagger: 0.015 }); M.textOut(nC, T3 - 0.2 + 7 * 0.015, { stagger: 0.015 });
 
@@ -274,12 +283,13 @@ M.scene({ duration: 14, push: 0 }, async (tl, M) => {
     m.A.forEach((a, i) => {
       const s = EL[a.el].r * a.show.v;
       a.mesh.scale.setScalar(Math.max(1e-4, s)); a.mesh.visible = s > 1e-3 && !(a.grp === 'phos' && phos.fade < 0.01);
+      if (a.id === 'O4' || a.id === 'P') { a.mat.emissive.copy(WARM); a.mat.emissiveIntensity = 0.9 * flash.v; }
       if (a.grp === 'phos') { a.mat.opacity = phos.fade; a.mat.depthWrite = phos.fade > 0.99; return; }
       // azul: onda (psilocina activa) + núcleo común (beat 3)
       let e = 0;
-      if (inPhos) { const x = w - depAct.get(i); e = glow * Math.min(1, Math.max(0, x)) * (0.28 + 0.55 * Math.exp(-x * x * 1.2)); }
-      if (a.ring) e = Math.max(e, 0.32 * core);
-      a.mat.emissive.copy(BLUE); a.mat.emissiveIntensity = e;
+      if (inPhos) { const x = w - depAct.get(i); e = glow * Math.min(1, Math.max(0, x)) * (1.3 + 1.0 * Math.exp(-x * x * 1.2)) * (a.el === 'N' ? 0.6 : 1); }
+      if (a.ring) e = Math.max(e, 1.1 * core);
+      a.mat.userData.rim.value = e;
     });
     m.B.forEach((bd) => {
       const A0 = m.A[bd.a], A1 = m.A[bd.b], g = bd.g.v;
@@ -303,28 +313,23 @@ M.scene({ duration: 14, push: 0 }, async (tl, M) => {
       let e = 0;
       if (inPhos) { const x = w - Math.max(depAct.get(bd.a), depAct.get(bd.b)); e = glow * Math.min(1, Math.max(0, x)) * (0.45 + 0.7 * Math.exp(-x * x * 1.2)); }
       if (A0.ring && A1.ring) e = Math.max(e, 0.5 * core);
-      bd.mat.emissive.copy(BLUE); bd.mat.emissiveIntensity = e;
+      bd.mat.color.copy(STICK_C).lerp(STICK_B, Math.min(1, e / 0.45)); bd.mat.emissive.copy(BLUE); bd.mat.emissiveIntensity = e * 0.5;
     });
     // contorno que se dibuja
     const c = m.contour, n = Math.floor(c.total * c.v / 3) * 3;
     c.tube.geometry.setDrawRange(0, n); c.halo.geometry.setDrawRange(0, n);
-    c.fill.material.opacity = 0.07 * core;
+    c.fill.material.opacity = 0.035 * core;
     m.g.rotation.y = spin.a;
   }
 
   M.onFrame(() => {
     update(mA); update(mB);
-    spark.visible = sp.v > 0.01; spark.scale.setScalar(Math.max(1e-4, 0.32 * sp.v));
     camera.position.set(cam.lx + Math.sin(cam.ang) * Math.cos(cam.el) * cam.rad, cam.ly + Math.sin(cam.el) * cam.rad, cam.lz + Math.cos(cam.ang) * Math.cos(cam.el) * cam.rad);
     camera.lookAt(cam.lx, cam.ly, cam.lz);
     camera.setViewOffset(1920, 1080, cam.shift, 0, 1920, 1080);
     S.render();
   });
 
-  // depuración: caja proyectada de cada molécula (para medir tamaños sin mirar imágenes)
-  window.__bbox = () => [mA, mB].map((m) => { let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
-    m.A.forEach((a) => { if (!a.mesh.visible) return; const p = S.project(a.mesh); x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y); });
-    return [x0, y0, x1, y1].map(Math.round); });
 });
 </script>
 </body>
