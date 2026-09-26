@@ -177,9 +177,13 @@ svg .f-cyan { fill: var(--cyan); }
 svg .f-white { fill: var(--white); }
 svg .fondo-only, .fondo-only { }
 html.verde .fondo-only { display: none !important; }
-html.fondo .verde-only { display: none !important; }
+html.fondo .verde-only, html.alfa .verde-only { display: none !important; }
 
 /* Chroma: los rótulos mono finos y celestes se "comen" al recortar el verde
    (submuestreo 4:2:0 + chromakey). En verde van más gruesos y en blanco frío. */
 html.verde .kicker { font-weight: 700; }
 html.verde .kicker .txt { color: var(--white); }
+
+/* Modo alfa: mismos efectos que "fondo" (glow, vidrio, reflejos) pero sin el fondo → video con transparencia */
+html.alfa, html.alfa body { background: transparent; }
+html.alfa #bg { display: none; }

@@ -1,0 +1,19 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR/motion/setup.sh\"", "timeout": 300 }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(node render.mjs:*)",
+      "Bash(node qa.mjs:*)",
+      "Bash(python3 qa_chroma.py:*)",
+      "Bash(node alpha_test.mjs:*)"
+    ]
+  }
+}

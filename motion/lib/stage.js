@@ -15,7 +15,8 @@
    ========================================================================== */
 (function () {
   const params = new URLSearchParams(location.search);
-  const MODE = params.get('mode') === 'verde' ? 'verde' : 'fondo';
+  // fondo = azul noche completo · verde = chroma #00FF00 opaco · alfa = efectos de fondo sin el fondo (PNG con transparencia)
+  const MODE = ['verde', 'alfa'].includes(params.get('mode')) ? params.get('mode') : 'fondo';
   document.documentElement.classList.add(MODE);
 
   gsap.registerPlugin(SplitText, DrawSVGPlugin, CustomEase);
@@ -28,6 +29,19 @@
   CustomEase.create('exit', 'M0,0 C0.55,0 0.85,0.35 1,1');        // salida que acelera
   CustomEase.create('settle', 'M0,0 C0.3,0 0.22,1.1 0.55,1.03 C0.72,0.99 0.86,1 1,1'); // leve rebote
 
+  // Tokens de motion estilo Apple (medidos en el CSS de apple.com + springs de SwiftUI). Preferir estos en escenas nuevas.
+  CustomEase.create('apple', 'M0,0 C0.4,0 0.6,1 1,1');           // curva de la casa (0.4,0,0.6,1): cambios de estado, movimientos
+  CustomEase.create('appleOut', 'M0,0 C0,0 0.2,1 1,1');          // (0,0,0.2,1): entradas / revelados
+  CustomEase.create('appleIn', 'M0,0 C0.4,0 1,1 1,1');           // (0.4,0,1,1): salidas
+  // Spring tipo SwiftUI normalizado a la duración del tween. bounce 0 = sin rebote (default de Apple), 0.15 = apenas
+  const springEase = (bounce = 0) => {
+    const z = 1 - bounce, w = 2 * Math.PI * 1.0, wd = w * Math.sqrt(Math.max(1e-6, 1 - z * z));
+    const x = (t) => z >= 0.999 ? 1 - Math.exp(-w * t) * (1 + w * t)
+      : 1 - Math.exp(-z * w * t) * (Math.cos(wd * t) + (z * w / wd) * Math.sin(wd * t));
+    const end = x(1);
+    return (t) => x(t) + (1 - end) * t;
+  };
+
   // PRNG determinista
   function rng(seed) { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
 
@@ -36,6 +50,9 @@
   const iconCache = {};
 
   const M = {
+    /** Duraciones (s) y ritmo estilo Apple */
+    D: { micro: 0.24, fast: 0.4, base: 0.5, reveal: 0.8, scene: 1.0, staggerMax: 0.5, hold: 1.5 },
+    spring: springEase,
     W: 1920, H: 1080, mode: MODE, chroma: MODE === 'verde', duration: 10,
     tl: gsap.timeline({ paused: true, defaults: { ease: 'smooth' } }),
     rng,
