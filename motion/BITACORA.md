@@ -48,7 +48,7 @@
     4. Versión ENTREGA.
     5. Enviar y hacer commit.
 
-### Serie 3: Psicodélicos SIN TEXTO. CONSTRUIDA; render en curso (pedido del 26/09)
+### Serie 3: Psicodélicos SIN TEXTO. TERMINADA y ENVIADA (renders FONDO+audio y ENTREGA en renders/p0*)
 - Escenas p01–p05 construidas (QA sin errores).
 - Render FONDO con audio + ENTREGA: lanzados con `/tmp/claude-0/batch.sh` (se pierde si reinicia el contenedor). Si faltan `renders/p0*_ENTREGA.mp4`, re-renderizar.
 - p03: el recorrido de los axones cambió al final y no se revisó en detalle. En la hoja se ve bien.
