@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>B01 · Consciencia (un ojo que se despierta)</title>
+<link rel="stylesheet" href="../lib/theme.css">
+<link rel="stylesheet" href="../lib/fonts-spartan.css">
+<style>
+  /* Lámina: grafito, trazo hueso, iris como dibujo técnico (ámbar + salvia), bucle lila. Sin texto. */
+  body { background: #15171A; }
+  #cv { position: absolute; inset: 0; }
+  #grain { position: absolute; inset: -20px; opacity: 0.05; mix-blend-mode: overlay; pointer-events: none; }
+  #vig { position: absolute; inset: 0; background: radial-gradient(120% 110% at 50% 48%, transparent 55%, rgba(8,9,10,0.55) 100%); pointer-events: none; }
+  #fade { position: absolute; inset: 0; background: #15171A; opacity: 1; }
+</style>
+</head>
+<body>
+<div id="world">
+  <canvas id="cv" width="1920" height="1080"></canvas>
+  <div id="vig"></div>
+  <canvas id="grain" width="512" height="512" style="width:1960px;height:1120px"></canvas>
+  <div id="fade"></div>
+</div>
+<script src="../node_modules/gsap/dist/gsap.min.js"></script>
+<script src="../node_modules/gsap/dist/SplitText.min.js"></script>
+<script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
+<script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
+<script src="../lib/stage.js"></script>
+<script src="../lib/audio.js"></script>
+<script>
+/* Storyboard (16 s)
+   1  0–3    oscuridad: estímulos hueso parpadean sin orden; en el centro se dibuja un párpado cerrado con pestañas
+   2  3–6    el párpado tiembla, se entreabre y vuelve a cerrar; después se abre lento (apple); el iris se dibuja
+             en líneas radiales ámbar/salvia y la pupila se contrae con la luz
+   3  6–10   los estímulos dejan de parpadear y viajan en espiral hacia la pupila; adentro se ordenan en anillos
+   4  10–14  zoom suave: dentro de la pupila se abre un ojo más chico, y dentro de ese otro (Droste);
+             un bucle lila sale del ojo grande y vuelve al chico: el sistema se mira a sí mismo
+   5  14–16  parpadeo tranquilo, queda abierto y estable; fundido al grafito */
+M.scene({ duration: 16, push: 0, audio: { key: 'D', mode: 'lydian', bed: { cycle: 10, bright: 0.6, sub: 0.26 } } }, (tl, M) => {
+  const $ = (s) => document.querySelector(s);
+  const ctx = $('#cv').getContext('2d');
+  { const g = $('#grain').getContext('2d'); const im = g.createImageData(512, 512); const rn = M.rng(3);
+    for (let i = 0; i < im.data.length; i += 4) { const v = 128 + (rn() - 0.5) * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+    g.putImageData(im, 0, 0); }
+
+  /* ---------- paleta y utilidades (idénticas a a03) ---------- */
+  const BG = [21, 23, 26], BONE = [233, 230, 223], AMB = [201, 154, 75], SAGE = [143, 169, 138], LILAC = [162, 148, 190];
+  const PUP = [10, 11, 13];
+  const TAU = Math.PI * 2;
+  const rgba = (c, a) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${Math.max(0, Math.min(1, a)).toFixed(3)})`;
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, m) => a + (b - a) * m;
+  const seg = (t, a, b) => clamp((t - a) / (b - a));
+  const eA = gsap.parseEase('apple'), eO = gsap.parseEase('appleOut'), eI = gsap.parseEase('appleIn'), eSp = M.spring(0.15);
+  const pop = (lt, d, dur = 0.5) => (lt <= d ? 0 : eSp(clamp((lt - d) / dur)));
+  const sstep = (a, b, x) => { const k = clamp((x - a) / (b - a)); return k * k * (3 - 2 * k); };
+
+  function line(ax, ay, bx, by, c, a, w, e = 1) {
+    if (a <= 0.004 || e <= 0 || w <= 0.05) return;
+    ctx.strokeStyle = rgba(c, a); ctx.lineWidth = w; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(ax + (bx - ax) * e, ay + (by - ay) * e); ctx.stroke();
+  }
+  function dot(x, y, r, c, a) { if (a <= 0.004 || r <= 0.1) return; ctx.fillStyle = rgba(c, a); ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill(); }
+  function ring(x, y, r, c, a, w = 2) { if (a <= 0.004 || r <= 0.1) return; ctx.strokeStyle = rgba(c, a); ctx.lineWidth = w; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.stroke(); }
+  function head(x, y, ang, s, c, a) {
+    if (a <= 0.004) return; ctx.fillStyle = rgba(c, a); ctx.beginPath();
+    ctx.moveTo(x, y); ctx.lineTo(x - s * Math.cos(ang - 0.45), y - s * Math.sin(ang - 0.45)); ctx.lineTo(x - s * Math.cos(ang + 0.45), y - s * Math.sin(ang + 0.45)); ctx.closePath(); ctx.fill();
+  }
+  const qpt = (p0, c, p1, k) => [lerp(lerp(p0[0], c[0], k), lerp(c[0], p1[0], k), k), lerp(lerp(p0[1], c[1], k), lerp(c[1], p1[1], k), k)];
+  // bezier cúbica: punto y tangente
+  const cpt = (P, k) => { const u = 1 - k; return [u * u * u * P[0][0] + 3 * u * u * k * P[1][0] + 3 * u * k * k * P[2][0] + k * k * k * P[3][0], u * u * u * P[0][1] + 3 * u * u * k * P[1][1] + 3 * u * k * k * P[2][1] + k * k * k * P[3][1]]; };
+  const ctan = (P, k) => { const u = 1 - k; const dx = 3 * u * u * (P[1][0] - P[0][0]) + 6 * u * k * (P[2][0] - P[1][0]) + 3 * k * k * (P[3][0] - P[2][0]); const dy = 3 * u * u * (P[1][1] - P[0][1]) + 6 * u * k * (P[2][1] - P[1][1]) + 3 * k * k * (P[3][1] - P[2][1]); const L = Math.hypot(dx, dy) || 1; return [dx / L, dy / L]; };
+  function cstroke(P, c, a, w, e = 1, k0 = 0) {
+    if (a <= 0.004 || e <= k0) return;
+    ctx.strokeStyle = rgba(c, a); ctx.lineWidth = w; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.beginPath();
+    const n = 56; let p = cpt(P, k0); ctx.moveTo(p[0], p[1]);
+    for (let i = 1; i <= n; i++) { p = cpt(P, lerp(k0, e, i / n)); ctx.lineTo(p[0], p[1]); } ctx.stroke();
+  }
+  // valor por tramos: [inicio, fin, destino, ease] encadenados
+  const keys = (K) => (t) => { let v = 0; for (const [a, b, to, ez] of K) { if (t < a) break; v = lerp(v, to, ez(seg(t, a, b))); } return v; };
+
+  /* ---------- geometría del ojo ---------- */
+  const CX = 960, CY = 540, W = 312, RI = 158, HU = 200, HL = 188, HC = 68;
+  // párpados: dos cúbicas entre el canto interno (izq., un poco más bajo) y el externo (der.)
+  function lids(E, ou, ol) {
+    const { cx, cy, s } = E, p0 = [cx - W * s, cy + 7 * s], p3 = [cx + W * s, cy - 7 * s];
+    const U = [p0, [cx + lerp(-0.38, -0.5, ou) * W * s, cy + lerp(HC * 0.9, -HU, ou) * s], [cx + lerp(0.52, 0.42, ou) * W * s, cy + lerp(HC, -HU * 0.93, ou) * s], p3];
+    const L = [p0, [cx - 0.38 * W * s, cy + lerp(HC * 0.9, HL * 0.9, ol) * s], [cx + 0.52 * W * s, cy + lerp(HC, HL, ol) * s], p3];
+    return { U, L };
+  }
+  const R0 = M.rng(19);
+  const LASH = Array.from({ length: 14 }, (_, i) => ({ k: 0.13 + (i / 13) * 0.79 + (R0() - 0.5) * 0.02, len: 17 + 24 * Math.pow(i / 13, 0.8) + R0() * 6, curl: 0.18 + R0() * 0.14, w: 1.5 + R0() * 0.6 }));
+  const LOW = Array.from({ length: 8 }, (_, i) => ({ k: 0.34 + (i / 7) * 0.52, len: 6 + R0() * 5 }));
+  // iris: juegos de líneas radiales por nivel de detalle
+  const irisSpec = (N, seed) => {
+    const r = M.rng(seed), out = [];
+    for (let i = 0; i < N; i++) {
+      const ang = (i / N) * TAU + (r() - 0.5) * (TAU / N) * 0.8;
+      out.push({ ang, inner: true, f: 0.55 + r() * 0.45, al: 0.35 + r() * 0.45, o: i / N });
+      const ang2 = ((i + 0.5) / N) * TAU + (r() - 0.5) * (TAU / N) * 0.9;
+      out.push({ ang: ang2, inner: false, f: 0.62 + r() * 0.34, al: 0.22 + r() * 0.42, o: (i + 0.5) / N, st: r() * 0.18 });
+    }
+    return out;
+  };
+  const IRIS = [irisSpec(96, 5), irisSpec(40, 6), irisSpec(18, 7)];
+
+  function drawIris(E, t) {
+    const { cx, cy, s } = E, R = RI * s, pr = E.pr(t) * s, rc = pr + 0.36 * (R - pr), g = E.iris(t), ra = E.ring(t);
+    const lw = (w) => w * clamp(s * 1.6, 0.34, 1);
+    const spec = IRIS[s > 0.5 ? 0 : s > 0.1 ? 1 : 2];
+    // fibras radiales (se dibujan en barrido desde las 12)
+    for (const l of spec) {
+      const e = eO(clamp(g * 1.7 - l.o * 0.7));
+      if (e <= 0) continue;
+      const ca = Math.cos(l.ang - Math.PI / 2), sa = Math.sin(l.ang - Math.PI / 2);
+      let r0, r1;
+      if (l.inner) { r0 = pr + 1.5 * s; r1 = lerp(pr, rc, l.f); } else { r0 = rc + (2 + l.st * (R - rc)) * s; r1 = lerp(rc, R, l.f); }
+      line(cx + ca * r0, cy + sa * r0, cx + ca * r1, cy + sa * r1, l.inner ? AMB : SAGE, l.al, lw(1.15), e);
+    }
+    // collarete ondulado (ámbar) y limbo (hueso)
+    if (g > 0) {
+      ctx.strokeStyle = rgba(AMB, 0.75 * eO(seg(g, 0.3, 0.9))); ctx.lineWidth = lw(1.3); ctx.beginPath();
+      const n = 180; for (let i = 0; i <= n; i++) { const a = (i / n) * TAU, r = rc + 2.6 * s * Math.sin(a * 22) + 1.2 * s * Math.sin(a * 7 + 1); const x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); } ctx.stroke();
+    }
+    ring(cx, cy, R - 7 * s, BONE, 0.18 * ra, lw(1));
+    ring(cx, cy, R, BONE, 0.85 * ra, lw(2.2));
+    // pupila
+    if (ra > 0.004) { dot(cx, cy, pr, PUP, ra); ring(cx, cy, pr, BONE, 0.8 * ra, lw(1.6)); }
+    // brillo: un reflejo recortado, sin glow
+    const ka = E.catch(t);
+    if (ka > 0.004) {
+      const hx = cx - 0.47 * R, hy = cy - 0.44 * R;
+      ctx.fillStyle = rgba(BONE, 0.9 * ka); ctx.beginPath(); ctx.ellipse(hx, hy, 10 * s * ka, 7 * s * ka, -0.6, 0, TAU); ctx.fill();
+      dot(hx + 16 * s, hy + 9 * s, 2.6 * s * ka, BONE, 0.55 * ka);
+    }
+  }
+
+  function drawEye(E, t) {
+    const dr = E.draw(t); if (dr <= 0) return;
+    const { s } = E, ou = E.ou(t), ol = E.ol(t), { U, L } = lids(E, ou, ol);
+    const lw = (w) => w * clamp(s * 1.6, 0.34, 1);
+    // interior del ojo (recortado por los párpados)
+    if (ou + ol > 0.004 && dr >= 1) {
+      ctx.save(); ctx.beginPath(); ctx.moveTo(U[0][0], U[0][1]);
+      ctx.bezierCurveTo(U[1][0], U[1][1], U[2][0], U[2][1], U[3][0], U[3][1]);
+      ctx.bezierCurveTo(L[2][0], L[2][1], L[1][0], L[1][1], L[0][0], L[0][1]); ctx.closePath(); ctx.clip();
+      ctx.fillStyle = rgba(BONE, 0.035); ctx.fill();
+      drawIris(E, t);
+      if (E.inside) E.inside(t);
+      if (E.child) drawEye(E.child, t);
+      ctx.restore();
+    }
+    // pliegue del párpado superior (aparece con la apertura)
+    const oc = sstep(0.35, 1, ou);
+    if (oc > 0.004) {
+      const C = [[E.cx - W * 0.84 * s, E.cy - 22 * s], [E.cx - W * 0.48 * s, E.cy - (HU + 58) * s], [E.cx + W * 0.4 * s, E.cy - (HU + 50) * s], [E.cx + W * 0.9 * s, E.cy - 34 * s]];
+      cstroke(C, BONE, 0.26 * oc, lw(1.3), 0.12 + 0.76 * oc, 0.12);
+    }
+    // canto interno
+    line(U[0][0], U[0][1], U[0][0] - 15 * s, U[0][1] + 6 * s, BONE, 0.6 * dr * (dr >= 1 ? 1 : 0), lw(2));
+    // párpado inferior y sus pestañas cortas
+    cstroke(L, BONE, 0.55, lw(1.7), dr);
+    for (const q of LOW) {
+      const a = 0.42 * sstep(0.3, 1, ol); if (a <= 0.004) continue;
+      const p = cpt(L, q.k), tg = ctan(L, q.k), n = [tg[1], -tg[0]], d = n[1] > 0 ? 1 : -1;
+      line(p[0], p[1], p[0] + (n[0] * d + tg[0] * 0.35) * q.len * s, p[1] + (n[1] * d + tg[1] * 0.35) * q.len * s, BONE, a, lw(1.1));
+    }
+    // párpado superior
+    cstroke(U, BONE, 0.95, lw(3.1), dr);
+    // pestañas: cerradas cuelgan, abiertas suben; en el medio se acortan (escorzo)
+    const f = lerp(-1, 1, sstep(0.01, 0.16, ou));
+    ctx.lineCap = 'round';
+    for (const l of LASH) {
+      const pp = E.lash(t, l.k); if (pp <= 0.01) continue;
+      const p = cpt(U, l.k), tg = ctan(U, l.k); let n = [tg[1], -tg[0]]; if (n[1] > 0) n = [-n[0], -n[1]];
+      const sweep = (l.k - 0.42) * 0.95, len = l.len * s * pp * (0.4 + 0.6 * Math.abs(f));
+      const d = [n[0] * f + tg[0] * sweep, n[1] * f + tg[1] * sweep];
+      const end = [p[0] + d[0] * len, p[1] + d[1] * len];
+      const mid = [p[0] + d[0] * len * 0.55 + tg[0] * l.curl * len * Math.sign(sweep || 1), p[1] + d[1] * len * 0.55 + tg[1] * l.curl * len * Math.sign(sweep || 1)];
+      ctx.strokeStyle = rgba(BONE, 0.88); ctx.lineWidth = lw(l.w); ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.quadraticCurveTo(mid[0], mid[1], end[0], end[1]); ctx.stroke();
+    }
+  }
+
+  /* ---------- estímulos ---------- */
+  const RS = M.rng(7), MAIN = [], DUST = [];
+  const place = () => { for (;;) { const x = 140 + RS() * 1640, y = 120 + RS() * 840; if (((x - CX) / 440) ** 2 + ((y - CY) / 270) ** 2 > 1) return [x, y]; } };
+  for (let i = 0; i < 36; i++) { const [x, y] = place(); MAIN.push({ x, y, r: 3 + RS() * 1.6, per: 0.7 + RS() * 1.1, ph: RS(), a: 0.7 + RS() * 0.3 }); }
+  for (let i = 0; i < 44; i++) { const [x, y] = place(); DUST.push({ x, y, r: 1.7 + RS() * 1.3, per: 0.5 + RS() * 1.3, ph: RS(), a: 0.32 + RS() * 0.3 }); }
+  const flick = (d, t) => Math.pow(Math.max(0, Math.sin(TAU * (t / d.per + d.ph))), 2) * eO(seg(t, 0.25 + d.ph * 1.1, 0.6 + d.ph * 1.1));
+  // orden de llegada por cercanía; anillos 6/12/18 dentro de la pupila
+  const RINGS = [[26, 6], [50, 12], [72, 18]];
+  MAIN.map((d, i) => [Math.hypot(d.x - CX, d.y - CY), i]).sort((a, b) => a[0] - b[0]).forEach(([, i], rank) => (MAIN[i].rank = rank));
+  { let base = 0;
+    RINGS.forEach(([r, n], ri) => {
+      const grp = MAIN.filter((d) => d.rank >= base && d.rank < base + n).sort((a, b) => Math.atan2(a.y - CY, a.x - CX) - Math.atan2(b.y - CY, b.x - CX));
+      grp.forEach((d, j) => { const a = -Math.PI + ((j + 0.5) / n) * TAU + ri * 0.2; d.tx = CX + Math.cos(a) * r; d.ty = CY + Math.sin(a) * r; });
+      base += n;
+    }); }
+  MAIN.forEach((d) => {
+    d.t0 = 6.25 + d.rank * 0.046; d.t1 = d.t0 + 0.95;
+    const mx = (d.x + d.tx) / 2, my = (d.y + d.ty) / 2, dx = d.tx - d.x, dy = d.ty - d.y;
+    d.c = [mx - dy * 0.38, my + dx * 0.38];         // todas giran en el mismo sentido: un remolino que se ordena
+  });
+  const T_ORD = 8.95, PAT_OUT = [10.0, 10.5];
+
+  /* ---------- tres ojos anidados ---------- */
+  const E3 = { cx: CX, cy: CY, s: 1 / 16,
+    draw: (t) => eO(seg(t, 12.0, 12.3)), ou: keys([[12.35, 12.9, 1, eA]]), ol: keys([[12.4, 12.95, 1, eA]]),
+    pr: () => RI * 0.6, iris: (t) => seg(t, 12.5, 12.95), ring: (t) => eO(seg(t, 12.4, 12.6)), catch: (t) => eO(seg(t, 12.8, 13.0)),
+    lash: (t, k) => pop(t, 12.05 + k * 0.2, 0.4) };
+  const E2 = { cx: CX, cy: CY, s: 0.25, child: E3,
+    draw: (t) => eO(seg(t, 10.45, 10.9)),
+    ou: keys([[10.98, 11.16, 0.18, eO], [11.2, 11.34, 0, eI], [11.48, 12.15, 1, eA]]),
+    ol: keys([[11.02, 11.2, 0.1, eO], [11.24, 11.38, 0, eI], [11.52, 12.22, 1, eA]]),
+    pr: (t) => RI * (0.76 - 0.18 * eSp(seg(t, 11.95, 12.7))), iris: (t) => seg(t, 11.6, 12.2), ring: (t) => eO(seg(t, 10.98, 11.2)),
+    catch: (t) => eO(seg(t, 12.0, 12.3)), lash: (t, k) => pop(t, 10.5 + k * 0.35, 0.45) };
+  const E1 = { cx: CX, cy: CY, s: 1, child: E2,
+    draw: (t) => eO(seg(t, 0.4, 1.55)),
+    ou: (t) => {
+      const base = keys([[3.55, 3.95, 0.2, eO], [4.02, 4.3, 0, eI], [4.7, 6.05, 1, eA], [14.5, 14.66, 0, eI], [14.72, 15.1, 1, eO]])(t);
+      const tr = seg(t, 2.95, 3.5), env = Math.sin(Math.PI * tr);    // temblor antes de abrir
+      return base + 0.035 * env * Math.abs(Math.sin(TAU * 7.5 * t)) ;
+    },
+    ol: keys([[3.63, 4.0, 0.1, eO], [4.08, 4.34, 0, eI], [4.8, 6.2, 1, eA], [14.53, 14.7, 0, eI], [14.78, 15.2, 1, eO]]),
+    pr: (t) => RI * (0.76 - 0.19 * eSp(seg(t, 5.4, 6.3))), iris: (t) => seg(t, 4.85, 5.95), ring: (t) => eO(seg(t, 3.55, 3.9)),
+    catch: (t) => eO(seg(t, 5.55, 6.0)), lash: (t, k) => pop(t, 0.55 + k * 0.95, 0.5),
+    inside(t) {
+      const fo = 1 - eI(seg(t, PAT_OUT[0], PAT_OUT[1]));
+      if (fo <= 0.004) return;
+      let base = 0;
+      RINGS.forEach(([r, n], ri) => {
+        const e = eO(seg(t, T_ORD + ri * 0.12, T_ORD + 0.45 + ri * 0.12));
+        if (e > 0) { ctx.strokeStyle = rgba(BONE, 0.24 * fo); ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(CX, CY, r, -Math.PI / 2, -Math.PI / 2 + TAU * e); ctx.stroke(); }
+        base += n;
+      });
+      for (const d of MAIN) {
+        if (t < d.t1) continue;
+        const k = seg(t, d.t1, d.t1 + 0.5);
+        dot(d.tx, d.ty, 2.5, BONE, 0.95 * fo);
+        if (k < 1) ring(d.tx, d.ty, 3 + 9 * eO(k), BONE, (1 - k) * 0.5 * fo, 1);
+      }
+      dot(CX, CY, 3, AMB, fo * eO(seg(t, T_ORD + 0.3, T_ORD + 0.6)));
+    } };
+
+  /* ---------- bucle lila: del ojo grande, alrededor, al ojo chico ---------- */
+  const LOOP = (() => {
+    // sale del canto externo, rodea el ojo (abajo → izquierda → arriba) y baja a la pupila desde arriba
+    const pts = [], rx = W + 110, ry = 282, THS = 0.72, TH1 = 1.5 * Math.PI - 0.42;
+    const P0 = [CX + W + 6, CY - 7], ES = [CX + rx * Math.cos(THS), CY + ry * Math.sin(THS)];
+    const TS = [-rx * Math.sin(THS), ry * Math.cos(THS)], tl0 = Math.hypot(TS[0], TS[1]);
+    const S0 = [P0, [P0[0] + 120, P0[1] + 6], [ES[0] - TS[0] / tl0 * 120, ES[1] - TS[1] / tl0 * 120], ES];
+    for (let i = 0; i <= 40; i++) pts.push(cpt(S0, i / 40));
+    for (let i = 1; i <= 200; i++) { const th = THS + (i / 200) * (TH1 - THS); pts.push([CX + rx * Math.cos(th), CY + ry * Math.sin(th)]); }
+    const A = pts[pts.length - 1], Bp = pts[pts.length - 2], dl = Math.hypot(A[0] - Bp[0], A[1] - Bp[1]);
+    const T = [(A[0] - Bp[0]) / dl, (A[1] - Bp[1]) / dl], END = [CX, CY - 60];
+    const C = [A, [A[0] + T[0] * 170, A[1] + T[1] * 170], [END[0], END[1] - 190], END];
+    for (let i = 1; i <= 80; i++) pts.push(cpt(C, i / 80));
+    return pts;
+  })();
+  const LP = [12.45, 13.5], PULSE = [13.55, 14.4];
+  function drawLoop(t) {
+    const e = eA(seg(t, LP[0], LP[1])); if (e <= 0) return;
+    const m = Math.max(1, Math.floor(e * (LOOP.length - 1)));
+    ctx.strokeStyle = rgba(LILAC, 1); ctx.lineWidth = 2.6; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.beginPath();
+    ctx.moveTo(LOOP[0][0], LOOP[0][1]); for (let i = 1; i <= m; i++) ctx.lineTo(LOOP[i][0], LOOP[i][1]); ctx.stroke();
+    dot(LOOP[0][0], LOOP[0][1], 4.2, LILAC, eO(seg(t, LP[0] - 0.1, LP[0] + 0.15)));
+    const a = LOOP[m - 1], b = LOOP[m];
+    head(b[0] - 1, b[1], Math.atan2(b[1] - a[1], b[0] - a[0]), 12, LILAC, sstep(0, 0.05, e));
+    const k = seg(t, PULSE[0], PULSE[1]);
+    if (k > 0 && k < 1) { const p = LOOP[Math.round(eA(k) * (LOOP.length - 1))]; dot(p[0], p[1], 4.5, LILAC, Math.sin(Math.PI * k) * 0.95 + 0.05); }
+  }
+
+  /* ---------- tiempo: tramos con movimiento (para qa) y fundidos ---------- */
+  [[0.25, 1.6], [2.95, 6.3], [6.25, 9.5], [9.9, 13.5], [13.55, 15.2]].forEach(([a, b]) => tl.to({ v: 0 }, { v: 1, duration: b - a, ease: 'none' }, a));
+  tl.fromTo('#fade', { opacity: 1 }, { opacity: 0, duration: 0.45, ease: 'appleOut' }, 0);
+  tl.to('#fade', { opacity: 1, duration: 0.33, ease: 'appleIn' }, 15.35);
+
+  /* ---------- sonido ---------- */
+  M.sfx(6.05, 'swell', { dur: 1.4, degs: [0, 4, 7, 11], gain: -4 });                 // el ojo se abre
+  MAIN.forEach((d) => { if (d.rank % 4 === 0) M.sfx(d.t1, 'tick', { gain: -4 - (d.rank % 3), pan: clamp((d.x - CX) / 1100, -0.7, 0.7) }); });
+  M.sfx(12.15, 'shimmer', { degs: [4, 7, 9], oct: 5, spread: 0.05, gain: -4 });       // ojo interior
+  M.sfx(12.9, 'shimmer', { degs: [7, 9, 11], oct: 6, spread: 0.04, gain: -11 });      // y otro más adentro
+  M.sfx(LP[1], 'tap', { deg: 4, oct: 5, bright: 0.6, gain: -7 });                     // el bucle se cierra
+
+  /* ---------- dibujo por cuadro ---------- */
+  M.onFrame((tt) => {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = rgba(BG, 1); ctx.fillRect(0, 0, 1920, 1080);
+    const Z = lerp(1, 1.42, eA(seg(tt, 9.9, 12.5)));
+    ctx.setTransform(Z, 0, 0, Z, CX * (1 - Z), CY * (1 - Z));
+
+    // polvo: parpadea y se apaga cuando aparece la mirada
+    const dOut = 1 - eI(seg(tt, 5.9, 6.7));
+    for (const d of DUST) dot(d.x, d.y, d.r, BONE, d.a * flick(d, tt) * dOut);
+    drawEye(E1, tt);
+    // estímulos principales: parpadeo → quietos → viajan a la pupila
+    for (const d of MAIN) {
+      if (tt >= d.t1) continue;
+      const st = eA(seg(tt, 5.95, 6.35));
+      const al = lerp(d.a * flick(d, tt), 0.8, st);
+      const k = seg(tt, d.t0, d.t1);
+      if (k <= 0) { dot(d.x, d.y, d.r, BONE, al); continue; }
+      const kk = eA(k), p = qpt([d.x, d.y], d.c, [d.tx, d.ty], kk), r = lerp(d.r, 2.5, kk);
+      // estela corta sobre la misma curva
+      ctx.strokeStyle = rgba(BONE, 0.28 * Math.sin(Math.PI * k)); ctx.lineWidth = 1; ctx.lineCap = 'round'; ctx.beginPath();
+      for (let i = 0; i <= 10; i++) { const q = qpt([d.x, d.y], d.c, [d.tx, d.ty], Math.max(0, kk - 0.14 * (1 - i / 10))); i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]); } ctx.stroke();
+      dot(p[0], p[1], r, BONE, 0.9);
+    }
+
+    drawLoop(tt);
+  });
+});
+</script>
+</body>
+</html>
