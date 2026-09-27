@@ -1,6 +1,6 @@
 # Bitácora del proyecto de motion graphics
 
-Última actualización: 2026-09-26. Rama: `claude/capcut-usage-77m4ya`.
+Última actualización: 2026-09-27. Rama: `claude/capcut-usage-77m4ya`.
 
 ## Cómo retomar en una sesión nueva
 1. El hook de SessionStart instala las dependencias solo (`motion/setup.sh`). Si falla: `cd motion && npm install && pip install imageio-ffmpeg numpy pillow`.
@@ -69,11 +69,12 @@ Son 5 animaciones útiles como B-roll para narración, **sin ningún texto en pa
 - El render y el sonido los hace el orquestador.
 - Reutilizar `three-stage.mjs`, la iluminación de h01 y el modelador de moléculas de h02 (`scenes/h02-quimica.html`) para p05.
 
-### Serie 4: IA en 2D, sin 3D (pedido del 26/09). EN CURSO
+### Serie 4: IA en 2D, sin 3D (pedido del 26/09). TERMINADA y ENVIADA
 - Brief: `BRIEF-IA.md`.
-- Escenas: a01-agi (Bauhaus), a02-recursiva (tinta y zoom infinito), a03-tipos-ia (30 s, diagramas vivos).
-- Workflow `serie-ia`, run wf_f1ee457b-218: construir → criticar → corregir.
-- Después: render con `/tmp/claude-0/batch.sh a01-agi a02-recursiva a03-tipos-ia` (si se perdió, ver comandos arriba), versión ENTREGA, envío y commit.
+- Escenas: a01-agi (Bauhaus), a02-recursiva (tinta y zoom infinito), a03-tipos-ia (30 s, diagramas vivos). QA 0 errores.
+- Renders FONDO+audio, AUDIO y ENTREGA en `renders/a0*`.
+- Workflow `serie-ia` (run wf_f1ee457b-218): construir → criticar → corregir. La corrección se cortó por límite de sesión de subagentes: a01 y a02 quedaron corregidas, **a03 sin aplicar la crítica** (resultados cacheados en el journal del run, solo misma sesión).
+- Pendiente opcional: aplicar la crítica a a03 y re-renderizar.
 
 ## Infra hecha en esta sesión (para no rehacerla)
 - **`render.mjs`:**
