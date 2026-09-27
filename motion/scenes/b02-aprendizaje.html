@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>B02 · Cómo aprende una red</title>
+<link rel="stylesheet" href="../lib/theme.css">
+<link rel="stylesheet" href="../lib/fonts-spartan.css">
+<style>
+  /* Misma lengua visual que a03: grafito, líneas y nodos en hueso, colores funcionales apagados. */
+  body { background: #15171A; }
+  #cv { position: absolute; inset: 0; }
+  #grain { position: absolute; inset: -20px; opacity: 0.05; mix-blend-mode: overlay; pointer-events: none; }
+  #vig { position: absolute; inset: 0; background: radial-gradient(120% 110% at 50% 48%, transparent 55%, rgba(8,9,10,0.55) 100%); pointer-events: none; }
+  #fade { position: absolute; inset: 0; background: #15171A; opacity: 1; }
+</style>
+</head>
+<body>
+<div id="world">
+  <canvas id="cv" width="1920" height="1080"></canvas>
+  <div id="vig"></div>
+  <canvas id="grain" width="512" height="512" style="width:1960px;height:1120px"></canvas>
+  <div id="fade"></div>
+</div>
+<script src="../node_modules/gsap/dist/gsap.min.js"></script>
+<script src="../node_modules/gsap/dist/SplitText.min.js"></script>
+<script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
+<script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
+<script src="../lib/stage.js"></script>
+<script src="../lib/audio.js"></script>
+<script>
+/* Storyboard (14 s). Izquierda: red densa 4-5-5-2 con barras salida/objetivo. Derecha: valle de pérdida
+   visto desde arriba (curvas de nivel) con una bola que desciende dejando un rastro punteado.
+   0–2,5   se arma la red (grosor = peso), aparece el valle, la bola arriba
+   2,5–5   pasada hacia adelante (ámbar) → barras: salida vs objetivo (punteado); la diferencia en terracota
+   5–8     retropropagación (terracota) capa por capa; los pesos cambian de grosor; la bola da un paso grande
+   8–11    tres ciclos más rápidos (1,2 / 0,8 / 0,5 s): error menor, pasos más cortos
+   11–14   última pasada: la salida coincide con el objetivo → salvia; la bola quieta en el fondo; fundido */
+M.scene({ duration: 14, push: 0, audio: { key: 'D', mode: 'lydian', bed: { cycle: 8, bright: 0.85, sub: 0.15 } } }, (tl, M) => {
+  const $ = (s) => document.querySelector(s);
+  const ctx = $('#cv').getContext('2d');
+  { const g = $('#grain').getContext('2d'); const im = g.createImageData(512, 512); const rn = M.rng(3);
+    for (let i = 0; i < im.data.length; i += 4) { const v = 128 + (rn() - 0.5) * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+    g.putImageData(im, 0, 0); }
+
+  /* ---------- paleta y utilidades (idénticas a a03) ---------- */
+  const BG = [21, 23, 26], BONE = [233, 230, 223], AMB = [201, 154, 75], SAGE = [143, 169, 138],
+        TERRA = [196, 110, 82];
+  const TAU = Math.PI * 2;
+  const rgba = (c, a) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${Math.max(0, Math.min(1, a)).toFixed(3)})`;
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, m) => a + (b - a) * m;
+  const mixc = (A, B, m) => [lerp(A[0], B[0], m), lerp(A[1], B[1], m), lerp(A[2], B[2], m)];
+  const seg = (t, a, b) => clamp((t - a) / (b - a));
+  const eA = gsap.parseEase('apple'), eO = gsap.parseEase('appleOut'), eI = gsap.parseEase('appleIn'), eSp = M.spring(0.15);
+  const pop = (lt, d, dur = 0.5) => (lt <= d ? 0 : eSp(clamp((lt - d) / dur)));
+  const nd = (x, y, o = {}) => ({ x, y, w: o.w ?? 15, h: o.h ?? o.w ?? 15, q: o.q ?? 0, fc: o.fc ?? BONE, fa: o.fa ?? 0, sc: o.sc ?? BONE, sa: o.sa ?? 1, sw: o.sw ?? 2 });
+
+  function line(ax, ay, bx, by, c, a, w, e = 1) {
+    if (a <= 0.004 || e <= 0 || w <= 0.05) return;
+    ctx.strokeStyle = rgba(c, a); ctx.lineWidth = w; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(ax + (bx - ax) * e, ay + (by - ay) * e); ctx.stroke();
+  }
+  function dot(x, y, r, c, a) { if (a <= 0.004 || r <= 0.1) return; ctx.fillStyle = rgba(c, a); ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill(); }
+  function ring(x, y, r, c, a, w = 2) { if (a <= 0.004 || r <= 0.1) return; ctx.strokeStyle = rgba(c, a); ctx.lineWidth = w; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.stroke(); }
+  function drawNode(n) {
+    if (n.w < 0.35 || n.h < 0.35) return;
+    const m = Math.min(n.w, n.h), rad = m * (1 - n.q) + m * n.q * 0.14;
+    ctx.beginPath(); ctx.roundRect(n.x - n.w, n.y - n.h, n.w * 2, n.h * 2, rad);
+    if (n.sa > 0.02) { ctx.fillStyle = rgba(BG, 1); ctx.fill(); }
+    if (n.fa > 0.004) { ctx.fillStyle = rgba(n.fc, n.fa); ctx.fill(); }
+    if (n.sa > 0.004 && n.sw > 0.05) { ctx.strokeStyle = rgba(n.sc, n.sa); ctx.lineWidth = n.sw; ctx.stroke(); }
+  }
+
+  /* =====================================================================================
+     HORARIO: 4 ciclos de aprendizaje + una pasada final.
+     f/fd = pasada hacia adelante, b/bd = retropropagación, s/sd = paso de la bola.
+     ===================================================================================== */
+  const CY = [
+    { f: 2.6,  fd: 1.35, b: 5.0,  bd: 1.8,  s: 6.85,  sd: 0.8 },
+    { f: 8.0,  fd: 0.42, b: 8.47, bd: 0.42, s: 8.9,   sd: 0.3 },
+    { f: 9.3,  fd: 0.28, b: 9.6,  bd: 0.28, s: 9.89,  sd: 0.21 },
+    { f: 10.2, fd: 0.17, b: 10.38, bd: 0.17, s: 10.56, sd: 0.14 },
+  ];
+  const FIN = { f: 11.0, fd: 0.9 };                        // pasada final (coincide)
+  const PASS = [...CY.map((c) => ({ f: c.f, fd: c.fd })), FIN];
+  const ARR = PASS.map((p) => p.f + p.fd);                  // llegada a la salida
+  const ERR = [1, 0.55, 0.28, 0.12, 0];                     // error relativo en cada pasada
+  const RK = [1, 0.5, 0.26, 0.1, 0];                        // distancia al fondo tras k pasos
+  const DONE = ARR[4] + 0.08;
+
+  /* ---------- red 4-5-5-2 ---------- */
+  const X = [210, 390, 570, 750], C = [4, 5, 5, 2], GAP = 106, NY = 540, r = M.rng(17);
+  const ny = (li, k) => NY + (k - (C[li] - 1) / 2) * (li === 3 ? 120 : GAP);
+  const act = C.map((n, li) => Array.from({ length: n }, () => (li === 0 ? 0.35 + r() * 0.6 : 0.25 + r() * 0.75)));
+  const conns = [];
+  for (let li = 0; li < 3; li++) for (let i = 0; i < C[li]; i++) for (let j = 0; j < C[li + 1]; j++) {
+    const w0 = 0.08 + r() * 0.92, wf = clamp(1.05 - w0 + (r() - 0.5) * 0.35, 0.06, 1);
+    conns.push({ li, i, j, W: RK.map((rk) => lerp(wf, w0, rk)) });
+  }
+  const TGT = [0.84, 0.26], INIT = [0.3, 0.8];
+  const outAt = (j, p) => lerp(TGT[j], INIT[j], ERR[p]);
+
+  // ventana de la retropropagación p sobre la capa li (entre li y li+1): va de la salida a la entrada
+  const bwin = (p, li) => { const c = CY[p], g = 2 - li; return [c.b + (g * c.bd) / 3, c.b + ((g + 1) * c.bd) / 3]; };
+  const fwin = (p, li) => { const c = PASS[p]; return [c.f + (li * c.fd) / 3, c.f + ((li + 1) * c.fd) / 3]; };
+  const weightOf = (cn, t) => {
+    let w = cn.W[0], hot = 0;
+    for (let p = 0; p < CY.length; p++) {
+      const [a, b] = bwin(p, cn.li), m = seg(t, a, b);
+      if (m > 0) { w = lerp(cn.W[p], cn.W[p + 1], eA(m)); if (m < 1) hot = Math.sin(Math.PI * m) * (0.55 + 0.45 * ERR[p]); }
+    }
+    return [w, hot];
+  };
+  // valor de salida mostrado (barras y nodos de salida)
+  const shown = (j, t) => {
+    let v = 0;
+    for (let p = 0; p < PASS.length; p++) {
+      const d = p === 0 ? 0.45 : p === 4 ? 0.5 : Math.min(0.3, PASS[p].fd * 0.8);
+      const m = seg(t, ARR[p], ARR[p] + d);
+      if (m > 0) v = lerp(p === 0 ? 0 : outAt(j, p - 1), outAt(j, p), (p === 0 ? eO : eA)(m));
+    }
+    return v;
+  };
+  // brillo de un nodo por las pasadas (flash que decae hacia un piso)
+  const nodeLit = (li, t) => {
+    let fl = 0, base = 0;
+    for (let p = 0; p < PASS.length; p++) {
+      const arr = li === 0 ? PASS[p].f : fwin(p, li - 1)[1];
+      if (t >= arr - 0.12) { base = 0.2; const d = t - arr; fl = Math.max(fl, d < 0 ? 1 + d / 0.12 : Math.exp(-d / 0.45)); }
+    }
+    return clamp(base + 0.8 * clamp(fl));
+  };
+  const nodeHit = (li, t) => {          // pulso terracota al pasar la retropropagación
+    let h = 0;
+    for (let p = 0; p < CY.length; p++) {
+      const at = li === 3 ? CY[p].b : bwin(p, li)[1];
+      const d = t - at; if (d > -0.08 && d < 0.5) h = Math.max(h, (d < 0 ? 1 + d / 0.08 : Math.exp(-d / 0.18)) * (0.5 + 0.5 * ERR[p]));
+    }
+    return clamp(h);
+  };
+
+  /* ---------- valle de pérdida (mapa de curvas de nivel) ---------- */
+  const VC = [1400, 548], VA = 318, VB = 200, ROT = -0.3;
+  const cr = Math.cos(ROT), sr = Math.sin(ROT);
+  const Rf = (th, s) => 1 + (0.07 * Math.sin(2 * th + 0.7) + 0.05 * Math.cos(3 * th - 0.5)) * s * s + 0.03 * Math.sin(th + 1.9) * s;
+  const vpt = (s, th) => { const R = s * Rf(th, s), u = VA * R * Math.cos(th), v = VB * R * Math.sin(th); return [VC[0] + u * cr - v * sr, VC[1] + u * sr + v * cr]; };
+  const LEV = [0.13, 0.24, 0.34, 0.43, 0.52, 0.61, 0.7, 0.79, 0.88, 0.97, 1.06];
+  const ISO = LEV.map((s) => { const pts = []; for (let i = 0; i <= 180; i++) pts.push(vpt(s, (i / 180) * TAU - 2.2)); return pts; });
+  // posiciones de reposo de la bola: zigzag de descenso por gradiente
+  const TH = [-0.55, 1.05, -0.5, 1.1, 0];
+  const BP = RK.map((rk, k) => (rk === 0 ? [...VC] : vpt(rk * 0.95, TH[k])));
+  // tramos: curva cuadrática suave de un reposo al siguiente, con puntos muestreados por longitud
+  const STEPS = [];
+  for (let k = 0; k < 4; k++) {
+    const p0 = BP[k], p1 = BP[k + 1], mx = (p0[0] + p1[0]) / 2, my = (p0[1] + p1[1]) / 2;
+    const c = [mx + (VC[0] - mx) * 0.22, my + (VC[1] - my) * 0.22];
+    const pts = []; let L = 0, prev = p0;
+    for (let i = 0; i <= 120; i++) {
+      const u = i / 120, q = [lerp(lerp(p0[0], c[0], u), lerp(c[0], p1[0], u), u), lerp(lerp(p0[1], c[1], u), lerp(c[1], p1[1], u), u)];
+      L += Math.hypot(q[0] - prev[0], q[1] - prev[1]); prev = q; pts.push([q[0], q[1], L]);
+    }
+    STEPS.push({ pts, L });
+  }
+  const along = (st, m) => { const Lm = st.L * m; const pts = st.pts; let i = 1; while (i < pts.length - 1 && pts[i][2] < Lm) i++; const a = pts[i - 1], b = pts[i], k = (Lm - a[2]) / Math.max(1e-6, b[2] - a[2]); return [lerp(a[0], b[0], clamp(k)), lerp(a[1], b[1], clamp(k))]; };
+  const ballAt = (t) => {
+    let pos = BP[0], moving = -1, m = 0;
+    for (let k = 0; k < 4; k++) { const c = CY[k], mm = seg(t, c.s, c.s + c.sd); if (mm > 0) { pos = mm < 1 ? along(STEPS[k], eA(mm)) : BP[k + 1]; if (mm < 1) { moving = k; m = eA(mm); } } }
+    return { pos, moving, m };
+  };
+
+  /* ---------- barras de salida / objetivo ---------- */
+  const BX = 812, BL = 190, BH = 14;
+
+  /* ---------- tramos con movimiento (hoja de cues de qa) ---------- */
+  tl.to({ v: 0 }, { v: 1, duration: 12.4 - 0.2, ease: 'none' }, 0.2);
+  tl.fromTo('#fade', { opacity: 1 }, { opacity: 0, duration: 0.45, ease: 'appleOut' }, 0);
+  tl.to('#fade', { opacity: 1, duration: 0.33, ease: 'appleIn' }, 13.55);
+
+  /* ---------- sonido ---------- */
+  PASS.forEach((p, i) => M.sfx(p.f, 'tap', { deg: i === 4 ? 4 : 0, oct: 5, bright: 0.7, gain: i === 0 || i === 4 ? -4 : -7 - i }));
+  CY.forEach((c, i) => M.sfx(c.b, 'whoosh', { dur: Math.max(0.35, c.bd), peak: 0.4, dir: -1, bright: 0.55, gain: i === 0 ? -8 : -11 - i }));
+  CY.forEach((c, i) => M.sfx(c.s + 0.02, 'tick', { tone: 'glass', gain: -2 - i * 1.5, pan: 0.45 }));
+  M.sfx(DONE, 'shimmer', { degs: [0, 4, 7], oct: 5, spread: 0.05, gain: -3 });
+
+  /* ---------- dibujo por cuadro ---------- */
+  const DOTS = []; for (let x = 120; x <= 1800; x += 60) for (let y = 60; y <= 1020; y += 60) DOTS.push([x, y]);
+  M.onFrame((t) => {
+    ctx.fillStyle = rgba(BG, 1); ctx.fillRect(0, 0, 1920, 1080);
+    ctx.fillStyle = rgba(BONE, 0.045); for (const [x, y] of DOTS) ctx.fillRect(x - 1, y - 1, 2, 2);
+    const ok = eA(seg(t, DONE, DONE + 0.5));
+
+    /* ===== valle ===== */
+    // tono: cada región interior un poco más clara (sin brillo, solo capas planas)
+    for (let i = LEV.length - 1; i >= 0; i--) {
+      const e = eO(seg(t, 0.55 + (LEV.length - 1 - i) * 0.07, 1.25 + (LEV.length - 1 - i) * 0.07));
+      if (e <= 0) continue;
+      const pts = ISO[i], n = Math.max(2, Math.round(e * (pts.length - 1)));
+      const idx = i % 5 === 4;                                   // curva maestra
+      ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
+      for (let q = 1; q <= n; q++) ctx.lineTo(pts[q][0], pts[q][1]);
+      if (e >= 1) { ctx.closePath(); ctx.fillStyle = rgba(BONE, 0.008); ctx.fill(); }
+      ctx.strokeStyle = rgba(BONE, (idx ? 0.42 : 0.2 + 0.14 * (1 - i / LEV.length))); ctx.lineWidth = idx ? 1.7 : 1.05; ctx.lineJoin = 'round'; ctx.stroke();
+    }
+    { const e = eO(seg(t, 1.5, 1.9)); if (e > 0) { const l = 7 * e; line(VC[0] - l, VC[1], VC[0] + l, VC[1], BONE, 0.35, 1.2); line(VC[0], VC[1] - l, VC[0], VC[1] + l, BONE, 0.35, 1.2); } }
+
+    // rastro punteado de la bola
+    const bl = ballAt(t);
+    for (let k = 0; k < 4; k++) {
+      const c = CY[k], mm = seg(t, c.s, c.s + c.sd); if (mm <= 0) continue;
+      const st = STEPS[k], Lm = st.L * (mm < 1 ? eA(mm) : 1), sp = 15;
+      for (let d = sp; d < Lm - 6; d += sp) { const p = along(st, d / st.L); dot(p[0], p[1], 2.4, BONE, 0.55); }
+    }
+    // reposos anteriores
+    for (let k = 0; k < 4; k++) if (t >= CY[k].s + CY[k].sd * 0.5) ring(BP[k][0], BP[k][1], 6, BONE, 0.45, 1.4);
+    // bola
+    { const s = pop(t, 1.85, 0.55); if (s > 0) {
+      const [x, y] = bl.pos, bc = mixc(BONE, SAGE, ok);
+      dot(x, y, 14 * s, bc, 1);
+      if (bl.moving >= 0) { const st = STEPS[bl.moving], pb = along(st, Math.max(0, bl.m - 0.04)); const ang = Math.atan2(y - pb[1], x - pb[0]); line(x - Math.cos(ang) * 22, y - Math.sin(ang) * 22, x - Math.cos(ang) * 42, y - Math.sin(ang) * 42, BONE, 0.3, 2); }
+      if (ok > 0) ring(x, y, 22, SAGE, 0.75 * ok, 2);
+      const k = seg(t, DONE, DONE + 0.9); if (k > 0 && k < 1) ring(x, y, 24 + 46 * eO(k), SAGE, (1 - k) * 0.6, 2);
+    } }
+
+    /* ===== red ===== */
+    for (const cn of conns) {
+      const A = [X[cn.li], ny(cn.li, cn.i)], Bn = [X[cn.li + 1], ny(cn.li + 1, cn.j)];
+      const e = eO(seg(t, 0.5 + cn.li * 0.16, 1.15 + cn.li * 0.16));
+      const [w, hot] = weightOf(cn, t);
+      line(A[0], A[1], Bn[0], Bn[1], BONE, 0.1 + 0.34 * w, 0.4 + 5.6 * w, e);
+      if (hot > 0.01) line(A[0], A[1], Bn[0], Bn[1], TERRA, 0.75 * hot, 0.4 + 5.6 * w + 1.2 * hot);
+      // señal hacia adelante (ámbar)
+      for (let p = 0; p < PASS.length; p++) {
+        const [a, b] = fwin(p, cn.li), k = seg(t, a, b);
+        if (k > 0 && k < 1) { const kk = eA(k); dot(lerp(A[0], Bn[0], kk), lerp(A[1], Bn[1], kk), 2.2 + 2 * w, AMB, act[cn.li][cn.i] * (0.35 + 0.65 * w)); }
+      }
+      // error hacia atrás (terracota)
+      for (let p = 0; p < CY.length; p++) {
+        const [a, b] = bwin(p, cn.li), k = seg(t, a, b);
+        if (k > 0 && k < 1) { const kk = eA(k); dot(lerp(Bn[0], A[0], kk), lerp(Bn[1], A[1], kk), (2 + 2.6 * w) * (0.5 + 0.5 * Math.sqrt(ERR[p])), TERRA, 0.95); }
+      }
+    }
+    C.forEach((n, li) => { for (let k = 0; k < n; k++) {
+      const s = pop(t, 0.2 + li * 0.14 + k * 0.03, 0.5), hit = nodeHit(li, t);
+      if (li < 3) drawNode(nd(X[li], ny(li, k), { w: 15 * s, fc: AMB, fa: act[li][k] * nodeLit(li, t), sc: mixc(BONE, TERRA, hit), sw: 2 + 1.5 * hit }));
+      else {
+        const v = shown(k, t), fc = mixc(AMB, SAGE, ok);
+        drawNode(nd(X[li], ny(li, k), { w: 18 * s, fc, fa: 0.15 + 0.85 * v, sc: mixc(mixc(BONE, TERRA, hit), SAGE, ok), sw: 2 + 1.5 * hit }));
+      }
+    } });
+
+    /* ===== barras: salida (ámbar) vs objetivo (punteado); diferencia = error (terracota) ===== */
+    const ba = eO(seg(t, ARR[0] - 0.25, ARR[0] + 0.2));
+    if (ba > 0) for (let j = 0; j < 2; j++) {
+      const y = ny(3, j), o = [X[3], y];
+      line(o[0] + 24, y, BX - 12, y, BONE, 0.3 * ba, 1.4);
+      line(BX, y - 20, BX, y + 20, BONE, 0.6 * ba, 2);                     // origen
+      const v = shown(j, t), tg = BX + BL * TGT[j], vx = BX + BL * v;
+      const lo = Math.min(vx, tg), hi = Math.max(vx, tg);
+      const barC = mixc(AMB, SAGE, ok);
+      ctx.fillStyle = rgba(barC, 0.92); ctx.fillRect(BX + 3, y - BH / 2, Math.max(0, Math.min(vx, tg) - BX - 3), BH);
+      if (hi - lo > 0.5) {
+        const flash = CY.reduce((m, c) => Math.max(m, 1 - Math.abs(t - c.b) / 0.25), 0);
+        ctx.fillStyle = rgba(TERRA, (0.9) * ba); ctx.fillRect(lo, y - BH / 2, hi - lo, BH);
+        if (flash > 0) { ctx.strokeStyle = rgba(TERRA, 0.8 * flash); ctx.lineWidth = 2; ctx.strokeRect(lo - 4, y - BH / 2 - 4, hi - lo + 8, BH + 8); }
+      }
+      // objetivo: línea punteada vertical
+      const tc = mixc(BONE, SAGE, ok);
+      ctx.fillStyle = rgba(tc, 0.9 * ba);
+      for (let yy = y - 26; yy <= y + 26; yy += 7) ctx.fillRect(tg - 1.25, yy - 1.75, 2.5, 3.5);
+      const k = seg(t, DONE, DONE + 0.9); if (k > 0 && k < 1) ring(o[0], y, 22 + 40 * eO(k), SAGE, (1 - k) * 0.6, 2);
+    }
+  });
+});
+</script>
+</body>
+</html>
