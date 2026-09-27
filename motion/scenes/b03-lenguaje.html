@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>B03 · Cómo escribe un modelo de lenguaje</title>
+<link rel="stylesheet" href="../lib/theme.css">
+<link rel="stylesheet" href="../lib/fonts-spartan.css">
+<style>
+  /* Misma lámina que a03: grafito, trazo hueso, colores funcionales apagados. Sin texto. */
+  body { background: #15171A; }
+  #cv { position: absolute; inset: 0; }
+  #grain { position: absolute; inset: -20px; opacity: 0.05; mix-blend-mode: overlay; pointer-events: none; }
+  #vig { position: absolute; inset: 0; background: radial-gradient(120% 110% at 50% 48%, transparent 55%, rgba(8,9,10,0.55) 100%); pointer-events: none; }
+  #fade { position: absolute; inset: 0; background: #15171A; opacity: 1; }
+</style>
+</head>
+<body>
+<div id="world">
+  <canvas id="cv" width="1920" height="1080"></canvas>
+  <div id="vig"></div>
+  <canvas id="grain" width="512" height="512" style="width:1960px;height:1120px"></canvas>
+  <div id="fade"></div>
+</div>
+<script src="../node_modules/gsap/dist/gsap.min.js"></script>
+<script src="../node_modules/gsap/dist/SplitText.min.js"></script>
+<script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
+<script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
+<script src="../lib/stage.js"></script>
+<script src="../lib/audio.js"></script>
+<script>
+/* Storyboard (16 s). Tokens = bloques hueso sin letras.
+   1  0–3    fila de 5 tokens a la izquierda; cursor en el hueco
+   2  3–6    cada token → vector de 8 barras con signo → punto en un plano pizarra (dos cúmulos: salvia / terracota)
+   3  6–9    vuelve la fila; el último token mira a los anteriores con arcos lila (uno claramente el más grueso)
+   4  9–12   histograma de 12 candidatos en el hueco; la barra ámbar se despega y se vuelve el token nuevo
+   5  12–15  el ciclo se repite cada vez más rápido (1 · 0,6 · 0,4 · 0,3 …); la fila hace wrap como un párrafo
+   6  15–16  hold y fundido
+   Color = significado: lila = atención, ámbar = predicción / token recién escrito, salvia/terracota = cúmulos semánticos. */
+M.scene({ duration: 16, push: 0, audio: { key: 'D', mode: 'lydian', bed: { cycle: 8, bright: 0.8, sub: 0.15 } } }, (tl, M) => {
+  const $ = (s) => document.querySelector(s);
+  const ctx = $('#cv').getContext('2d');
+  { const g = $('#grain').getContext('2d'); const im = g.createImageData(512, 512); const rn = M.rng(3);
+    for (let i = 0; i < im.data.length; i += 4) { const v = 128 + (rn() - 0.5) * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+    g.putImageData(im, 0, 0); }
+
+  /* ---------- paleta y utilidades (idénticas a a03) ---------- */
+  const BG = [21, 23, 26], BONE = [233, 230, 223], AMB = [201, 154, 75], SAGE = [143, 169, 138],
+        TERRA = [196, 110, 82], SLATE = [122, 146, 178], LILAC = [162, 148, 190];
+  const TAU = Math.PI * 2;
+  const rgba = (c, a) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${Math.max(0, Math.min(1, a)).toFixed(3)})`;
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, m) => a + (b - a) * m;
+  const mixc = (A, B, m) => [lerp(A[0], B[0], m), lerp(A[1], B[1], m), lerp(A[2], B[2], m)];
+  const seg = (t, a, b) => clamp((t - a) / (b - a));
+  const eA = gsap.parseEase('apple'), eO = gsap.parseEase('appleOut'), eI = gsap.parseEase('appleIn'), eSp = M.spring(0.15);
+  const pop = (lt, d, dur = 0.5) => (lt <= d ? 0 : eSp(clamp((lt - d) / dur)));
+  const gauss = (r) => { const u = Math.max(1e-6, r()), v = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(TAU * v); };
+
+  function line(ax, ay, bx, by, c, a, w, e = 1) {
+    if (a <= 0.004 || e <= 0 || w <= 0.05) return;
+    ctx.strokeStyle = rgba(c, a); ctx.lineWidth = w; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(ax + (bx - ax) * e, ay + (by - ay) * e); ctx.stroke();
+  }
+  function dot(x, y, r, c, a) { if (a <= 0.004 || r <= 0.1) return; ctx.fillStyle = rgba(c, a); ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill(); }
+  function ring(x, y, r, c, a, w = 2) { if (a <= 0.004 || r <= 0.1) return; ctx.strokeStyle = rgba(c, a); ctx.lineWidth = w; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.stroke(); }
+  const qpt = (p0, c, p1, k) => [lerp(lerp(p0[0], c[0], k), lerp(c[0], p1[0], k), k), lerp(lerp(p0[1], c[1], k), lerp(c[1], p1[1], k), k)];
+  function qcurve(p0, c, p1, col, a, w, e = 1, e0 = 0) {
+    if (a <= 0.004 || e <= e0) return; ctx.strokeStyle = rgba(col, a); ctx.lineWidth = w; ctx.lineCap = 'round'; ctx.beginPath();
+    const n = 40; let p = qpt(p0, c, p1, e0); ctx.moveTo(p[0], p[1]);
+    for (let i = 1; i <= n; i++) { p = qpt(p0, c, p1, lerp(e0, e, i / n)); ctx.lineTo(p[0], p[1]); } ctx.stroke();
+  }
+  // bloque redondeado (token o barra): x = borde izquierdo, yc = centro vertical, hh = medio alto
+  function block(x, yc, w, hh, col, a, r = 14) {
+    if (a <= 0.004 || w <= 0.5 || hh <= 0.3) return;
+    ctx.beginPath(); ctx.roundRect(x, yc - hh, w, 2 * hh, Math.min(r, hh, w / 2));
+    ctx.fillStyle = rgba(BG, 1); ctx.fill();
+    ctx.fillStyle = rgba(col, a); ctx.fill();
+  }
+
+  /* ---------- tokens y maquetación del "párrafo" ---------- */
+  const TW = [124, 218, 156, 110, 188, 172, 136, 228, 120, 196, 150, 130, 210].map((w) => Math.round(w * 1.15));   // anchos: frase sin letras
+  const NT = TW.length, NP0 = 5, HH = 32, GAP = 24, X0 = 200, XMAX = 1720, LS = 124;
+  const POS = []; { let x = X0, ln = 0; TW.forEach((w) => { if (x + w > XMAX) { x = X0; ln++; } POS.push({ x, w, ln }); x += w + GAP; }); }
+  const WRAP = POS.findIndex((p) => p.ln === 1);                       // primer token de la 2.ª línea
+  const cx = (i) => POS[i].x + POS[i].w / 2;
+
+  /* ---------- ciclos de predicción ---------- */
+  const r = M.rng(71);
+  const CY = [];
+  // ciclo 0: el explicado con calma (beats 3 y 4)
+  CY.push({ att0: 6.8, attIn: 0.55, attOut: [9.0, 9.35], hs: 9.25, hg: 0.55, hst: 0.022, ds: 10.9, born: 11.5, H: 240, arcA: 1,
+    W: [0.22, 1, 0.1, 0.42], vals: [0.34, 0.12, 0.52, 0.2, 1, 0.3, 0.62, 0.16, 0.26, 0.08, 0.4, 0.14], win: 4 });
+  { let t = 12.0;
+    [1, 0.6, 0.4, 0.3, 0.25, 0.2, 0.18].forEach((D, n) => {
+      const k = n + 1, q = NP0 + k - 1;                                  // token que consulta = el último escrito
+      const W = Array.from({ length: q }, () => 0.06 + r() ** 2 * 0.4); W[Math.floor(r() * q)] = 1;
+      const win = 2 + Math.floor(r() * 8), vals = Array.from({ length: 12 }, (_, i) => (i === win ? 1 : 0.08 + r() * r() * 0.62));
+      CY.push({ att0: t, attIn: 0.2 * D, attOut: [t + 0.34 * D, t + 0.5 * D], hs: t + 0.24 * D, hg: 0.24 * D, hst: 0.012 * D, ds: t + 0.66 * D, born: t + D,
+        H: 104, arcA: 0.8, W, vals, win });
+      t += D;
+    });
+  }
+  const born = (i) => (i < NP0 ? 0.35 + i * 0.14 : CY[i - NP0].born);
+  const SHIFT = [CY[WRAP - NP0 - 1].ds - 0.05, CY[WRAP - NP0 - 1].born + 0.1];   // el párrafo sube media línea al hacer wrap
+  const rowY = (ln, t) => 540 - (LS / 2) * eA(seg(t, SHIFT[0], SHIFT[1])) + ln * LS;
+  const tokY = (i, t) => rowY(POS[i].ln, t);
+
+  /* ---------- embeddings: vectores con signo y plano ---------- */
+  const rv = M.rng(19);
+  const VEC = Array.from({ length: NP0 }, () => Array.from({ length: 8 }, () => (rv() < 0.5 ? -1 : 1) * (0.22 + 0.78 * rv())));
+  const CLUS = [SAGE, TERRA, SAGE, SAGE, TERRA];                       // 0,2,3 parecidos · 1,4 parecidos
+  const V0 = 3.0, VST = 0.09, VD = 0.55, BACK = 6.0;
+  const vecM = (i, t) => eA(seg(t, V0 + i * VST, V0 + i * VST + VD)) * (1 - eA(seg(t, BACK + i * 0.05, BACK + 0.5 + i * 0.05)));
+  const PL = { cx: 1556, yF: 300, yN: 780, hwF: 192, hwN: 252 };
+  const pmap = (u, v) => { const vv = v / (v + (1 - v) * 1.18); return [PL.cx + (u - 0.5) * 2 * lerp(PL.hwF, PL.hwN, vv), lerp(PL.yF, PL.yN, vv)]; };
+  const CC = [[0.3, 0.3], [0.7, 0.7]];                                  // centros de los cúmulos (salvia, terracota)
+  const rg = M.rng(29), GH = [];
+  for (let c = 0; c < 2; c++) for (let k = 0; k < 13; k++) GH.push({ u: clamp(CC[c][0] + gauss(rg) * 0.075, 0.04, 0.96), v: clamp(CC[c][1] + gauss(rg) * 0.07, 0.04, 0.96), col: c ? TERRA : SAGE, d: rg() });
+  for (let k = 0; k < 7; k++) GH.push({ u: 0.06 + rg() * 0.88, v: 0.06 + rg() * 0.88, col: BONE, d: rg() });
+  const LAND = [[0.34, 0.24], [0.64, 0.74], [0.22, 0.36], [0.37, 0.4], [0.76, 0.63]];
+  const FLY = (i) => 3.85 + i * 0.1, FD = 0.62;
+  const planeA = (t) => eO(seg(t, 3.15, 3.6)) * (1 - eI(seg(t, BACK, BACK + 0.45)));
+
+  /* ---------- sonido ---------- */
+  for (let i = 0; i < NP0; i++) M.sfx(born(i), 'tick', { gain: -9, pan: -0.55 + i * 0.12 });
+  M.sfx(V0, 'whoosh', { dur: 0.6, peak: 0.45, gain: -12, dir: 1 });
+  for (let i = 0; i < NP0; i++) M.sfx(FLY(i) + FD, 'tick', { tone: 'glass', gain: -9, pan: 0.35 + i * 0.06 });
+  M.sfx(CY[0].att0, 'scan', { dur: 1.0, from: 500, to: 2200, q: 5, gain: -8 });
+  M.sfx(CY[0].hs, 'tick', { gain: -4, pan: 0.1 });
+  CY.forEach((c, k) => {
+    if (k > 0 && k < 3) { M.sfx(c.att0, 'scan', { dur: 0.35 * (c.born - c.att0), from: 700, to: 2000, q: 5, gain: -13 }); M.sfx(c.hs, 'tick', { gain: -8 }); }
+    M.sfx(c.born, 'tap', { deg: [4, 0, 2, 4, 7, 4, 7, 9][k], oct: 5, bright: 0.7, gain: -3 - k * 0.7, pan: -0.3 + (k % 4) * 0.2 });
+  });
+
+  /* ---------- tramos con movimiento (cues de qa) y fundidos ---------- */
+  [[0.3, 1.2], [V0, FLY(4) + FD + 0.4], [BACK, CY[0].att0 + CY[0].attIn + 0.2], [CY[0].attOut[0], CY[0].hs + 0.9], [CY[0].ds, CY[0].born + 0.3], [12.0, CY[CY.length - 1].born + 0.3]]
+    .forEach(([a, b]) => tl.to({ v: 0 }, { v: 1, duration: b - a, ease: 'none' }, a));
+  tl.fromTo('#fade', { opacity: 1 }, { opacity: 0, duration: 0.45, ease: 'appleOut' }, 0);
+  tl.to('#fade', { opacity: 1, duration: 0.33, ease: 'appleIn' }, 15.55);
+
+  /* ---------- dibujo por cuadro ---------- */
+  const DOTS = []; for (let x = 120; x <= 1800; x += 60) for (let y = 60; y <= 1020; y += 60) DOTS.push([x, y]);
+  // arco de atención: de la cabeza del token que consulta a la del token mirado
+  function attArc(q, j, t, e, col, a, w) {
+    const p0 = [cx(q), tokY(q, t) - HH - 8], p1 = [cx(j), tokY(j, t) - HH - 8];
+    const d = Math.abs(p1[0] - p0[0]), h = Math.min(310, 36 + 0.42 * d);
+    const c = [(p0[0] + p1[0]) / 2, Math.min(p0[1], p1[1]) - 2 * h];
+    qcurve(p0, c, p1, col, a, w, e);
+    if (e >= 1) dot(p1[0], p1[1], 2 + w * 0.35, col, a);
+  }
+  const cycAt = (t) => { for (let k = CY.length - 1; k >= 0; k--) if (t >= CY[k].att0 - 0.001 && t < CY[k].born + 0.001) return k; return -1; };
+
+  M.onFrame((t) => {
+    ctx.fillStyle = rgba(BG, 1); ctx.fillRect(0, 0, 1920, 1080);
+    ctx.fillStyle = rgba(BONE, 0.045); for (const [x, y] of DOTS) ctx.fillRect(x - 1, y - 1, 2, 2);
+
+    /* --- plano de embeddings --- */
+    const pa = planeA(t);
+    if (pa > 0.004) {
+      const G = 8;
+      for (let k = 0; k <= G; k++) {
+        const e = eO(seg(t, 3.15 + k * 0.03, 3.75 + k * 0.03)), edge = k === 0 || k === G;
+        const [ax, ay] = pmap(k / G, 0), [bx, by] = pmap(k / G, 1);
+        line(ax, ay, bx, by, SLATE, pa * (edge ? 0.42 : 0.16), edge ? 1.6 : 1, e);
+        const [cx0, cy0] = pmap(0, k / G), [cx1, cy1] = pmap(1, k / G);
+        line(cx0, cy0, cx1, cy1, SLATE, pa * (edge ? 0.42 : 0.16), edge ? 1.6 : 1, e);
+      }
+      // cúmulos: una mancha muy tenue detrás de cada uno
+      const ha = pa * eO(seg(t, 4.3, 5.0));
+      CC.forEach(([u, v], c) => { const [x, y] = pmap(u, v); ctx.fillStyle = rgba(c ? TERRA : SAGE, 0.07 * ha); ctx.beginPath(); ctx.ellipse(x, y, 96, 62, 0, 0, TAU); ctx.fill(); });
+      GH.forEach((g) => { const s = pop(t, 3.5 + g.d * 0.5, 0.45), [x, y] = pmap(g.u, g.v); dot(x, y, 5 * s, g.col, pa * (g.col === BONE ? 0.28 : 0.6)); });
+    }
+
+    /* --- atención (debajo de los tokens) --- */
+    const k = cycAt(t), cy = k >= 0 ? CY[k] : null;
+    let attW = null, q = -1, attA = 0;
+    if (cy) {
+      q = NP0 + k - 1;
+      attA = 1 - eI(seg(t, cy.attOut[0], cy.attOut[1]));
+      if (attA > 0.004 && t >= cy.att0) {
+        attW = cy.W;
+        for (let j = 0; j < q; j++) {
+          const d0 = cy.att0 + (k === 0 ? (q - 1 - j) * 0.07 : 0), e = eO(seg(t, d0, d0 + cy.attIn)), w = cy.W[j];
+          attArc(q, j, t, e, LILAC, attA * cy.arcA * (0.28 + 0.72 * w), 1.4 + 9 * w);
+        }
+      }
+    }
+
+    /* --- histograma de candidatos, en el hueco --- */
+    let morph = null;
+    if (cy && t >= cy.hs) {
+      const s = NP0 + k, sx = POS[s].x, yb = tokY(s, t) + HH, BW = 12, BP = 20;
+      const shrink = 1 - eI(seg(t, cy.ds, lerp(cy.ds, cy.born, 0.55)));
+      line(sx - 8, yb + 10, sx + 12 * BP, yb + 10, BONE, 0.28 * eO(seg(t, cy.hs, cy.hs + cy.hg)) * shrink, 1.2);
+      cy.vals.forEach((v, i) => {
+        const g = eO(seg(t, cy.hs + i * cy.hst, cy.hs + i * cy.hst + cy.hg)), h = cy.H * v * g, x = sx + i * BP;
+        if (i === cy.win) {
+          const m = eA(seg(t, cy.ds, cy.born));
+          if (m <= 0) { if (h > 0.5) { ctx.fillStyle = rgba(AMB, 1); ctx.beginPath(); ctx.roundRect(x, yb - h, BW, h, 3); ctx.fill(); } }
+          else morph = { x: lerp(x, sx, m), y: lerp(yb - h / 2, tokY(s, t), m) - Math.sin(Math.PI * m) * (k === 0 ? 26 : 10), w: lerp(BW, POS[s].w, m), hh: lerp(h / 2, HH, m), r: lerp(3, 14, m) };
+        } else if (h * shrink > 0.5) { ctx.fillStyle = rgba(BONE, 0.42); ctx.beginPath(); ctx.roundRect(x, yb - h * shrink, BW, h * shrink, 3); ctx.fill(); }
+      });
+    }
+
+    /* --- tokens (y su forma de vector en el beat 2) --- */
+    for (let i = 0; i < NT; i++) {
+      const b = born(i); if (t < b) continue;
+      const x = POS[i].x, w = POS[i].w;
+      let y = tokY(i, t), col = BONE;
+      const grow = i < NP0 ? eO(seg(t, b, b + 0.32)) : 1;
+      if (i >= NP0) col = mixc(AMB, BONE, eA(seg(t, b + 0.45, b + 1.2)));          // lo recién escrito es ámbar y se asienta
+      if (attW && i < q) col = mixc(col, LILAC, 0.8 * attW[i] * attA * eO(seg(t, cy.att0 + 0.15, cy.att0 + cy.attIn + 0.2)));
+      if (i === q && cy) { const l = eA(seg(t, cy.att0 - 0.1, cy.att0 + 0.2)) * (1 - eA(seg(t, cy.attOut[0], cy.attOut[1] + 0.1))); y -= (k === 0 ? 8 : 5) * l; }
+      const vm = i < NP0 ? vecM(i, t) : 0;
+      if (vm <= 0) { block(x, y, w * grow, HH, col, 0.94 * (i < NP0 ? eO(seg(t, b, b + 0.2)) : 1)); continue; }
+      // token → se aplana en una línea → brotan 8 barras con signo (su vector)
+      const flat = eA(seg(vm, 0, 0.5)), bars = eO(seg(vm, 0.4, 1));
+      const VW = 84, fw = lerp(w, VW, flat), vx = x + w / 2 - VW / 2;
+      block(x + (w - fw) / 2, y, fw, Math.max(1.2, HH * (1 - flat)), col, 0.94 * (1 - 0.6 * flat), 14);
+      const land = eA(seg(t, FLY(i) + FD - 0.05, FLY(i) + FD + 0.3)), bc = mixc(BONE, CLUS[i], land);
+      for (let n = 0; n < 8; n++) {
+        const v = VEC[i][n] * bars, bx = vx + (n + 0.5) * (VW / 8) - 3.5, h = 66 * Math.abs(v);
+        if (h < 0.5) continue;
+        ctx.fillStyle = rgba(bc, 0.92); ctx.beginPath(); ctx.roundRect(bx, v < 0 ? y : y - h, 7, h, 2.5); ctx.fill();
+      }
+    }
+    if (morph) block(morph.x, morph.y, morph.w, morph.hh, AMB, 1, morph.r);
+
+    /* --- proyección: cada vector viaja al plano como un punto --- */
+    if (pa > 0.004) for (let i = 0; i < NP0; i++) {
+      const kf = seg(t, FLY(i), FLY(i) + FD); if (kf <= 0) continue;
+      const p0 = [cx(i), tokY(i, t)], p1 = pmap(...LAND[i]), c = [lerp(p0[0], p1[0], 0.55), Math.min(p0[1], p1[1]) - 120 - i * 18];
+      const e = eA(kf), trailA = pa * (1 - eI(seg(t, FLY(i) + FD, FLY(i) + FD + 0.5)));
+      qcurve(p0, c, p1, CLUS[i], 0.45 * trailA, 1.5, e, Math.max(0, e - 0.35));
+      const p = qpt(p0, c, p1, e);
+      dot(p[0], p[1], kf < 1 ? 6 : 8, CLUS[i], pa);
+      if (kf >= 1) { ring(p1[0], p1[1], 13, CLUS[i], 0.7 * pa, 1.6); const kr = seg(t, FLY(i) + FD, FLY(i) + FD + 0.6); if (kr < 1) ring(p1[0], p1[1], 14 + 30 * eO(kr), CLUS[i], (1 - kr) * 0.6 * pa, 1.5); }
+    }
+
+    /* --- cursor en el hueco (cuando el modelo "espera") --- */
+    const nxt = (() => { let n = 0; for (let i = 0; i < NT; i++) if (t >= born(i)) n = i + 1; return n; })();
+    const cw = [[1.3, V0 - 0.1], [BACK + 0.55, CY[0].hs - 0.05], [CY[CY.length - 1].born + 0.15, 15.9]].find(([a, b]) => t >= a && t < b);
+    if (cw) {
+      const on = Math.floor((t - cw[0]) / 0.5) % 2 === 0;
+      const i = Math.min(nxt, NT - 1), x = nxt < NT ? POS[i].x + 2 : POS[NT - 1].x + POS[NT - 1].w + GAP;
+      if (on) { ctx.fillStyle = rgba(BONE, 0.75); ctx.fillRect(x, tokY(i, t) - HH, 3, 2 * HH); }
+    }
+  });
+});
+</script>
+</body>
+</html>
