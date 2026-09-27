@@ -31,11 +31,16 @@
 <script>
 /* ============================================================================
    A02 · Inteligencia recursiva (sin texto)
-   Un tablero de dibujo con brazos articulados (tecnígrafo) dibuja dentro de sí
-   una copia MEJOR de sí mismo: con más brazos. La cámara entra en la copia, que
-   dibuja otra aún mejor, cada vez más rápido (ciclos 3 → 1,8 → 1,08 → 0,65 s …,
-   razón 0,6 → converge en un instante finito). En ese límite todo se funde en un
-   punto rojo, que baja al origen y dibuja la curva: cada ciclo es un punto de ella.
+   Un tecnígrafo (tablero con brazos articulados) dibuja en el centro de su hoja
+   una copia MEJOR de sí mismo. Cada generación suma algo visible, que la copia
+   dibuja en rojo: un brazo más (1 → 2 → 4), punta cónica en la pluma, escuadra
+   en L en el cabezal y una barra más en el cajetín (la escalera de versiones).
+   La hoja tiene marcas de corte (+) alrededor de la copia: al hacer zoom, esas
+   marcas y el marco del padre salen del cuadro de forma continua (Droste real)
+   hasta que el marco de la copia coincide con el del padre y se cambia de
+   generación sin ningún salto. Ciclos 3 → 1,8 → 1,08 → 0,65 s … (razón 0,6):
+   convergen en un instante finito, donde todo se lava a un punto rojo que baja
+   al origen y dibuja la curva; cada ciclo es una miniatura sobre ella.
    ========================================================================== */
 M.scene({ duration: 14, push: 0, audio: { key: 'D', mode: 'lydian', bed: { cycle: 8, bright: 0.85, sub: 0.15 } } }, (tl, M) => {
   const $ = (s) => document.querySelector(s);
@@ -43,15 +48,20 @@ M.scene({ duration: 14, push: 0, audio: { key: 'D', mode: 'lydian', bed: { cycle
   const buf = document.createElement('canvas'); buf.width = 1920; buf.height = 1080;
   const gb = buf.getContext('2d');
   let g = g0;
+  let ALPHA = 1;                    // multiplicador de opacidad de los trazos (brazos que se desvanecen)
 
   const PAPER = '#EFEDE8', INK = '#1B1A18', RED = '#C8372D', GREY = '#9A958C';
   const C = [960, 540];            // punto fijo del zoom (centro)
   const S = 0.4;                   // escala de la copia dentro del tablero
-  const L1 = 760, L2 = 560;        // brazo: tramo largo y tramo corto
+  const L1 = 830, L2 = 500;        // brazo: tramo largo y tramo corto
   const BO = [150, 84, 1770, 996], BI = [184, 118, 1736, 962];   // tablero (16:9) y hoja
   const EASE = { apple: gsap.parseEase('apple'), appleOut: gsap.parseEase('appleOut'), appleIn: gsap.parseEase('appleIn'), sineIn: gsap.parseEase('sine.in') };
   const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
   const lerp = (a, b, u) => a + (b - a) * u;
+  const mixRed = (u) => { // INK → RED
+    const a = [0x1B, 0x1A, 0x18], b = [0xC8, 0x37, 0x2D];
+    return `rgb(${a.map((v, i) => Math.round(lerp(v, b[i], u))).join(',')})`;
+  };
 
   /* ---------------- papel ---------------- */
   { const gg = $('#grain').getContext('2d'); const im = gg.createImageData(960, 540); const rn = M.rng(5);
@@ -59,50 +69,83 @@ M.scene({ duration: 14, push: 0, audio: { key: 'D', mode: 'lydian', bed: { cycle
     gg.putImageData(im, 0, 0); }
 
   /* ---------------- geometría del tablero (coordenadas locales = pantalla cuando esa generación llena el cuadro) ---------------- */
-  // Anclas de los brazos (en la ranura del marco). En reposo: plegados a lo largo de un lado (TL, BR)
-  // o estirados sobre la ranura (TR, BL). El codo siempre trabaja hacia adentro del tablero.
+  // Anclas en las esquinas del marco. En reposo cada brazo se pliega a lo largo de su lado, con el codo
+  // un poco hacia adentro de la hoja (δ) y el antebrazo volviendo hacia adentro (γ).
   const AN = [
-    { a: [167, 101], f: [0, 1], n: [1, 0] },                 // arriba-izq: plegado, baja por la izquierda
-    { a: [1753, 979], f: [0, -1], n: [-1, 0] },              // abajo-der: plegado, sube por la derecha
-    { a: [1753, 101], f: [-1, 0], ext: 1 },                  // arriba-der: estirado sobre la ranura de arriba
-    { a: [167, 979], f: [1, 0], ext: 1 },                    // abajo-izq: estirado sobre la ranura de abajo
+    { a: [167, 101], f: [0, 1], n: [1, 0] },     // arriba-izq: baja por la izquierda
+    { a: [1753, 979], f: [0, -1], n: [-1, 0] },  // abajo-der: sube por la derecha
+    { a: [1753, 101], f: [-1, 0], n: [0, 1] },   // arriba-der: va hacia la izquierda por arriba
+    { a: [167, 979], f: [1, 0], n: [0, -1] },    // abajo-izq: va hacia la derecha por abajo
   ];
-  function ik(a, p, sg) {
+  function ik2(a, p) {
     const dx = p[0] - a[0], dy = p[1] - a[1];
     const d = clamp(Math.hypot(dx, dy), Math.abs(L1 - L2) + 1, L1 + L2 - 0.01);
     const th = Math.atan2(dy, dx), al = Math.acos(clamp((L1 * L1 + d * d - L2 * L2) / (2 * L1 * d), -1, 1));
-    return [a[0] + L1 * Math.cos(th + sg * al), a[1] + L1 * Math.sin(th + sg * al)];
+    return [[a[0] + L1 * Math.cos(th + al), a[1] + L1 * Math.sin(th + al)], [a[0] + L1 * Math.cos(th - al), a[1] + L1 * Math.sin(th - al)]];
   }
-  const beta = 12 * Math.PI / 180;
-  const inBoard = (e) => e[0] > BO[0] - 1 && e[0] < BO[2] + 1 && e[1] > BO[1] - 1 && e[1] < BO[3] + 1;
+  // Codo: se elige la solución que queda dentro de la hoja; si ambas lo están, la del lado de diseño del brazo.
+  const inset = (e) => Math.min(e[0] - BI[0], BI[2] - e[0], e[1] - BI[1], BI[3] - e[1]);
+  function ik(A, p) {
+    const s = ik2(A.a, p), e0 = s[A.side], e1 = s[1 - A.side];
+    return inset(e0) >= 12 || inset(e0) >= inset(e1) ? e0 : e1;
+  }
+  const DELTA = 7 * Math.PI / 180, GAMMA = 12 * Math.PI / 180;
   AN.forEach((A) => {
-    if (A.ext) A.rest = [A.a[0] + A.f[0] * (L1 + L2 - 0.02), A.a[1] + A.f[1] * (L1 + L2 - 0.02)];
-    else { const u = L1 - L2 * Math.cos(beta), v = L2 * Math.sin(beta); A.rest = [A.a[0] + A.f[0] * u + A.n[0] * v, A.a[1] + A.f[1] * u + A.n[1] * v]; }
-    A.sg = inBoard(ik(A.a, C, 1)) ? 1 : -1;
+    const E = [A.a[0] + L1 * (A.f[0] * Math.cos(DELTA) + A.n[0] * Math.sin(DELTA)), A.a[1] + L1 * (A.f[1] * Math.cos(DELTA) + A.n[1] * Math.sin(DELTA))];
+    A.rest = [E[0] + L2 * (-A.f[0] * Math.cos(GAMMA) + A.n[0] * Math.sin(GAMMA)), E[1] + L2 * (-A.f[1] * Math.cos(GAMMA) + A.n[1] * Math.sin(GAMMA))];
+    const s = ik2(A.a, A.rest);
+    A.side = Math.hypot(s[0][0] - E[0], s[0][1] - E[1]) < Math.hypot(s[1][0] - E[0], s[1][1] - E[1]) ? 0 : 1;
+    A.sx = Math.sign(C[0] - A.a[0]); A.sy = Math.sign(C[1] - A.a[1]);
   });
-  // Mejora visible: cada generación tiene más brazos (1 → 2 → 4)
+  // Mejora visible por generación: brazos 1 → 2 → 4 · punta cónica (k ≥ 1) · escuadra en L (k ≥ 2) · barras del cajetín = k + 1
   const armsOf = (k) => (k <= 0 ? 1 : k === 1 ? 2 : 4);
+  const NBARS = 8;
 
   const circ = (c, r, n) => { const p = []; for (let i = 0; i <= n; i++) { const a = -Math.PI / 2 + i / n * Math.PI * 2; p.push([c[0] + r * Math.cos(a), c[1] + r * Math.sin(a)]); } return p; };
+  const rect = (x0, y0, x1, y1) => [[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]];
   function seg(p, q, off, t0, t1) {
     const dx = q[0] - p[0], dy = q[1] - p[1], L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L, nx = -uy, ny = ux;
     return [[p[0] + ux * t0 + nx * off, p[1] + uy * t0 + ny * off], [q[0] - ux * t1 + nx * off, q[1] - uy * t1 + ny * off]];
   }
-  function armStrokes(A, pen) {
-    const E = ik(A.a, pen, A.sg);
-    return [
+  // Piezas del cabezal según la generación
+  function coneOf(E, pen) {   // punta cónica: triángulo con vértice en la pluma, base 34 px hacia el codo
+    const dx = E[0] - pen[0], dy = E[1] - pen[1], L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L;
+    const b = [pen[0] + ux * 34, pen[1] + uy * 34], h = 8;
+    return [[b[0] - uy * h, b[1] + ux * h], [pen[0], pen[1]], [b[0] + uy * h, b[1] - ux * h], [b[0] - uy * h, b[1] + ux * h]];
+  }
+  function squareOf(A, pen) { // escuadra en L (reglas del tecnígrafo), paralela a los bordes, hacia adentro
+    const c = [pen[0] + A.sx * 18, pen[1] + A.sy * 18], Lr = 92, wd = 10;
+    return {
+      outer: [[c[0] + A.sx * Lr, c[1]], c, [c[0], c[1] + A.sy * Lr]],
+      inner: [[c[0] + A.sx * Lr, c[1] + A.sy * wd], [c[0] + A.sx * wd, c[1] + A.sy * wd], [c[0] + A.sx * wd, c[1] + A.sy * Lr]],
+      ends: [[[c[0] + A.sx * Lr, c[1]], [c[0] + A.sx * Lr, c[1] + A.sy * wd]], [[c[0], c[1] + A.sy * Lr], [c[0] + A.sx * wd, c[1] + A.sy * Lr]]],
+      polys: [[c, [c[0] + A.sx * Lr, c[1]], [c[0] + A.sx * Lr, c[1] + A.sy * wd], [c[0], c[1] + A.sy * wd]], [c, [c[0] + A.sx * wd, c[1]], [c[0] + A.sx * wd, c[1] + A.sy * Lr], [c[0], c[1] + A.sy * Lr]]],
+    };
+  }
+  function armStrokes(A, pen, k) {
+    const E = ik(A, pen);
+    const s = [
       { pts: seg(A.a, E, 6.5, 17, 12), w: 1.5, arm: 1 }, { pts: seg(A.a, E, -6.5, 17, 12), w: 1.5, arm: 1 },
       { pts: circ(E, 11, 26), w: 1.5, arm: 1 }, { pts: circ(E, 2.4, 8), w: 2.6, arm: 1 },
       { pts: seg(E, pen, 4.2, 12, 14), w: 1.5, arm: 1 }, { pts: seg(E, pen, -4.2, 12, 14), w: 1.5, arm: 1 },
       { pts: circ(pen, 13, 28), w: 1.5, arm: 1 }, { pts: circ(pen, 3, 8), w: 3, arm: 1, nib: 1 },
     ];
+    if (k >= 1) s.push({ pts: coneOf(E, pen), w: 1.5, arm: 1, feat: 1 });
+    if (k >= 2) { const q = squareOf(A, pen); s.push({ pts: q.outer, w: 1.5, arm: 1, feat: 2 }, { pts: q.inner, w: 1.1, arm: 1, feat: 2 }, ...q.ends.map((e) => ({ pts: e, w: 1.1, arm: 1, feat: 2 }))); }
+    return s;
   }
   // Cuerpo opaco del brazo vivo (tapa lo que está debajo: es un objeto sobre el papel)
-  function armBody(A, pen) {
-    const E = ik(A.a, pen, A.sg);
+  function armBody(A, pen, k) {
+    const E = ik(A, pen);
     const q = (p, r, o) => { const a = seg(p, r, o, 0, 0), b = seg(p, r, -o, 0, 0); return [a[0], a[1], b[1], b[0]]; };
-    return { polys: [q(A.a, E, 6.5), q(E, pen, 4.2)], circles: [[A.a, 15], [E, 11], [pen, 13]], E };
+    const polys = [q(A.a, E, 6.5), q(E, pen, 4.2)];
+    if (k >= 1) polys.push(coneOf(E, pen));
+    if (k >= 2) polys.push(...squareOf(A, pen).polys);
+    return { polys, circles: [[A.a, 15], [E, 11], [pen, 13]] };
   }
+  // Cajetín (abajo a la derecha de la hoja) con la escalera de versiones
+  const CJ = [1486, 866, 1714, 942];
+  const barRect = (i) => { const w = 14, x = CJ[0] + 14 + i * 26, h = 10 + i * 7; return rect(x, CJ[3] - 8 - h, x + w, CJ[3] - 8); };
   function boardStrokes(k) {
     const [a, b, c, d] = BO, [e, f, h, i] = BI, s = [];
     s.push({ pts: [[a, b], [c, b]], w: 2.6 }, { pts: [[c, b], [c, d]], w: 2.6 }, { pts: [[c, d], [a, d]], w: 2.6 }, { pts: [[a, d], [a, b]], w: 2.6 });
@@ -111,24 +154,41 @@ M.scene({ duration: 14, push: 0, audio: { key: 'D', mode: 'lydian', bed: { cycle
     const sp = 10, sw = 20;
     for (let y = b + sw + 18; y <= d; y += sp) s.push({ pts: [[c + 2, y], [c + sw, y - 18]], w: 0.9, hatch: 1 });
     for (let x = a + sw; x <= c + 2; x += sp) s.push({ pts: [[x, d + sw], [x + 18, d + 2]], w: 0.9, hatch: 1 });
-    AN.slice(0, armsOf(k)).forEach((A) => { s.push({ pts: circ(A.a, 15, 30), w: 1.5 }, { pts: circ(A.a, 6, 14), w: 1.5 }); });
+    AN.slice(0, armsOf(k)).forEach((A, j) => { const nu = k >= 1 && j >= armsOf(k - 1) ? 1 : 0; s.push({ pts: circ(A.a, 15, 30), w: 1.5, nu }, { pts: circ(A.a, 6, 14), w: 1.5, nu }); });
+    s.push({ pts: rect(CJ[0], CJ[1], CJ[2], CJ[3]), w: 1.2 });
+    for (let j = 0; j <= Math.min(k, NBARS - 1); j++) s.push({ pts: barRect(j), w: 1.3, nu: j === k && k >= 1 ? 1 : 0 });
     return s;
   }
-  const genStrokes = (k) => [...boardStrokes(k), ...AN.slice(0, armsOf(k)).flatMap((A) => armStrokes(A, A.rest))];
+  function genStrokes(k) {
+    const out = boardStrokes(k);
+    AN.slice(0, armsOf(k)).forEach((A, j) => {
+      const newArm = k >= 1 && j >= armsOf(k - 1);
+      armStrokes(A, A.rest, k).forEach((s) => out.push({ ...s, nu: newArm || (s.feat && s.feat === k) ? 1 : 0 }));
+    });
+    return out;
+  }
   const lenOf = (pts) => { let L = 0; for (let i = 1; i < pts.length; i++) L += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); return L; };
 
+  // Marcas de corte (+) de la hoja: grilla de 96 px alrededor de la copia (no dentro de ella ni del cajetín)
+  const CROSS = [];
+  for (let i = -7; i <= 7; i++) for (let j = -4; j <= 4; j++) {
+    const x = C[0] + i * 96, y = C[1] + j * 96;
+    if (Math.abs(x - C[0]) <= 0.4 * 810 + 36 && Math.abs(y - C[1]) <= 0.4 * 456 + 36) continue;
+    if (x > CJ[0] - 24 && y > CJ[1] - 24) continue;
+    CROSS.push({ p: [x, y], r: Math.hypot((x - C[0]) / 672, (y - C[1]) / 384) / Math.SQRT2 });
+  }
+
   /* ---------------- plan de dibujo: la generación k-1 dibuja a la k ---------------- */
-  // Recorridos de pluma por brazo (en coords del padre): viajes (pluma arriba) + trazos. Se repite igual desde k = 3.
   const TRAVEL_W = 0.42, HATCH_W = 0.3;
   const plans = {};
   function planFor(k) {
-    const key = Math.min(k, 3);
+    const key = Math.min(k, NBARS);
     if (plans[key]) return plans[key];
-    const strokes = genStrokes(k).map((s, i) => {
+    const strokes = genStrokes(key).map((s, i) => {
       const pp = s.pts.map((p) => [C[0] + S * (p[0] - C[0]), C[1] + S * (p[1] - C[1])]);
       return { ...s, i, pp, len: lenOf(pp) };
     });
-    const parents = AN.slice(0, armsOf(k - 1));
+    const parents = AN.slice(0, armsOf(key - 1));
     const lists = parents.map(() => []);
     strokes.forEach((s) => {
       const m = s.pp[Math.floor(s.pp.length / 2)];
@@ -163,7 +223,7 @@ M.scene({ duration: 14, push: 0, audio: { key: 'D', mode: 'lydian', bed: { cycle
     for (const sg of arm.segs) {
       if (D <= sg.d1) {
         const u = (D - sg.d0) / Math.max(1e-6, sg.d1 - sg.d0);
-        if (sg.travel) return { p: [lerp(sg.a[0], sg.b[0], u), lerp(sg.a[1], sg.b[1], u)], drawing: true };
+        if (sg.travel) return { p: [lerp(sg.a[0], sg.b[0], u), lerp(sg.a[1], sg.b[1], u)], drawing: true, up: true };
         return { p: pointAt(sg.pts, u), drawing: true };
       }
     }
@@ -199,12 +259,14 @@ M.scene({ duration: 14, push: 0, audio: { key: 'D', mode: 'lydian', bed: { cycle
     const tau = (t - Tn(n)) / cyc(n), [a, b] = dWin(n), u = clamp((tau - a) / (b - a)), w = wOf(n);
     return planFor(n + 1).Dmax * ((1 - w) * EASE.apple(u) + w * u);
   }
+  // Tinta fresca (roja) detrás de la pluma: lo que se dibujó en los últimos 0,4 s (mín. 180 px)
+  const wetOf = (n) => { const [a, b] = dWin(n); return Math.max(180, planFor(n + 1).Dmax / ((b - a) * cyc(n)) * 0.4); };
 
   /* ---------------- dibujo ---------------- */
   function stroke(pts, lw, color, from = 0, to = 1) {
     if (to <= from || lw <= 0.05) return;
     g.strokeStyle = color; g.lineWidth = Math.max(0.35, lw);
-    g.globalAlpha = lw < 0.35 ? lw / 0.35 : 1;
+    g.globalAlpha = (lw < 0.35 ? lw / 0.35 : 1) * ALPHA;
     g.beginPath();
     if (from <= 0 && to >= 1) { g.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]); }
     else {
@@ -224,8 +286,22 @@ M.scene({ duration: 14, push: 0, audio: { key: 'D', mode: 'lydian', bed: { cycle
   }
   const scr = (F, p) => [C[0] + F * (p[0] - C[0]), C[1] + F * (p[1] - C[1])];
   const scrAll = (F, pts) => pts.map((p) => scr(F, p));
-  const LWEXP = 0.8;
-  const WET = 240;   // largo de la tinta fresca (roja) detrás de la pluma, en px del padre
+  // Grosor en pantalla: escala con F^0,8 y con piso de ~0,9 px mientras la generación es legible (continuo en F)
+  const lwOf = (w, F, hatch) => hatch ? w * F ** 0.8 : Math.max(w * F ** 0.8, Math.min(w, 0.95) * clamp(F / 0.3));
+  const redLw = (lw, F) => Math.max(lw * 1.5, 2 * clamp(F / 0.3));
+
+  function renderCrosses(F, alphaOf) {
+    const fa = clamp((F - 0.1) / 0.18);
+    if (fa <= 0) return;
+    const h = 7 * F;
+    g.strokeStyle = GREY; g.lineWidth = Math.max(0.6, 1.1 * F ** 0.8);
+    for (const c of CROSS) {
+      const a = alphaOf(c) * fa; if (a <= 0.01) continue;
+      const p = scr(F, c.p); if (p[0] < -10 || p[0] > 1930 || p[1] < -10 || p[1] > 1090) continue;
+      g.globalAlpha = a * 0.9; g.beginPath(); g.moveTo(p[0] - h, p[1]); g.lineTo(p[0] + h, p[1]); g.moveTo(p[0], p[1] - h); g.lineTo(p[0], p[1] + h); g.stroke();
+    }
+    g.globalAlpha = 1;
+  }
 
   // Revelado de la generación 0 (se dibuja sola al empezar)
   const G0 = genStrokes(0);
@@ -238,39 +314,49 @@ M.scene({ duration: 14, push: 0, audio: { key: 'D', mode: 'lydian', bed: { cycle
   function renderGen(k, t, z) {                   // tinta fija (tablero y lo ya dibujado)
     const F = S ** (k - z);
     if (F > 7 || F < 0.012) return;
-    const lwk = F ** LWEXP;
     const active = t >= Tn(k);                      // sus brazos ya se mueven (se dibujan en renderArms)
     if (k === 0) {
-      G0.forEach((s, i) => { if (s.arm && active) return; stroke(scrAll(F, s.pts), s.w * lwk, INK, 0, introFrac(s, i, t)); });
+      renderCrosses(F, (c) => EASE.appleOut(clamp((t - 0.45 - 0.5 * c.r) / 0.35)));
+      G0.forEach((s, i) => { if (s.arm && active) return; stroke(scrAll(F, s.pts), lwOf(s.w, F, s.hatch), INK, 0, introFrac(s, i, t)); });
       return;
     }
     const P = planFor(k), Dp = DAt(k - 1, t);
     if (Dp <= 0) return;
-    const drawingNow = Dp < P.Dmax;
+    const pr = Dp / P.Dmax;
+    renderCrosses(F, (c) => clamp((pr - 0.08 - 0.55 * c.r) / 0.14));
+    const drawingNow = Dp < P.Dmax, WET = wetOf(k - 1);
+    const rn = 1 - clamp((z - (k - 1) - 0.35) / 0.45);   // lo nuevo sigue rojo hasta mitad del zoom
+    const newCol = mixRed(rn);
     P.strokes.forEach((s) => {
       if (s.arm && active) return;
       if (s.d0 === undefined || Dp <= s.d0) return;
       const f = clamp((Dp - s.d0) / (s.d1 - s.d0));
       const wf = drawingNow ? clamp((Dp - WET - s.d0) / (s.d1 - s.d0)) : f;
-      const pts = scrAll(F, s.pts), lw = s.w * lwk;
-      if (s.rev) { stroke(pts, lw, INK, 1 - wf, 1); if (wf < f) stroke(pts, lw * 1.7 + 0.3, RED, 1 - f, 1 - wf); }
-      else { stroke(pts, lw, INK, 0, wf); if (wf < f) stroke(pts, lw * 1.7 + 0.3, RED, wf, f); }
+      const pts = scrAll(F, s.pts), lw = lwOf(s.w, F, s.hatch);
+      const col = s.nu ? newCol : INK, lwc = s.nu ? lerp(lw, redLw(lw, F), rn) : lw;
+      const rl = redLw(lw, F);
+      if (s.rev) { stroke(pts, lwc, col, 1 - wf, 1); if (wf < f) stroke(pts, rl, RED, 1 - f, 1 - wf); }
+      else { stroke(pts, lwc, col, 0, wf); if (wf < f) stroke(pts, rl, RED, wf, f); }
     });
   }
+  const armsAlpha = (z) => 1 - clamp((z - 3.2) / 0.6);   // en los ciclos ≤ 0,39 s solo queda la tinta que corre
   function renderArms(k, t, z) {                  // brazos vivos de la generación k
     if (t < Tn(k)) return;
     const F = S ** (k - z);
     if (F > 7 || F < 0.012) return;
-    const lwk = F ** LWEXP;
-    const P = planFor(k + 1), D = DAt(k, t);
+    const P = planFor(k + 1), D = DAt(k, t), AA = armsAlpha(z);
     P.arms.forEach((arm) => {
-      const { p, drawing } = penAt(arm, D);
-      const B = armBody(arm.A, p);
-      g.fillStyle = PAPER;
-      B.polys.forEach((q) => { g.beginPath(); q.forEach((v, i) => { const w = scr(F, v); i ? g.lineTo(w[0], w[1]) : g.moveTo(w[0], w[1]); }); g.closePath(); g.fill(); });
-      B.circles.forEach(([c, r]) => { const w = scr(F, c); g.beginPath(); g.arc(w[0], w[1], r * F, 0, 6.2832); g.fill(); });
-      armStrokes(arm.A, p).forEach((s) => { if (!(s.nib && drawing)) stroke(scrAll(F, s.pts), s.w * lwk, INK); });
-      if (drawing) { const w = scr(F, p); g.fillStyle = RED; g.beginPath(); g.arc(w[0], w[1], 4.6 * F, 0, 6.2832); g.fill(); }
+      const { p, drawing, up } = penAt(arm, D);
+      if (AA > 0.01) {
+        const B = armBody(arm.A, p, k);
+        g.fillStyle = PAPER; g.globalAlpha = AA;
+        B.polys.forEach((q) => { g.beginPath(); q.forEach((v, i) => { const w = scr(F, v); i ? g.lineTo(w[0], w[1]) : g.moveTo(w[0], w[1]); }); g.closePath(); g.fill(); });
+        B.circles.forEach(([c, r]) => { const w = scr(F, c); g.beginPath(); g.arc(w[0], w[1], r * F, 0, 6.2832); g.fill(); });
+        g.globalAlpha = 1; ALPHA = AA;
+        armStrokes(arm.A, p, k).forEach((s) => { if (!(s.nib && drawing)) stroke(scrAll(F, s.pts), lwOf(s.w, F), INK); });
+        ALPHA = 1;
+      }
+      if (drawing && !(up && AA <= 0.01)) { const w = scr(F, p); g.fillStyle = RED; g.beginPath(); g.arc(w[0], w[1], Math.max(2.5, 4.6 * F), 0, 6.2832); g.fill(); }
     });
   }
 
@@ -285,27 +371,44 @@ M.scene({ duration: 14, push: 0, audio: { key: 'D', mode: 'lydian', bed: { cycle
   }
 
   /* ---------------- final: la curva hecha de ciclos ---------------- */
-  const O = [250, 860], XI = 1560, KC = 51900;
+  const O = [230, 842], XI = 1600, KC = 72500;
   const yC = (x) => O[1] - KC * (1 / (XI - x) - 1 / (XI - O[0]));
   const xEnd = XI - 1 / ((O[1] + 70) / KC + 1 / (XI - O[0]));
   const markX = (n) => XI - (XI - O[0]) * R ** n;
-  const TC0 = 10.15, TC1 = 11.85;                  // la pluma recorre la curva
+  const TC0 = 10.05, TC1 = 11.75;                  // la pluma recorre la curva
   const penX = (t) => O[0] + (xEnd - O[0]) * EASE.sineIn(clamp((t - TC0) / (TC1 - TC0)));
   const tMark = (n) => { // instante en que la pluma pasa por el ciclo n
     const target = (markX(n) - O[0]) / (xEnd - O[0]); let lo = 0, hi = 1;
     for (let i = 0; i < 40; i++) { const m = (lo + hi) / 2; if (EASE.sineIn(m) < target) lo = m; else hi = m; }
     return TC0 + lo * (TC1 - TC0);
   };
-  const DOT_IN = TINF - 0.06, GLIDE0 = 9.42, GLIDE1 = 10.1;
+  const tMk = (n) => (n === 0 ? TC0 - 0.05 : tMark(n));
+  const DOT_IN = TINF - 0.06, GLIDE0 = 9.25, GLIDE1 = 10.0;
+  const CORN = [[-1, -1], [1, 1], [1, -1], [-1, 1]];   // esquinas de los brazos (TL, BR, TR, BL)
+  function thumb(n, x, y, sc) {
+    const w = 34 * sc, h = 20 * sc;
+    g.fillStyle = PAPER; g.fillRect(x - w / 2, y - h / 2, w, h);
+    g.strokeStyle = INK; g.lineWidth = 1.6; g.strokeRect(x - w / 2, y - h / 2, w, h);
+    g.lineWidth = 0.8; g.strokeRect(x - w / 2 + 2.5 * sc, y - h / 2 + 2.5 * sc, w - 5 * sc, h - 5 * sc);
+    for (let j = 0; j < armsOf(n); j++) {           // el diminuto: un trazo por brazo (los nuevos, en rojo)
+      const [cx, cy] = CORN[j], x0 = x + cx * (w / 2 - 3.5 * sc), y0 = y + cy * (h / 2 - 3.5 * sc);
+      g.strokeStyle = n >= 1 && j >= armsOf(n - 1) ? RED : INK; g.lineWidth = 1.6;
+      g.beginPath(); g.moveTo(x0, y0); g.lineTo(x0 - cx * 10 * sc, y0 - cy * 5.5 * sc); g.stroke();
+    }
+  }
   function renderEnd(t) {
+    g.setTransform(1, 0, 0, 1, 0, 0);
     g.fillStyle = PAPER; g.fillRect(0, 0, 1920, 1080);
+    // empuje de cámara leve mientras la curva se asienta
+    const pu = 1 + 0.03 * EASE.appleOut(clamp((t - TC1) / 1.5)), P0 = [900, 560];
+    g.setTransform(pu, 0, 0, pu, P0[0] * (1 - pu), P0[1] * (1 - pu));
     g.lineCap = 'round'; g.lineJoin = 'round';
     // base (tiempo) y la pared (límite)
-    const bl = EASE.appleOut(clamp((t - 9.55) / 0.9));
-    if (bl > 0) stroke([[O[0] - 60, O[1]], [1730, O[1]]], 1.4, INK, 0, bl);
-    const wl = EASE.appleOut(clamp((t - 10.45) / 1.0));
+    const bl = EASE.appleOut(clamp((t - 9.45) / 0.9));
+    if (bl > 0) stroke([[O[0] - 60, O[1]], [1760, O[1]]], 1.4, INK, 0, bl);
+    const wl = EASE.appleOut(clamp((t - 10.35) / 1.0));
     if (wl > 0) {
-      g.save(); g.setLineDash([7, 11]); stroke([[XI, O[1] - 4], [XI, 96]], 1.3, GREY, 0, wl); g.restore();
+      g.save(); g.setLineDash([6, 6]); ALPHA = 0.55; stroke([[XI, O[1] - 4], [XI, 70]], 1.4, INK, 0, wl); ALPHA = 1; g.restore();
     }
     // curva roja
     const px = penX(t);
@@ -314,14 +417,11 @@ M.scene({ duration: 14, push: 0, audio: { key: 'D', mode: 'lydian', bed: { cycle
       for (let i = 0; i <= 260; i++) { const lam = lam1 * i / 260; const x = XI - (XI - O[0]) * Math.exp(-lam); pts.push([x, yC(x)]); }
       stroke(pts, 3.4, RED);
     }
-    // una marca por ciclo (una miniatura del tablero): aparece cuando la pluma pasa
+    // una miniatura del tablero por ciclo: aparece cuando la pluma pasa
     for (let n = 0; n <= 5; n++) {
-      const tm = n === 0 ? TC0 - 0.05 : tMark(n); const u = clamp((t - tm) / 0.32);
+      const u = clamp((t - tMk(n)) / 0.32);
       if (u <= 0) continue;
-      const sc = M.spring(0.15)(u), x = markX(n), y = yC(x), w = 40 * sc, h = 22.5 * sc;
-      g.fillStyle = PAPER; g.fillRect(x - w / 2, y - h / 2, w, h);
-      g.strokeStyle = INK; g.lineWidth = 1.5; g.strokeRect(x - w / 2, y - h / 2, w, h);
-      g.lineWidth = 0.9; g.strokeRect(x - w / 2 + 3 * sc, y - h / 2 + 3 * sc, w - 6 * sc, h - 6 * sc);
+      const x = markX(n); thumb(n, x, yC(x), M.spring(0.15)(u));
     }
     // la pluma: punto rojo que nace en el centro, baja al origen y recorre la curva
     let pp, r = 7;
@@ -329,6 +429,7 @@ M.scene({ duration: 14, push: 0, audio: { key: 'D', mode: 'lydian', bed: { cycle
     else if (t < TC0) { const u = EASE.apple(clamp((t - GLIDE0) / (GLIDE1 - GLIDE0))); pp = [lerp(C[0], O[0], u), lerp(C[1], O[1], u)]; }
     else pp = [px, yC(px)];
     if (r > 0.1 && pp[1] > -20) { g.fillStyle = RED; g.beginPath(); g.arc(pp[0], pp[1], r, 0, 6.2832); g.fill(); }
+    g.setTransform(1, 0, 0, 1, 0, 0);
   }
 
   /* ---------------- cuadro: desenfoque de movimiento cuando el zoom corre ---------------- */
@@ -340,12 +441,15 @@ M.scene({ duration: 14, push: 0, audio: { key: 'D', mode: 'lydian', bed: { cycle
     const zoomPx = (zAt(t) - zAt(t1)) * 0.916 * 1100;
     const { n } = cycleAt(t);
     const penPx = n >= 0 ? (DAt(n, t) - DAt(n, t1)) / 0.42 * S ** (n - zAt(t)) : 0;
-    const N = clamp(Math.ceil(Math.max(zoomPx, penPx) / 7), 1, 12);
+    const N = clamp(Math.ceil(Math.max(zoomPx, penPx) / 9), 1, 5);
     if (N === 1) { g = g0; renderRush(t); }
     else {
-      for (let i = 0; i < N; i++) {
+      // muestras con peso decreciente hacia atrás (0,55ⁱ): la más reciente domina
+      const w = []; for (let i = 0; i < N; i++) w.push(0.55 ** i);
+      for (let i = N - 1; i >= 0; i--) {
+        let tail = 0; for (let j = i; j < N; j++) tail += w[j];
         g = gb; renderRush(t - (i / N) * SH);
-        g0.globalAlpha = 1 / (i + 1); g0.drawImage(buf, 0, 0); g0.globalAlpha = 1;
+        g0.globalAlpha = w[i] / tail; g0.drawImage(buf, 0, 0); g0.globalAlpha = 1;
       }
       g = g0;
     }
@@ -354,6 +458,16 @@ M.scene({ duration: 14, push: 0, audio: { key: 'D', mode: 'lydian', bed: { cycle
     if (wa > 0) { g0.globalAlpha = wa; g0.fillStyle = PAPER; g0.fillRect(0, 0, 1920, 1080); g0.globalAlpha = 1; }
     if (t > DOT_IN) { g0.fillStyle = RED; g0.beginPath(); g0.arc(C[0], C[1], 7 * M.spring(0.15)(clamp((t - DOT_IN) / 0.35)), 0, 6.2832); g0.fill(); }
   });
+
+  // chequeo geométrico (para depurar): codos fuera de la hoja
+  window.__a02 = () => {
+    const bad = [];
+    for (let k = 1; k <= 4; k++) {
+      const P = planFor(k);
+      P.arms.forEach((arm, j) => { for (let D = 0; D <= arm.D; D += 6) { const { p } = penAt(arm, D); const e = ik(arm.A, p); if (inset(e) < 12) bad.push([k, j, Math.round(D), Math.round(inset(e)), p.map(Math.round), e.map(Math.round)]); } });
+    }
+    return { bad: bad.length, sample: bad.filter((b, i) => i % 25 === 0), Dmax: [1, 2, 3, 4].map((k) => Math.round(planFor(k).Dmax)) };
+  };
 
   // fundido final al papel
   tl.to('#fade', { opacity: 1, duration: 0.55, ease: 'appleIn' }, 13.35);
@@ -374,9 +488,10 @@ M.scene({ duration: 14, push: 0, audio: { key: 'D', mode: 'lydian', bed: { cycle
   }
   M.sfx(Tn(0) + zStart(0) * cyc(0), 'whoosh', { dur: (1 - zStart(0)) * cyc(0), peak: 0.5, dir: 1, gain: -4 });
   M.sfx(Tn(1) + zStart(1) * cyc(1), 'whoosh', { dur: (1 - zStart(1)) * cyc(1), peak: 0.5, dir: -1, gain: -7 });
-  M.sfx(TINF, 'riser', { dur: 3.0, semis: 12, gain: -2 });                            // corta en seco en el límite
+  M.sfx(TINF, 'riser', { dur: 3.0, semis: 12, gain: -2 });                            // corta en el límite…
+  M.sfx(TINF, 'tap', { deg: 4, oct: 6, bright: 0.6, gain: -10 });                     // …con el punto rojo
   M.sfx(GLIDE0, 'whoosh', { dur: GLIDE1 - GLIDE0, peak: 0.5, dir: -1, gain: -9 });
-  for (let n = 1; n <= 3; n++) M.sfx(tMark(n), 'tap', { deg: [0, 2, 4][n - 1], oct: 5, bright: 0.7, gain: -6, vary: 0.3 });
+  [0, 1, 2, 4, 5, 6].forEach((deg, n) => M.sfx(tMk(n), 'tap', { deg, oct: 5, bright: 0.7, gain: -5 - n, vary: 0.3 }));
   M.sfx(TC1, 'swell', { dur: 1.1, gain: -2 }).sfx(TC1, 'impact', { weight: 0.85 });
 });
 </script>
