@@ -75,6 +75,14 @@ Son 5 animaciones útiles como B-roll para narración, **sin ningún texto en pa
 - Renders FONDO+audio, AUDIO y ENTREGA en `renders/a0*`.
 - Workflow `serie-ia` (run wf_f1ee457b-218): construir → criticar → corregir. La corrección se cortó por límite de sesión de subagentes: a01 y a02 quedaron corregidas, **a03 sin aplicar la crítica** (resultados cacheados en el journal del run, solo misma sesión).
 - Pendiente opcional: aplicar la crítica a a03 y re-renderizar.
+- **Al usuario le gustó más a03** (grafito + diagramas vivos): es el estilo de referencia para la IA.
+
+### Serie 5: diagramas vivos, estilo a03 (pedido del 27/09). TERMINADA y ENVIADA
+- Brief: `BRIEF-IA2.md`.
+- Escenas sin texto, con sonido: b01-consciencia (ojo que despierta → percibe → ojo dentro del ojo, 16 s), b02-aprendizaje (retropropagación y valle de pérdida, 14 s), b03-lenguaje (tokens → vectores → atención → próxima palabra, 16 s). QA 0 errores.
+- Renders FONDO, AUDIO y ENTREGA en `renders/b0*`.
+- Los audios quedaron en ~−33 LUFS, un poco más bajos que las series anteriores. Si hace falta: `--gain`.
+- Proceso barato que funcionó: 3 agentes constructores en paralelo (qa + 1 hoja + ≤3 cuadros cada uno) y render desde el orquestador.
 
 ## Infra hecha en esta sesión (para no rehacerla)
 - **`render.mjs`:**
