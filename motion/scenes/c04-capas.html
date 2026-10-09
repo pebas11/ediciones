@@ -282,7 +282,7 @@ M.scene({ duration: 16, push: 0, audio: { key: 'D', mode: 'lydian', gain: 3, bed
       const xk = eO(seg(t, HS - 0.15, HS + 0.35));
       if (xk > 0.004) { ctx.font = '500 120px "League Spartan"'; ctx.fillStyle = rgba(BONE, 0.55 * xk); ctx.fillText('×', xr - wN - 22, yb - 12 + (1 - xk) * 10); }
       ctx.font = '500 28px "DM Mono"'; setLS('5px');
-      ctx.fillStyle = rgba(SLATE, 0.95); ctx.fillText(n === 1 ? 'CAPA' : 'CAPAS', xr, yb + 54);
+      ctx.fillStyle = rgba(SLATE, 0.95); ctx.fillText(n <= NS ? 'CAPA' : 'CAPAS', xr, yb + 54);
       setLS('0px');
     }
   });
