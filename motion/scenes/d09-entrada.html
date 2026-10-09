@@ -110,7 +110,7 @@ M.scene({ duration: 22, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed:
     // === Pod verde (Hugging Face)
     const podP = eA(seg(t, 0.5, 2.0));
     const per = 2 * (POD.w + POD.h);
-    ctx.save(); ctx.lineWidth = 3; ctx.strokeStyle = rgba(PAL.GREEN, 0.8); ctx.setLineDash([per * podP, per]);
+    ctx.save(); ctx.lineWidth = 3; ctx.strokeStyle = rgba(PAL.GREEN, 0.8); ctx.setLineDash([per * podP, per]); ctx.lineDashOffset = 0;
     rr(POD.x, POD.y, POD.w, POD.h, 26); ctx.stroke(); ctx.restore();
     text(ctx, 'POD', POD.x + 24, POD.y - 18, F_M, PAL.GREEN, 0.75 * eO(seg(t, 1.4, 2.2)), { spacing: '4px', glow: 6 });
 
@@ -175,7 +175,7 @@ M.scene({ duration: 22, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed:
     // línea de entrada persistente, tenue
     const entA = eO(seg(t, 3.2, 3.8)) * (1 - 0.55 * eA(seg(t, 5.2, 6)));
     ctx.strokeStyle = rgba(PAL.CYAN, 0.35 * entA); ctx.lineWidth = 2; ctx.setLineDash([6, 12]); ctx.lineDashOffset = -t * 20;
-    ctx.beginPath(); ctx.moveTo(PAN.x + PAN.w, R.y); ctx.lineTo(R.x - 54, R.y); ctx.stroke(); ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(PAN.x + PAN.w, R.y); ctx.lineTo(R.x - 54, R.y); ctx.stroke(); ctx.setLineDash([]); ctx.lineDashOffset = 0;
 
     // === Beat B: HDF5 -> lectura de archivos; fichas ámbar vuelven al agente
     {
@@ -230,7 +230,7 @@ M.scene({ duration: 22, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed:
       const da = dIn * dOut;
       // servicio de metadatos (nube, neutro)
       ctx.lineWidth = 2.5; ctx.strokeStyle = rgba(PAL.INK, 0.55 * da); ctx.setLineDash([8, 8]);
-      ctx.beginPath(); ctx.arc(META.x, META.y, 56, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
+      ctx.beginPath(); ctx.arc(META.x, META.y, 56, 0, TAU); ctx.stroke(); ctx.setLineDash([]); ctx.lineDashOffset = 0;
       text(ctx, 'METADATOS', META.x, META.y + 100, F_M, PAL.INK, 0.65 * da, { align: 'center', spacing: '3px', glow: 0 });
       // puerta verde
       const hit1 = pulse(t, 17.35, 0.7), hit2 = pulse(t, 18.6, 0.7);
@@ -241,7 +241,7 @@ M.scene({ duration: 22, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed:
       text(ctx, 'PERMITIDOS', GATE.x, GATE.y - 128, F_M, PAL.GREEN, 0.9 * da, { align: 'center', spacing: '3px', glow: 8 });
       // línea tenue R -> puerta
       ctx.strokeStyle = rgba(PAL.RED, 0.28 * da); ctx.lineWidth = 2; ctx.setLineDash([6, 12]); ctx.lineDashOffset = -t * 24;
-      ctx.beginPath(); ctx.moveTo(R.x + 54, R.y); ctx.lineTo(GATE.x - 6, GATE.y); ctx.stroke(); ctx.setLineDash([]);
+      ctx.beginPath(); ctx.moveTo(R.x + 54, R.y); ctx.lineTo(GATE.x - 6, GATE.y); ctx.stroke(); ctx.setLineDash([]); ctx.lineDashOffset = 0;
       // dos intentos: salen de R, chocan, rebotan
       [[16.6, 17.35], [17.85, 18.6]].forEach(([s, h], k) => {
         const u = eA(seg(t, s, h));

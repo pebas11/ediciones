@@ -84,7 +84,7 @@ M.scene({ duration: 20, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed:
 
   /* ---------- enjambre (beat D) ---------- */
   const SW = []; { const rs = M.rng(7); for (let i = 0; i < 16; i++) SW.push({ a: rs() * TAU, d: 14 + rs() * 74, ph: rs() * TAU, sp: 0.5 + rs() * 0.8, s: 2.6 + rs() * 2.4 }); }
-  const AG = { x: 360, y: 560 }, EV = { x: 1560, y: 560 }, W1 = 860, W2 = 1030;
+  const AG = { x: 340, y: 560 }, EV = { x: 1580, y: 560 }, W1 = 860, W2 = 1030;
 
   /* ---------- sonido ---------- */
   [T_A + 0.1, T_B + 0.1, T_C + 0.1, T_D + 0.1].forEach((a, i) => M.sfx(a, 'tick', { gain: i ? -1 : 0, tone: 'glass' }));
@@ -258,28 +258,28 @@ M.scene({ duration: 20, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed:
     const dOn = eO(seg(t, T_D + 0.2, T_D + 0.9));
     if (dOn > 0.004) {
       // camino tenue entre evaluador y agentes
-      ctx.save(); ctx.setLineDash([6, 14]); line(AG.x + 120, AG.y, EV.x - 130, EV.y, PAL.INK, 0.14 * dOn, 2, 0); ctx.restore();
+      ctx.save(); ctx.setLineDash([6, 14]); line(AG.x + 200, AG.y, EV.x - 190, EV.y, PAL.INK, 0.14 * dOn, 2, 0); ctx.restore();
       // agentes
       const hitA = eA(seg(t, 18.4, 18.8)) * (1 - eA(seg(t, 18.9, 19.3)));
       for (const p of SW) {
-        const x = AG.x + Math.cos(p.a + t * 0.15 * p.sp) * p.d + Math.sin(t * p.sp + p.ph) * 8, y = AG.y + Math.sin(p.a + t * 0.15 * p.sp) * p.d * 0.9 + Math.cos(t * p.sp * 1.3 + p.ph) * 7;
-        dot(x, y, p.s, PAL.CYAN, 0.85 * dOn, 6);
+        const x = AG.x + Math.cos(p.a + t * 0.15 * p.sp) * p.d * 1.7 + Math.sin(t * p.sp + p.ph) * 10, y = AG.y + Math.sin(p.a + t * 0.15 * p.sp) * p.d * 1.55 + Math.cos(t * p.sp * 1.3 + p.ph) * 9;
+        dot(x, y, p.s * 1.5, PAL.CYAN, 0.9 * dOn, 10);
       }
-      ring(AG.x, AG.y, 112 + 8 * Math.sin(t * 2), PAL.CYAN, 0.18 * dOn, 1.5, 0);
-      if (hitA > 0.01) ring(AG.x, AG.y, 112 + 40 * hitA, PAL.AMBER, 0.6 * (1 - hitA * 0.5), 3, 14);
+      ring(AG.x, AG.y, 190 + 8 * Math.sin(t * 2), PAL.CYAN, 0.3 * dOn, 2, 8);
+      if (hitA > 0.01) ring(AG.x, AG.y, 190 + 50 * hitA, PAL.AMBER, 0.6 * (1 - hitA * 0.5), 3, 14);
       // evaluador: ojo violeta
       const look = Math.sin(t * 0.8) * 4;
-      ring(EV.x, EV.y, 112, PAL.VIOLET, 0.8 * dOn, 3.5, 14);
-      ring(EV.x, EV.y, 128, PAL.VIOLET, 0.2 * dOn, 1.5, 0);
+      ring(EV.x, EV.y, 160, PAL.VIOLET, 0.8 * dOn, 4, 16);
+      ring(EV.x, EV.y, 182, PAL.VIOLET, 0.2 * dOn, 1.5, 0);
       ctx.save(); ctx.strokeStyle = rgba(PAL.VIOLET, 0.9 * dOn); ctx.lineWidth = 3.5; ctx.shadowColor = rgba(PAL.VIOLET, 0.8 * dOn); ctx.shadowBlur = 12;
-      ctx.beginPath(); ctx.moveTo(EV.x - 70, EV.y); ctx.quadraticCurveTo(EV.x, EV.y - 58, EV.x + 70, EV.y); ctx.quadraticCurveTo(EV.x, EV.y + 58, EV.x - 70, EV.y); ctx.stroke(); ctx.restore();
-      dot(EV.x - 14 + look, EV.y, 20, PAL.VIOLET, 0.95 * dOn, 14); dot(EV.x - 20 + look, EV.y - 5, 6, PAL.INK, 0.9 * dOn, 0);
+      ctx.beginPath(); ctx.moveTo(EV.x - 100, EV.y); ctx.quadraticCurveTo(EV.x, EV.y - 84, EV.x + 100, EV.y); ctx.quadraticCurveTo(EV.x, EV.y + 84, EV.x - 100, EV.y); ctx.stroke(); ctx.restore();
+      dot(EV.x - 20 + look, EV.y, 30, PAL.VIOLET, 0.95 * dOn, 16); dot(EV.x - 30 + look, EV.y - 8, 9, PAL.INK, 0.9 * dOn, 0);
       // trip-wires (dos): se tienden y el segundo se dispara
       for (let k = 0; k < 2; k++) {
         const wx = k ? W2 : W1, tw = eO(seg(t, 15.5 + k * 0.35, 16.2 + k * 0.35));
         const fire = k ? eA(seg(t, 17.4, 17.7)) * (1 - 0.55 * eA(seg(t, 18.4, 19.2))) : 0;
         const col = PAL.MAG, aa = (0.5 + 0.5 * fire) * dOn;
-        const y0 = 410, y1 = 710, ye = lerp(y0, y1, tw);
+        const y0 = 330, y1 = 790, ye = lerp(y0, y1, tw);
         line(wx, y0, wx, ye, col, aa, 3 + 1.5 * fire, 10 + 14 * fire);
         for (let m = 0; m < 6; m++) { const my = lerp(y0 + 20, y1 - 20, m / 5); if (my < ye) line(wx - 7, my, wx + 7, my, col, 0.5 * aa, 2, 0); }
         // postes
@@ -287,7 +287,7 @@ M.scene({ duration: 20, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed:
       }
       // sonda del evaluador viaja hacia los agentes y cruza el trip-wire
       const pr = eA(seg(t, 16.5, 17.4));
-      const px = lerp(EV.x - 130, W2, pr);
+      const px = lerp(EV.x - 190, W2, pr);
       if (t > 16.45 && t < 17.45) { dot(px, EV.y, 9, PAL.VIOLET, 0.95, 16); line(px + 40, EV.y, px + 8, EV.y, PAL.VIOLET, 0.4, 3, 6); }
       // destello al cruzar
       const fl = seg(t, 17.4, 18.1);
@@ -296,7 +296,7 @@ M.scene({ duration: 20, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed:
       for (let k = 0; k < 6; k++) {
         const s0 = 17.55 + k * 0.17, u = eA(seg(t, s0, s0 + 0.95));
         if (u <= 0 || u >= 1) continue;
-        const ax = lerp(W2, AG.x + 96, u), ay = EV.y + Math.sin(k * 2.1) * 26 * Math.sin(u * Math.PI);
+        const ax = lerp(W2, AG.x + 190, u), ay = EV.y + Math.sin(k * 2.1) * 26 * Math.sin(u * Math.PI);
         line(ax + 34, ay, ax, ay, PAL.AMBER, 0.45, 3, 6);
         bar(ax - 8, ay, 16, 11, PAL.AMBER, 0.95, 14);
       }

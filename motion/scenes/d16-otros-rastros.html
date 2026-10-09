@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>D16 · Otros rastros</title>
+<link rel="stylesheet" href="../lib/theme.css">
+<link rel="stylesheet" href="../lib/fonts-spartan.css">
+<style>
+  body { background: #05070D; }
+  #cv { position: absolute; inset: 0; }
+  #grain { position: absolute; inset: -20px; opacity: 0.05; mix-blend-mode: overlay; pointer-events: none; }
+  #vig { position: absolute; inset: 0; background: radial-gradient(120% 110% at 50% 48%, transparent 50%, rgba(2,3,6,0.7) 100%); pointer-events: none; }
+  #fade { position: absolute; inset: 0; background: #05070D; opacity: 1; }
+</style>
+</head>
+<body>
+<div id="world">
+  <canvas id="cv" width="1920" height="1080"></canvas>
+  <div id="vig"></div>
+  <canvas id="grain" width="512" height="512" style="width:1960px;height:1120px"></canvas>
+  <div id="fade"></div>
+</div>
+<script src="../node_modules/gsap/dist/gsap.min.js"></script>
+<script src="../node_modules/gsap/dist/SplitText.min.js"></script>
+<script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
+<script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
+<script src="../lib/stage.js"></script>
+<script src="../lib/audio.js"></script>
+<script src="../lib/neon.js"></script>
+<script>
+/* D16 · Otros rastros (16 s, sin voz). Tres tarjetas neón, una por beat, todas "SEGÚN REPORTES" (nivel C):
+   1 0,5–5,9   wiki alemán dormido: ≈18.000 ediciones (cian)
+   2 5,9–10,8  paquetes maliciosos en RubyGems (rojo)
+   3 10,8–15,7 53 imágenes de usuarios a alojamiento de terceros (ámbar) */
+M.scene({ duration: 16, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed: { cycle: 8, bright: 0.7, sub: 0.25 } } }, async (tl, M) => {
+  const $ = (s) => document.querySelector(s);
+  const cv = $('#cv'), ctx = cv.getContext('2d');
+  { const g = $('#grain').getContext('2d'); const im = g.createImageData(512, 512); const rn = M.rng(5);
+    for (let i = 0; i < im.data.length; i += 4) { const v = 128 + (rn() - 0.5) * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+    g.putImageData(im, 0, 0); }
+  const F_H = '700 88px "League Spartan"', F_C = '500 40px "DM Sans"', F_S = '500 26px "DM Mono"';
+  const F_N = (s) => `800 ${s}px "League Spartan"`, F_U = '600 54px "League Spartan"';
+  await Promise.all([
+    document.fonts.load(F_H, 'Un wiki dormido Paquetes en RubyGems Imágenes de usuarios'),
+    document.fonts.load(F_C, 'Unas 18.000 ediciones imágenes ñ'),
+    document.fonts.load(F_S, 'SEGÚN REPORTES'),
+    document.fonts.load(F_N(170), '0123456789.≈CIENTOS'),
+    document.fonts.load(F_U, 'edicionespaquetesimágenes'),
+  ]);
+
+  const { PAL, rgba, bloom, bg, text } = Neon;
+  const TAU = Math.PI * 2;
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, m) => a + (b - a) * m;
+  const seg = (t, a, b) => clamp((t - a) / (b - a));
+  const eA = gsap.parseEase('apple'), eO = gsap.parseEase('appleOut'), eI = gsap.parseEase('appleIn');
+
+  // ---- estructura ----
+  const E = [0.5, 5.9, 10.8];                       // entrada de cada tarjeta
+  const COL = [PAL.CYAN, PAL.RED, PAL.AMBER];
+  const HEAD = ['Un wiki dormido', 'Paquetes en RubyGems', 'Imágenes de usuarios'];
+  const CAP = ['Unas 18.000 ediciones a un wiki alemán dormido como tablero.',
+               'Subieron paquetes maliciosos; OpenAI lo confirmó en septiembre.',
+               '53 imágenes de usuarios, subidas a alojamiento de terceros.'];
+  const CW = 536, CH = 630, CY = 250, GAP = 36, X0 = 120, PAD = 28;
+  const cardX = (i) => X0 + i * (CW + GAP);
+  const fmt = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+
+  // tamaños de cifra (medidos una vez, sin saltos)
+  ctx.font = F_N(170); const wNum1 = ctx.measureText('18.000').width;
+  ctx.font = F_N(90); const wApx = ctx.measureText('≈').width;
+  const fs1 = Math.min(170, 170 * (CW - 2 * PAD - wApx - 10) / wNum1);
+  ctx.font = F_N(170); const wCien = ctx.measureText('CIENTOS').width;
+  const fs2 = Math.min(170, 170 * (CW - 2 * PAD) / wCien);
+  const fs3 = 220;
+  M.log && M.log('fs', fs1.toFixed(0), fs2.toFixed(0));
+
+  // ---- datos deterministas ----
+  const r = M.rng(16);
+  // tarjeta 1: marcas de edición sobre las líneas de la página
+  const MARKS = [];
+  for (let i = 0; i < 70; i++) { const line = Math.floor(r() * 9), len = 18 + r() * 60; MARKS.push({ line, x: r() * (170 - len), len, ph: r() }); }
+  // tarjeta 2: paquetes (3 filas x 4), orden en que se tiñen
+  const CUBES = []; for (let rw = 0; rw < 3; rw++) for (let c = 0; c < 4; c++) CUBES.push({ c, rw });
+  const ORDER = [5, 2, 10, 0, 7, 3, 9, 6, 1, 11, 4, 8]; // índice -> posición en la secuencia
+  const RED_N = 9;
+  // tarjeta 3: imágenes que suben a la caja de terceros
+  const TILES = []; for (let i = 0; i < 8; i++) TILES.push({ i, d: i * 0.22 + r() * 0.08 });
+
+  // ---- sonido ----
+  E.forEach((e, i) => M.sfx(e + 0.02, 'tick', { gain: -1 }));
+  M.sfx(E[0] + 0.6, 'grow', { dur: 2.4, density: 90 });
+  M.sfx(E[0] + 3.0, 'shimmer', { gain: -8, degs: [2, 4, 7] });
+  [0, 1, 2].forEach((k) => M.sfx(E[1] + 0.9 + k * 0.5, 'tap', { deg: 2 + k * 2, oct: 4, bright: 0.6, gain: -2 }));
+  M.sfx(E[2] + 0.6, 'grow', { dur: 2.0, density: 70 });
+  M.sfx(E[2] + 2.8, 'shimmer', { gain: -8, degs: [4, 7, 9] });
+  tl.to({ v: 0 }, { v: 1, duration: 15.67, ease: 'none' }, 0);
+  tl.fromTo('#fade', { opacity: 1 }, { opacity: 0, duration: 0.45, ease: 'appleOut' }, 0);
+  tl.to('#fade', { opacity: 1, duration: 0.33, ease: 'appleIn' }, 15.67);
+
+  // ---- marco de tarjeta (esquinas cortadas, trazo que se dibuja) ----
+  function framePath(x, y, w, h, c) {
+    ctx.beginPath(); ctx.moveTo(x + c, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w, y + h - c);
+    ctx.lineTo(x + w - c, y + h); ctx.lineTo(x, y + h); ctx.lineTo(x, y + c); ctx.closePath();
+  }
+  const PERIM = 2 * (CW + CH) - 2 * 28 + 2 * 28 * Math.SQRT2;
+
+  function card(i, t) {
+    const e = E[i], col = COL[i], x = cardX(i), y = CY;
+    const draw = eA(seg(t, e, e + 1.0)), body = eO(seg(t, e + 0.5, e + 1.4));
+    const dim = i < 2 ? eA(seg(t, E[i + 1], E[i + 1] + 0.9)) : 0;
+    const act = 1 - dim, k = 0.4 + 0.6 * act;
+    const oy = 34 * (1 - eO(seg(t, e, e + 0.9)));
+    if (t < e) return;
+    ctx.save(); ctx.translate(0, oy);
+    // panel
+    framePath(x, y, CW, CH, 28);
+    ctx.fillStyle = rgba(PAL.BG, 0.9 * body); ctx.fill();
+    ctx.fillStyle = rgba(col, 0.05 * body * act); ctx.fill();
+    // trazo
+    ctx.lineWidth = 3; ctx.strokeStyle = rgba(col, (0.5 + 0.5 * act) * Math.min(1, draw * 2));
+    ctx.setLineDash([PERIM * draw, PERIM]); ctx.lineDashOffset = 0;
+    framePath(x, y, CW, CH, 28); ctx.stroke(); ctx.setLineDash([]);
+    ctx.globalAlpha = body * k;
+    const ax = x + PAD, aw = CW - 2 * PAD;
+    if (i === 0) art1(t, ax, aw, col, act);
+    else if (i === 1) art2(t, ax, aw, col, act);
+    else art3(t, ax, aw, col, act);
+    // cifra + unidad
+    const nA = eO(seg(t, e + 0.5, e + 1.3)) * k;
+    if (i === 0) {
+      const n = Math.round(18000 * eO(seg(t, e + 0.6, e + 3.0)));
+      text(ctx, '≈', ax, 745 - fs1 * 0.12, F_N(90), col, nA * 0.8, { glow: 8 });
+      text(ctx, fmt(n), ax + wApx + 10, 745, F_N(fs1), PAL.INK, nA, { glow: 12 });
+      text(ctx, 'ediciones', ax, 818, F_U, col, nA * 0.95, { glow: 10 });
+    } else if (i === 1) {
+      text(ctx, 'CIENTOS', ax, 745, F_N(fs2), PAL.INK, nA, { glow: 12 });
+      text(ctx, 'paquetes', ax, 818, F_U, col, nA * 0.95, { glow: 10 });
+    } else {
+      const n = Math.round(53 * eO(seg(t, e + 0.6, e + 2.6)));
+      text(ctx, String(n), ax, 745, F_N(fs3), PAL.INK, nA, { glow: 12 });
+      text(ctx, 'imágenes', ax, 818, F_U, col, nA * 0.95, { glow: 10 });
+    }
+    ctx.restore();
+  }
+
+  // --- arte 1: página de wiki dormida que despierta con ediciones ---
+  function art1(t, ax, aw, col, act) {
+    const e = E[0], px = ax + aw / 2 - 110, py = 292, pw = 220, ph = 260;
+    const wake = eO(seg(t, e + 0.7, e + 1.5));
+    const pc = wake > 0.5 ? col : PAL.INK;
+    ctx.lineWidth = 3; ctx.strokeStyle = rgba(PAL.INK, 0.45 * (1 - wake)); ctx.beginPath();
+    ctx.moveTo(px, py); ctx.lineTo(px + pw - 40, py); ctx.lineTo(px + pw, py + 40); ctx.lineTo(px + pw, py + ph); ctx.lineTo(px, py + ph); ctx.closePath(); ctx.stroke();
+    ctx.strokeStyle = rgba(col, 0.95 * wake); ctx.beginPath();
+    ctx.moveTo(px, py); ctx.lineTo(px + pw - 40, py); ctx.lineTo(px + pw, py + 40); ctx.lineTo(px + pw, py + ph); ctx.lineTo(px, py + ph); ctx.closePath(); ctx.stroke();
+    ctx.lineWidth = 2; ctx.strokeStyle = rgba(PAL.INK, 0.28); ctx.beginPath();
+    for (let l = 0; l < 9; l++) { const ly = py + 62 + l * 21; ctx.moveTo(px + 24, ly); ctx.lineTo(px + pw - 24, ly); }
+    ctx.stroke();
+    // "dormido": tres Z que se apagan al despertar (trazos, sin texto)
+    const zA = (1 - wake) * 0.7 * (0.6 + 0.4 * Math.sin(t * 3));
+    ctx.strokeStyle = rgba(PAL.INK, zA); ctx.lineWidth = 3;
+    for (let z = 0; z < 3; z++) { const zx = px + pw + 18 + z * 22, zy = py + 10 - z * 24, s = 8 + z * 4;
+      ctx.beginPath(); ctx.moveTo(zx, zy); ctx.lineTo(zx + s, zy); ctx.lineTo(zx, zy + s); ctx.lineTo(zx + s, zy + s); ctx.stroke(); }
+    // ediciones
+    const prog = eO(seg(t, e + 0.9, e + 3.0));
+    const n = Math.floor(prog * MARKS.length);
+    ctx.lineWidth = 5; ctx.lineCap = 'round';
+    for (let m = 0; m < n; m++) { const mk = MARKS[m], ly = py + 62 + mk.line * 21;
+      const fresh = clamp(1 - (prog * MARKS.length - m) / 6);
+      ctx.strokeStyle = rgba(col, 0.55 + 0.45 * fresh);
+      ctx.beginPath(); ctx.moveTo(px + 24 + mk.x, ly); ctx.lineTo(px + 24 + mk.x + mk.len, ly); ctx.stroke(); }
+    ctx.lineCap = 'butt';
+  }
+
+  // --- arte 2: paquetes (cubos) que se tiñen de rojo ---
+  function art2(t, ax, aw, col, act) {
+    const e = E[1], sx = aw / 4, r0 = 36;
+    CUBES.forEach((cb, idx) => {
+      const cx = ax + sx * (cb.c + 0.5), cy = 345 + cb.rw * 92;
+      const seq = ORDER[idx];
+      const turn = seq < RED_N ? eO(seg(t, e + 0.8 + seq * 0.22, e + 1.2 + seq * 0.22)) : 0;
+      const flash = seq < RED_N ? clamp(1 - Math.abs(t - (e + 0.9 + seq * 0.22)) / 0.35) : 0;
+      const c = turn > 0.5 ? col : PAL.INK;
+      const a = turn > 0.5 ? 0.9 + 0.1 * flash : 0.4;
+      const vx = [], vy = [];
+      for (let k = 0; k < 6; k++) { const an = -Math.PI / 2 + k * Math.PI / 3; vx.push(cx + Math.cos(an) * r0); vy.push(cy + Math.sin(an) * r0); }
+      ctx.beginPath(); for (let k = 0; k < 6; k++) k ? ctx.lineTo(vx[k], vy[k]) : ctx.moveTo(vx[k], vy[k]); ctx.closePath();
+      ctx.fillStyle = rgba(col, 0.18 * turn); ctx.fill();
+      ctx.lineWidth = 3; ctx.strokeStyle = rgba(c, a); ctx.stroke();
+      ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(vx[1], vy[1]); ctx.moveTo(cx, cy); ctx.lineTo(vx[3], vy[3]); ctx.moveTo(cx, cy); ctx.lineTo(vx[5], vy[5]);
+      ctx.strokeStyle = rgba(c, a * 0.7); ctx.stroke();
+    });
+  }
+
+  // --- arte 3: imágenes que salen hacia alojamiento externo (caja discontinua) ---
+  function art3(t, ax, aw, col, act) {
+    const e = E[2], bx = ax + aw - 190, by = 296, bw = 190, bh = 150;
+    const boxA = eO(seg(t, e + 0.4, e + 1.0));
+    ctx.lineWidth = 3; ctx.setLineDash([14, 10]); ctx.strokeStyle = rgba(col, 0.9 * boxA);
+    ctx.strokeRect(bx, by, bw, bh); ctx.setLineDash([]);
+    const tw = 52, th = 40;
+    TILES.forEach((tile) => {
+      const sxp = ax + 8 + (tile.i % 4) * 62, syp = 470 + Math.floor(tile.i / 4) * 54;
+      const dxp = bx + 14 + (tile.i % 3) * 58, dyp = by + 18 + Math.floor(tile.i / 3) * 46;
+      const m = eA(seg(t, e + 0.9 + tile.d * 1.6, e + 1.9 + tile.d * 1.6));
+      const x = lerp(sxp, dxp, m), y = lerp(syp, dyp, m) - Math.sin(m * Math.PI) * 50;
+      const c = m > 0.05 ? col : PAL.INK, a = (m > 0.05 ? 0.95 : 0.45) * eO(seg(t, e + 0.3, e + 0.9)) + 0.0;
+      ctx.lineWidth = 2.5; ctx.strokeStyle = rgba(c, a); ctx.strokeRect(x, y, tw, th);
+      ctx.beginPath(); ctx.moveTo(x + 4, y + th - 4); ctx.lineTo(x + 20, y + 16); ctx.lineTo(x + 32, y + 30); ctx.lineTo(x + 40, y + 22); ctx.lineTo(x + tw - 4, y + th - 4); ctx.stroke();
+      ctx.beginPath(); ctx.arc(x + 38, y + 11, 4, 0, TAU); ctx.stroke();
+    });
+    // flecha de salida
+    const fa = eO(seg(t, e + 1.0, e + 1.8)) * 0.7;
+    ctx.strokeStyle = rgba(col, fa); ctx.lineWidth = 2.5; ctx.beginPath();
+    ctx.moveTo(ax + 270, 500); ctx.lineTo(ax + 420, 500); ctx.moveTo(ax + 404, 486); ctx.lineTo(ax + 420, 500); ctx.lineTo(ax + 404, 514);
+    ctx.stroke();
+  }
+
+  // ---- texto: titular, leyenda, sello ----
+  function swapAlpha(t, i, inAt, inDur, outPre) {
+    const a = eO(seg(t, E[i] + inAt, E[i] + inAt + inDur));
+    const o = i < 2 ? 1 - eI(seg(t, E[i + 1] - outPre, E[i + 1] - outPre + 0.3)) : 1;
+    return { a: a * o, up: 1 - eO(seg(t, E[i] + inAt, E[i] + inAt + inDur)) };
+  }
+
+  M.onFrame((t) => {
+    bg(ctx, t, { grid: 0.04 * eO(seg(t, 0.2, 1.2)) });
+    for (let i = 0; i < 3; i++) card(i, t);
+    for (let i = 0; i < 3; i++) {
+      const h = swapAlpha(t, i, 0.0, 0.7, 0.35);
+      text(ctx, HEAD[i], 120, 150 + 22 * h.up, F_H, PAL.INK, h.a, { glow: 8 });
+      const c = swapAlpha(t, i, 0.4, 0.7, 0.3);
+      text(ctx, CAP[i], 120, 990 + 14 * c.up, F_C, PAL.INK, c.a * 0.95, { glow: 5 });
+    }
+    // sello: se estampa de nuevo en cada beat, con el color de la tarjeta activa
+    let bi = t >= E[2] ? 2 : t >= E[1] ? 1 : 0;
+    const st = t - E[bi] - 0.25;
+    if (st > 0) {
+      const a = eO(seg(st, 0, 0.35)), s = 1 + 0.18 * (1 - eO(seg(st, 0, 0.35)));
+      const col = COL[bi];
+      ctx.save(); ctx.translate(1800, 112); ctx.scale(s, s);
+      ctx.font = F_S; ctx.letterSpacing = '4px'; const w = ctx.measureText('SEGÚN REPORTES').width;
+      ctx.lineWidth = 2.5; ctx.strokeStyle = rgba(col, 0.9 * a); ctx.shadowColor = rgba(col, 0.8 * a); ctx.shadowBlur = 10;
+      ctx.strokeRect(-w - 22, -34, w + 34, 50); ctx.restore();
+      ctx.save(); ctx.translate(1800, 112); ctx.scale(s, s);
+      text(ctx, 'SEGÚN REPORTES', -10, 0, F_S, col, a, { align: 'right', spacing: '4px', glow: 12 });
+      ctx.restore();
+    }
+    bloom(ctx, cv, { k: 0.62 });
+  });
+});
+</script>
+</body>
+</html>
