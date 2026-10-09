@@ -186,7 +186,7 @@ M.scene({ duration: 22, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed:
         const al = (1 - eA(seg(t, 10.4, 11.4)));
         // codo hacia los archivos
         ctx.save(); ctx.strokeStyle = rgba(PAL.CYAN, 0.9 * al); ctx.lineWidth = 3; ctx.shadowColor = rgba(PAL.CYAN, 0.8 * al); ctx.shadowBlur = 10;
-        ctx.beginPath(); ctx.moveTo(bx, y1); ctx.lineTo(bx + 90, y1); ctx.moveTo(bx + 90, y1); ctx.lineTo(bx + 90, lerp(y1, fsY, sc)); ctx.lineTo(lerp(bx + 90, fsX - 40, sc), lerp(y1, fsY, sc)); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(bx, y1); ctx.lineTo(bx + 90, y1); ctx.moveTo(bx + 90, y1); ctx.lineTo(bx + 90, lerp(y1, fsY, sc)); ctx.lineTo(lerp(bx + 90, fsX - 40, sc), lerp(y1, fsY, sc)); ctx.stroke(); ctx.restore();
       }
       // fichas ámbar de vuelta (variables de entorno, secretos)
       const chips = [{ d: 7.4, lb: 'ENV', dy: 0 }, { d: 7.7, lb: 'ENV', dy: 26 }, { d: 8.0, lb: 'SECRETOS', dy: -26 }, { d: 8.3, lb: 'SECRETOS', dy: 52 }];

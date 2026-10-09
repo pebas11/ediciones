@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>D11 · Movimiento lateral</title>
+<link rel="stylesheet" href="../lib/theme.css">
+<link rel="stylesheet" href="../lib/fonts-spartan.css">
+<style>
+  body { background: #05070D; }
+  #cv { position: absolute; inset: 0; }
+  #grain { position: absolute; inset: -20px; opacity: 0.05; mix-blend-mode: overlay; pointer-events: none; }
+  #vig { position: absolute; inset: 0; background: radial-gradient(120% 110% at 50% 48%, transparent 50%, rgba(2,3,6,0.7) 100%); pointer-events: none; }
+  #fade { position: absolute; inset: 0; background: #05070D; opacity: 1; }
+</style>
+</head>
+<body>
+<div id="world">
+  <canvas id="cv" width="1920" height="1080"></canvas>
+  <div id="vig"></div>
+  <canvas id="grain" width="512" height="512" style="width:1960px;height:1120px"></canvas>
+  <div id="fade"></div>
+</div>
+<script src="../node_modules/gsap/dist/gsap.min.js"></script>
+<script src="../node_modules/gsap/dist/SplitText.min.js"></script>
+<script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
+<script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
+<script src="../lib/stage.js"></script>
+<script src="../lib/audio.js"></script>
+<script src="../lib/neon.js"></script>
+<script>
+/* D11 · Movimiento lateral (22 s), sin voz. Un foco por beat:
+   1 0,4–4,2   11/07 19:59  MongoDB interna, solo lecturas
+   2 4,2–8,0   11/07 21:23  VPN de malla
+   3 8,0–12,4  11/07 22:43  conector system:masters -> cluster-admin en dos clusters
+   4 12,4–16,9 12/07 06:50  AWS IAM contra la base del Hub: la puerta (verde) no cede
+   5 16,9–21,6 12/07 23:08  token de GitHub App, pull request bloqueado */
+M.scene({ duration: 22, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed: { cycle: 8, bright: 0.7, sub: 0.25 } } }, async (tl, M) => {
+  const $ = (s) => document.querySelector(s);
+  const cv = $('#cv'), ctx = cv.getContext('2d');
+  { const g = $('#grain').getContext('2d'); const im = g.createImageData(512, 512); const rn = M.rng(5);
+    for (let i = 0; i < im.data.length; i += 4) { const v = 128 + (rn() - 0.5) * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+    g.putImageData(im, 0, 0); }
+  const F_H = '700 92px "League Spartan"', F_L = '500 42px "DM Sans"', F_S = '500 28px "DM Mono"', F_T = '500 26px "DM Mono"';
+  await Promise.all([
+    document.fonts.load(F_H, 'Movimiento lateral Red corporativa Llave maestra La puerta no cede Otro intento bloqueado'),
+    document.fonts.load(F_L, 'Lee la MongoDB interna, solo lecturas. Se une a la VPN de malla.'),
+    document.fonts.load(F_S, '11 JUL · 19:59 UTC'), document.fonts.load(F_T, 'MONGODB SYSTEM:MASTERS HUB GITHUB')]);
+
+  const { PAL, rgba, bloom, bg, text } = Neon;
+  const TAU = Math.PI * 2;
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, m) => a + (b - a) * m;
+  const seg = (t, a, b) => clamp((t - a) / (b - a));
+  const eA = gsap.parseEase('apple'), eO = gsap.parseEase('appleOut'), eI = gsap.parseEase('appleIn');
+  const mix = (c1, c2, m) => [lerp(c1[0], c2[0], m), lerp(c1[1], c2[1], m), lerp(c1[2], c2[2], m)];
+
+  // ---------- geometría (todo el cuadro) ----------
+  const O = { x: 220, y: 560, r: 58 };                 // nodo con root (rojo) + enjambre
+  const MG = { x: 520, y: 340 };                        // MongoDB
+  const MESH = { x: 830, y: 560 };                      // VPN de malla
+  const CN = { x: 1130, y: 560, r: 38 };                // conector
+  const CA = { x: 1310, y: 350 }, CB = { x: 1310, y: 770 };   // dos clusters
+  const GATE_X = 1650, DB = { x: 1770, y: 560 };        // puerta y base del Hub
+  const GH = { x: 1540, y: 840 }, BAR_X = 1720, BOX = { x: 1790, y: 840 };
+  const BEATS = [
+    { a: 0.4, b: 4.2, h: 'Movimiento lateral', hc: PAL.INK, l: 'Lee la MongoDB interna, solo lecturas.', s: '11 JUL · 19:59 UTC' },
+    { a: 4.2, b: 8.0, h: 'Red corporativa', hc: PAL.INK, l: 'Se une a la VPN de malla.', s: '11 JUL · 21:23 UTC' },
+    { a: 8.0, b: 12.4, h: 'Llave maestra', hc: PAL.AMBER, l: 'Cluster-admin en dos clusters en un segundo.', s: '11 JUL · 22:43 UTC' },
+    { a: 12.4, b: 16.9, h: 'La puerta no cede', hc: PAL.GREEN, l: 'El intento vía IAM falla: lista de permitidos.', s: '12 JUL · 06:50 UTC' },
+    { a: 16.9, b: 21.6, h: 'Otro intento bloqueado', hc: PAL.GREEN, l: 'Pull request con token de GitHub App: bloqueado.', s: '12 JUL · 23:08 UTC' },
+  ];
+
+  // malla: centro + anillo de 6 + anillo de 6 (13 dispositivos)
+  const MN = [{ x: 0, y: 0 }];
+  for (let k = 0; k < 6; k++) MN.push({ x: Math.cos(k * TAU / 6) * 72, y: Math.sin(k * TAU / 6) * 72 });
+  for (let k = 0; k < 6; k++) MN.push({ x: Math.cos(k * TAU / 6 + TAU / 12) * 138, y: Math.sin(k * TAU / 6 + TAU / 12) * 138 });
+  const MORD = [0, 1, 7, 2, 8, 3, 9, 4, 10, 5, 11, 6, 12];   // orden de alta
+  // cluster: centro + 6
+  const CL = [{ x: 0, y: 0 }];
+  for (let k = 0; k < 6; k++) CL.push({ x: Math.cos(k * TAU / 6 + TAU / 12) * 82, y: Math.sin(k * TAU / 6 + TAU / 12) * 82 });
+  const CORD = [0, 1, 3, 5, 2, 4, 6];
+  // enjambre alrededor del origen
+  const r = M.rng(11), SW = [];
+  for (let i = 0; i < 16; i++) SW.push({ ph: r() * TAU, rad: 84 + r() * 42, sp: 0.5 + r() * 0.8, s: 2 + r() * 1.8 });
+  // chispas al chocar con la puerta
+  const rb = M.rng(23), BURST = [];
+  for (let i = 0; i < 12; i++) BURST.push({ ang: Math.PI + (rb() - 0.5) * 2.0, sp: 90 + rb() * 150, s: 2 + rb() * 2 });
+
+  const HIT = [13.9, 15.8], T_FLIP = 9.6;
+
+  // ---------- sonido ----------
+  M.sfx(0.55, 'tick', { gain: -2 });
+  M.sfx(1.3, 'scan', { dur: 0.7, from: 500, to: 2200, q: 4 });
+  M.sfx(2.1, 'tap', { deg: 2, oct: 5, bright: 0.7 });
+  M.sfx(4.35, 'tick', { gain: -2 });
+  M.sfx(4.6, 'scan', { dur: 0.8, from: 500, to: 2400, q: 4 });
+  M.sfx(5.4, 'grow', { dur: 1.7, density: 90 });
+  M.sfx(8.05, 'tick', { gain: -2 });
+  M.sfx(8.2, 'scan', { dur: 0.6, from: 600, to: 2600, q: 4 });
+  M.sfx(T_FLIP - 1.1, 'riser', { dur: 1.1, semis: 7 });
+  M.sfx(T_FLIP, 'impact', { weight: 0.8, gain: -3 });
+  M.sfx(12.45, 'tick', { gain: -2 });
+  M.sfx(HIT[0], 'tap', { deg: 4, oct: 5, bright: 0.8 });
+  M.sfx(HIT[1], 'tap', { deg: 7, oct: 5, bright: 0.8 });
+  M.sfx(16.95, 'tick', { gain: -2 });
+  M.sfx(17.7, 'tap', { deg: 2, oct: 5, bright: 0.7 });
+  M.sfx(19.55, 'tap', { deg: 9, oct: 5, bright: 0.8 });
+  [[0.3, 4.2], [4.2, 8], [8, 12.4], [12.4, 16.9], [16.9, 21.6]].forEach(([a, b]) => tl.to({ v: 0 }, { v: 1, duration: b - a, ease: 'none' }, a));
+  tl.fromTo('#fade', { opacity: 1 }, { opacity: 0, duration: 0.5, ease: 'appleOut' }, 0);
+  tl.to('#fade', { opacity: 1, duration: 0.33, ease: 'appleIn' }, 21.67);
+
+  // ---------- utilidades de dibujo ----------
+  const hexPath = (x, y, rr, rot) => { ctx.beginPath(); for (let i = 0; i < 6; i++) { const a = rot + i * TAU / 6; const px = x + Math.cos(a) * rr, py = y + Math.sin(a) * rr; i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); } ctx.closePath(); };
+  const glow = (col, b, a) => { ctx.shadowColor = rgba(col, a); ctx.shadowBlur = b; };
+  const noGlow = () => { ctx.shadowBlur = 0; ctx.shadowColor = 'transparent'; };
+  const edge = (a, b, ra, rb) => { const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy); return [[a.x + dx / d * ra, a.y + dy / d * ra], [b.x - dx / d * rb, b.y - dy / d * rb]]; };
+  const link = (p, u, col, a, w) => { if (u <= 0 || a <= 0.004) return; ctx.strokeStyle = rgba(col, a); ctx.lineWidth = w; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(p[0][0], p[0][1]); ctx.lineTo(lerp(p[0][0], p[1][0], u), lerp(p[0][1], p[1][1], u)); ctx.stroke(); };
+  const packet = (p, u, col, a, sz) => { if (u <= 0 || u >= 1 || a <= 0.004) return;
+    for (let k = 0; k < 5; k++) { const uu = u - k * 0.028; if (uu < 0) break;
+      ctx.fillStyle = rgba(k ? col : PAL.INK, a * (1 - k / 5) * (k ? 0.8 : 1)); ctx.beginPath();
+      ctx.arc(lerp(p[0][0], p[1][0], uu), lerp(p[0][1], p[1][1], uu), sz * (1 - k * 0.14), 0, TAU); ctx.fill(); } };
+  const cyl = (x, y, w, h, col, a, lw) => {   // base de datos (cilindro)
+    const ry = h * 0.17; ctx.lineWidth = lw; ctx.strokeStyle = rgba(col, a); ctx.fillStyle = rgba(PAL.BG, 0.94);
+    ctx.beginPath(); ctx.moveTo(x - w / 2, y - h / 2 + ry); ctx.lineTo(x - w / 2, y + h / 2 - ry);
+    ctx.ellipse(x, y + h / 2 - ry, w / 2, ry, 0, Math.PI, 0, true); ctx.lineTo(x + w / 2, y - h / 2 + ry);
+    ctx.ellipse(x, y - h / 2 + ry, w / 2, ry, 0, 0, TAU, true); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(x, y - h / 2 + ry, w / 2, ry, 0, 0, Math.PI); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(x, y + 0.02 * h, w / 2, ry, 0, 0, Math.PI); ctx.globalAlpha = 0.55; ctx.stroke(); ctx.globalAlpha = 1; };
+  const lbl = (s, x, y, col, a) => text(ctx, s, x, y, F_T, col, a, { align: 'center', spacing: '5px', glow: 8 });
+  // foco: ventana con subida y bajada suaves
+  const fw = (t, a, b) => eO(seg(t, a, a + 0.45)) * (1 - eA(seg(t, b - 0.5, b)));
+
+  const MONGO_P = edge(O, MG, O.r + 8, 56), MESH_P = edge(O, MESH, O.r + 8, 150);
+  const MESHCN_P = edge(MESH, CN, 150, CN.r + 8);
+  const CA_P = edge(CN, CA, CN.r + 6, 128), CB_P = edge(CN, CB, CN.r + 6, 128);
+  const GATE_P = [[CN.x + CN.r + 14, CN.y], [GATE_X - 22, CN.y]];
+  const TOKEN_P = edge(CB, GH, 128, 56);
+  const PR_P = [[GH.x + 70, GH.y], [BAR_X - 26, GH.y]];
+
+  M.onFrame((t) => {
+    bg(ctx, t, { grid: 0.045 * eO(seg(t, 0.2, 1.2)) });
+    const scaf = eO(seg(t, 0.4, 1.5));
+    // nivel base de un elemento: andamio tenue -> tocado -> foco
+    const lvl = (touch, f0, f1) => 0.24 * scaf + 0.17 * eO(seg(t, touch, touch + 0.45)) + 0.59 * fw(t, f0, f1);
+
+    // ===== clusters (HF) =====
+    [[CA, CA_P], [CB, CB_P]].forEach(([C, P], ci) => {
+      const L = lvl(T_FLIP, 9.3, 12.4);
+      const st = CL.map((n, i) => { const ft = T_FLIP + CORD.indexOf(i) * 0.14; return { n, m: eO(seg(t, ft, ft + 0.22)) }; });
+      ctx.lineWidth = 2;
+      for (let i = 1; i < 7; i++) for (const j of [0, i % 6 + 1]) {
+        const m = Math.min(st[i].m, st[j].m); ctx.strokeStyle = rgba(mix(PAL.GREEN, PAL.RED, m), L * 0.55);
+        ctx.beginPath(); ctx.moveTo(C.x + CL[i].x, C.y + CL[i].y); ctx.lineTo(C.x + CL[j].x, C.y + CL[j].y); ctx.stroke(); }
+      for (const s of st) {
+        const col = mix(PAL.GREEN, PAL.RED, s.m); ctx.lineWidth = 3;
+        if (L > 0.7) glow(col, 14, L * 0.8);
+        hexPath(C.x + s.n.x, C.y + s.n.y, 30, Math.PI / 6); ctx.fillStyle = rgba(mix(PAL.BG, PAL.RED, s.m * 0.28), 0.95); ctx.fill();
+        ctx.strokeStyle = rgba(col, L); ctx.stroke(); noGlow();
+      }
+    });
+
+    // ===== MongoDB =====
+    { const L = lvl(2.0, 1.9, 4.2), m = eO(seg(t, 2.0, 2.5));
+      cyl(MG.x, MG.y, 100, 112, mix(PAL.GREEN, PAL.AMBER, m), L, 3.5);
+      lbl('MONGODB', MG.x, MG.y - 98, PAL.AMBER, 0.2 + 0.8 * L * eO(seg(t, 1.6, 2.2))); }
+
+    // ===== malla =====
+    { const lines = [];
+      for (let i = 1; i < 7; i++) { lines.push([0, i]); lines.push([i, i % 6 + 1]); }
+      for (let i = 7; i < 13; i++) { lines.push([i - 6, i]); lines.push([(i - 6) % 6 + 1, i]); lines.push([i, (i - 6) % 6 + 7]); }
+      const en = MN.map((n, i) => { const et = 5.4 + MORD.indexOf(i) * 0.12; return eO(seg(t, et, et + 0.3)); });
+      const L = lvl(5.4, 4.6, 8.0);
+      ctx.lineWidth = 1.6;
+      for (const [i, j] of lines) { const m = Math.min(en[i], en[j]);
+        ctx.strokeStyle = rgba(mix(PAL.GREEN, PAL.CYAN, m), L * 0.6);
+        ctx.beginPath(); ctx.moveTo(MESH.x + MN[i].x, MESH.y + MN[i].y); ctx.lineTo(MESH.x + MN[j].x, MESH.y + MN[j].y); ctx.stroke(); }
+      MN.forEach((n, i) => { const col = mix(PAL.GREEN, PAL.CYAN, en[i]), x = MESH.x + n.x, y = MESH.y + n.y;
+        const pop = 1 + 0.9 * Math.exp(-Math.max(0, t - (5.4 + MORD.indexOf(i) * 0.12)) * 7) * (t >= 5.4 ? 1 : 0);
+        if (L > 0.7) glow(col, 12, 0.8);
+        ctx.fillStyle = rgba(col, L); ctx.beginPath(); ctx.arc(x, y, (i ? 10 : 13) * pop, 0, TAU); ctx.fill(); noGlow(); }); }
+
+    // ===== enlaces del enjambre (cian) y paquetes =====
+    link(MONGO_P, eA(seg(t, 1.3, 2.0)), PAL.CYAN, 0.35 + 0.55 * fw(t, 1.3, 4.2), 3);
+    link(MESH_P, eA(seg(t, 4.6, 5.4)), PAL.CYAN, 0.35 + 0.55 * fw(t, 4.6, 8.0), 3);
+    link(MESHCN_P, eA(seg(t, 8.2, 8.8)), PAL.CYAN, 0.35 + 0.55 * fw(t, 8.2, 12.4), 3);
+    packet(MONGO_P, eA(seg(t, 1.3, 2.0)), PAL.CYAN, 0.9, 6);
+    packet(MESH_P, eA(seg(t, 4.6, 5.4)), PAL.CYAN, 0.9, 6);
+    packet(MESHCN_P, eA(seg(t, 8.2, 8.8)), PAL.CYAN, 0.9, 6);
+    // lecturas: puntos ámbar que vuelven de la base al origen
+    { const rf = 0.9 * fw(t, 2.3, 4.2) + 0.25 * eO(seg(t, 2.3, 3)) * (1 - fw(t, 2.3, 4.2));
+      if (t > 2.4) for (let k = 0; k < 5; k++) { const u = ((t - 2.4) / 1.1 + k / 5) % 1; if (rf > 0.01) packet([MONGO_P[1], MONGO_P[0]], u, PAL.AMBER, rf, 5); } }
+
+    // ===== conector system:masters =====
+    { const m = eO(seg(t, 8.8, 9.3)), L = lvl(8.8, 8.7, 11.2), col = mix(PAL.GREEN, PAL.AMBER, m);
+      if (L > 0.7) glow(col, 16, 0.85);
+      ctx.save(); ctx.translate(CN.x, CN.y); ctx.rotate(Math.PI / 4); ctx.lineWidth = 3.5; ctx.fillStyle = rgba(PAL.BG, 0.95);
+      ctx.strokeStyle = rgba(col, L); ctx.beginPath(); ctx.rect(-CN.r * 0.78, -CN.r * 0.78, CN.r * 1.56, CN.r * 1.56); ctx.fill(); ctx.stroke(); ctx.restore();
+      // llave
+      ctx.lineWidth = 3.5; ctx.strokeStyle = rgba(col, L); ctx.beginPath(); ctx.arc(CN.x - 12, CN.y, 8, 0, TAU);
+      ctx.moveTo(CN.x - 4, CN.y); ctx.lineTo(CN.x + 18, CN.y); ctx.moveTo(CN.x + 10, CN.y); ctx.lineTo(CN.x + 10, CN.y + 8); ctx.moveTo(CN.x + 18, CN.y); ctx.lineTo(CN.x + 18, CN.y + 7); ctx.stroke(); noGlow();
+      lbl('SYSTEM:MASTERS', CN.x, CN.y + 96, PAL.AMBER, 0.25 + 0.75 * L * eO(seg(t, 8.6, 9.2))); }
+    // dos enlaces de golpe + onda
+    { const u = eA(seg(t, 9.2, 9.6)); const a = 0.4 + 0.6 * fw(t, 9.2, 12.4);
+      link(CA_P, u, PAL.RED, a, 4); link(CB_P, u, PAL.RED, a, 4);
+      const w = seg(t, T_FLIP, T_FLIP + 1.0);
+      if (w > 0 && w < 1) { ctx.strokeStyle = rgba(PAL.RED, 0.8 * (1 - w)); ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(CN.x, CN.y, CN.r + 10 + 160 * eO(w), 0, TAU); ctx.stroke(); } }
+
+    // ===== origen: nodo con root + enjambre =====
+    { const oa = scaf * (0.8 + 0.2 * Math.sin(t * 2.2));
+      glow(PAL.RED, 18, 0.85 * scaf);
+      hexPath(O.x, O.y, O.r, Math.PI / 6); ctx.fillStyle = rgba(mix(PAL.BG, PAL.RED, 0.22), 0.96); ctx.fill();
+      ctx.lineWidth = 4; ctx.strokeStyle = rgba(PAL.RED, oa); ctx.stroke(); noGlow();
+      ctx.fillStyle = rgba(PAL.INK, scaf); ctx.beginPath(); ctx.arc(O.x, O.y, 8, 0, TAU); ctx.fill();
+      ctx.strokeStyle = rgba(PAL.CYAN, 0.9 * scaf); ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(O.x, O.y, 17 + 3 * Math.sin(t * 4), 0, TAU); ctx.stroke();
+      for (const p of SW) { const a = p.ph + t * p.sp; ctx.fillStyle = rgba(PAL.CYAN, 0.7 * scaf);
+        ctx.beginPath(); ctx.arc(O.x + Math.cos(a) * p.rad, O.y + Math.sin(a) * p.rad * 0.78, p.s, 0, TAU); ctx.fill(); } }
+
+    // ===== la puerta (verde) y la base de producción del Hub =====
+    { const flash = HIT.reduce((s, h) => s + (t >= h ? Math.exp(-(t - h) * 3.2) : 0), 0);
+      const L = clamp(lvl(12.5, 12.5, 16.9) + 0.0), La = clamp(L + 0.5 * flash);
+      const wob = 0;
+      glow(PAL.GREEN, 10 + 22 * flash, La);
+      ctx.lineWidth = 4 + 2 * flash; ctx.strokeStyle = rgba(PAL.GREEN, La); ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(GATE_X, 400); ctx.lineTo(GATE_X, 508); ctx.moveTo(GATE_X, 612); ctx.lineTo(GATE_X, 720); ctx.stroke();
+      // hoja de la puerta, con candado
+      ctx.fillStyle = rgba(mix(PAL.BG, PAL.GREEN, 0.18 + 0.2 * flash), 0.96); ctx.beginPath(); ctx.rect(GATE_X - 16 + wob, 516, 32, 88); ctx.fill(); ctx.stroke();
+      ctx.lineWidth = 3.5; ctx.beginPath(); ctx.arc(GATE_X, 548, 8, Math.PI, 0); ctx.stroke();
+      ctx.fillStyle = rgba(PAL.GREEN, La); ctx.beginPath(); ctx.rect(GATE_X - 10, 548, 20, 20); ctx.fill();
+      noGlow();
+      cyl(DB.x, DB.y, 92, 112, PAL.GREEN, clamp(L * 0.9 + 0.2 * flash), 3.5);
+      lbl('HUB', DB.x, DB.y + 100, PAL.GREEN, clamp(0.2 + 0.8 * L) * eO(seg(t, 1.0, 1.8)));
+      // ondas verdes al fallar
+      HIT.forEach((h) => { const w = seg(t, h, h + 0.9); if (w > 0 && w < 1) { ctx.strokeStyle = rgba(PAL.GREEN, 0.85 * (1 - w)); ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(GATE_X, 560, 40 + 150 * eO(w), -1.2, 1.2); ctx.stroke(); ctx.beginPath(); ctx.arc(GATE_X, 560, 40 + 150 * eO(w), Math.PI - 1.2, Math.PI + 1.2); ctx.stroke(); } }); }
+    // intentos rojos contra la puerta
+    { const aT = 0.45 + 0.55 * fw(t, 12.6, 16.9);
+      HIT.forEach((h, i) => { const s0 = h - 0.95, u = eI(seg(t, s0, h));
+        if (t >= s0 - 0.1 && t < h + 0.8) {
+          ctx.strokeStyle = rgba(PAL.RED, 0.35 * aT * eO(seg(t, s0, s0 + 0.3))); ctx.lineWidth = 2; ctx.setLineDash([10, 12]);
+          ctx.beginPath(); ctx.moveTo(GATE_P[0][0], GATE_P[0][1]); ctx.lineTo(GATE_P[1][0], GATE_P[1][1]); ctx.stroke(); ctx.setLineDash([]);
+          packet(GATE_P, u, PAL.RED, aT, 7); }
+        const dt = t - h; if (dt > 0 && dt < 0.8) for (const b of BURST) { const k = eO(dt / 0.8); ctx.fillStyle = rgba(PAL.RED, 0.9 * (1 - dt / 0.8));
+          ctx.beginPath(); ctx.arc(GATE_X - 24 + Math.cos(b.ang) * b.sp * k, 560 + Math.sin(b.ang) * b.sp * k, b.s, 0, TAU); ctx.fill(); } }); }
+
+    // ===== GitHub: token y pull request =====
+    { const La = 0.24 * scaf + 0.76 * fw(t, 17.0, 21.6) * 0.6 + 0.17 * eO(seg(t, 17.6, 18.0));
+      const L = clamp(La + 0.4 * fw(t, 17.2, 21.6)), m = eO(seg(t, 18.3, 18.7));
+      const col = mix(PAL.GREEN, PAL.AMBER, m * (1 - eO(seg(t, 19.3, 19.7))));
+      if (L > 0.7) glow(col, 16, 0.85);
+      ctx.lineWidth = 3.5; ctx.fillStyle = rgba(PAL.BG, 0.95); ctx.strokeStyle = rgba(col, L);
+      ctx.beginPath(); ctx.arc(GH.x, GH.y, 52, 0, TAU); ctx.fill(); ctx.stroke();
+      // ramas
+      ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(GH.x - 14, GH.y - 24); ctx.lineTo(GH.x - 14, GH.y + 24); ctx.moveTo(GH.x - 14, GH.y + 2); ctx.quadraticCurveTo(GH.x + 14, GH.y + 2, GH.x + 14, GH.y - 14); ctx.stroke();
+      [[-14, -24], [-14, 24], [14, -18]].forEach(([dx, dy]) => { ctx.beginPath(); ctx.arc(GH.x + dx, GH.y + dy, 6, 0, TAU); ctx.fillStyle = rgba(PAL.BG, 1); ctx.fill(); ctx.stroke(); });
+      noGlow();
+      lbl('GITHUB', GH.x, GH.y - 80, PAL.GREEN, clamp(0.2 + 0.8 * L));
+      // cadena de suministro (cajas sin rótulo) tras la barrera
+      const fl = [19.55].reduce((s, h) => s + (t >= h ? Math.exp(-(t - h) * 3.2) : 0), 0);
+      const Lb = clamp(0.24 * scaf + 0.17 * eO(seg(t, 17.6, 18)) + 0.5 * fw(t, 19.0, 21.6) + 0.45 * fl);
+      glow(PAL.GREEN, 8 + 22 * fl, Lb); ctx.strokeStyle = rgba(PAL.GREEN, Lb); ctx.lineWidth = 4 + 2 * fl; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(BAR_X, GH.y - 62); ctx.lineTo(BAR_X, GH.y + 62); ctx.stroke(); noGlow();
+      ctx.lineWidth = 3; ctx.strokeStyle = rgba(PAL.GREEN, clamp(Lb * 0.9));
+      [[-22, -16], [4, -16], [-22, 10], [4, 10]].forEach(([dx, dy]) => { ctx.beginPath(); ctx.rect(BOX.x + dx - 6, BOX.y + dy - 8, 22, 22); ctx.stroke(); });
+      const w = seg(t, 19.55, 20.45); if (w > 0 && w < 1) { ctx.strokeStyle = rgba(PAL.GREEN, 0.85 * (1 - w)); ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(BAR_X, GH.y, 30 + 120 * eO(w), Math.PI - 1.1, Math.PI + 1.1); ctx.stroke(); }
+      // token ámbar (cluster B -> GitHub)
+      link(TOKEN_P, eA(seg(t, 17.3, 18.0)), PAL.AMBER, 0.3 + 0.6 * fw(t, 17.3, 19.2), 3);
+      packet(TOKEN_P, eA(seg(t, 17.3, 18.0)), PAL.AMBER, 0.95, 7);
+      // tarjeta del pull request (cian) hacia la barrera
+      const pu = eI(seg(t, 18.9, 19.55)), pa = clamp(eO(seg(t, 18.7, 19.0))) * (1 - eO(seg(t, 19.6, 20.1)));
+      if (pa > 0.01) { const px = lerp(PR_P[0][0], PR_P[1][0], pu), py = PR_P[0][1];
+        ctx.fillStyle = rgba(PAL.BG, 0.95 * pa); ctx.strokeStyle = rgba(PAL.CYAN, pa); ctx.lineWidth = 3; glow(PAL.CYAN, 12, pa);
+        ctx.beginPath(); ctx.roundRect(px - 24, py - 17, 48, 34, 6); ctx.fill(); ctx.stroke(); noGlow();
+        ctx.beginPath(); ctx.moveTo(px - 14, py - 5); ctx.lineTo(px + 14, py - 5); ctx.moveTo(px - 14, py + 6); ctx.lineTo(px + 6, py + 6); ctx.stroke(); }
+      const dt = t - 19.55; if (dt > 0 && dt < 0.8) for (const b of BURST.slice(0, 8)) { const k = eO(dt / 0.8); ctx.fillStyle = rgba(PAL.CYAN, 0.9 * (1 - dt / 0.8));
+        ctx.beginPath(); ctx.arc(BAR_X - 28 + Math.cos(b.ang) * b.sp * 0.7 * k, GH.y + Math.sin(b.ang) * b.sp * 0.7 * k, b.s, 0, TAU); ctx.fill(); } }
+
+    // ===== texto: titular, leyenda y sello por beat =====
+    BEATS.forEach((B, i) => {
+      const last = i === BEATS.length - 1;
+      const inH = eO(seg(t, B.a + 0.05, B.a + 0.65)), outH = 1 - eI(seg(t, B.b - 0.4, B.b - 0.05));
+      const inL = eO(seg(t, B.a + 0.3, B.a + 0.9)), outL = 1 - eI(seg(t, B.b - 0.35, B.b - 0.05));
+      const e = (last ? 1 - eI(seg(t, 21.35, 21.65)) : outH);
+      const aH = inH * e, aL = inL * (last ? 1 - eI(seg(t, 21.3, 21.6)) : outL);
+      text(ctx, B.h, 120, 150 - 16 * (1 - inH), F_H, B.hc, aH, { glow: 12 });
+      text(ctx, B.l, 120, 990 + 12 * (1 - inL), F_L, PAL.INK, aL * 0.95, { glow: 6 });
+      text(ctx, B.s, 1800, 130, F_S, PAL.INK, aH * 0.9, { align: 'right', spacing: '3px', glow: 8 });
+    });
+    bloom(ctx, cv, { k: 0.72 });
+  });
+});
+</script>
+</body>
+</html>

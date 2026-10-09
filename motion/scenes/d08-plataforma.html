@@ -59,7 +59,7 @@ M.scene({ duration: 18, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed:
   const EW = 170, EH = 120;
   const GAP = { x: SB.x + SB.w, y: 580 };                   // salida del sandbox (ya abierta, ver d04)
   const route = [[GAP.x, GAP.y], [640, 560], [820, 610], [1000, 560], [1180, 610], [EX.x - EW / 2, EX.y]];
-  const R1 = [780, 430], R2 = [1020, 740], R3 = [1240, 430];
+  const R1 = [780, 430], R2 = [1020, 740], R3 = [1170, 430];
   const hop = [[GAP.x, GAP.y], R1, R2, R3, [EX.x - EW / 2, EX.y]];
   const mkLen = (p) => { const L = [0]; for (let i = 1; i < p.length; i++) L.push(L[i - 1] + Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1])); return L; };
   const LR = mkLen(route), LH = mkLen(hop);

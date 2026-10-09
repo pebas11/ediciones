@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>D12 · Acciones por día</title>
+<link rel="stylesheet" href="../lib/theme.css">
+<link rel="stylesheet" href="../lib/fonts-spartan.css">
+<style>
+  body { background: #05070D; }
+  #cv { position: absolute; inset: 0; }
+  #grain { position: absolute; inset: -20px; opacity: 0.05; mix-blend-mode: overlay; pointer-events: none; }
+  #vig { position: absolute; inset: 0; background: radial-gradient(120% 110% at 50% 48%, transparent 50%, rgba(2,3,6,0.7) 100%); pointer-events: none; }
+  #fade { position: absolute; inset: 0; background: #05070D; opacity: 1; }
+</style>
+</head>
+<body>
+<div id="world">
+  <canvas id="cv" width="1920" height="1080"></canvas>
+  <div id="vig"></div>
+  <canvas id="grain" width="512" height="512" style="width:1960px;height:1120px"></canvas>
+  <div id="fade"></div>
+</div>
+<script src="../node_modules/gsap/dist/gsap.min.js"></script>
+<script src="../node_modules/gsap/dist/SplitText.min.js"></script>
+<script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
+<script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
+<script src="../lib/stage.js"></script>
+<script src="../lib/audio.js"></script>
+<script src="../lib/neon.js"></script>
+<script>
+/* D12 · Acciones por día (20 s, sin voz)
+   1 0,4-7     cinco barras cian crecen (9 a 13/07); leyenda: 17.600 acciones, 6.280 grupos
+   2 7-12,3    foco en 11/07: cifra 7.677 grande
+   3 12,4-19,5 foco en 12/07: enjambre de puntos en movimiento que se congela a la vez (≈01:30 UTC) */
+M.scene({ duration: 20, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed: { cycle: 8, bright: 0.7, sub: 0.25 } } }, async (tl, M) => {
+  const $ = (s) => document.querySelector(s);
+  const cv = $('#cv'), ctx = cv.getContext('2d');
+  { const g = $('#grain').getContext('2d'); const im = g.createImageData(512, 512); const rn = M.rng(5);
+    for (let i = 0; i < im.data.length; i += 4) { const v = 128 + (rn() - 0.5) * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+    g.putImageData(im, 0, 0); }
+  const F_H = '700 92px "League Spartan"', F_V = '700 58px "League Spartan"', F_BIG = '800 190px "League Spartan"';
+  const F_L = '500 42px "DM Sans"', F_M = '500 30px "DM Mono"', F_S = '500 28px "DM Mono"';
+  await Promise.all([
+    document.fonts.load(F_H, 'Acciones por día 0123456789'), document.fonts.load(F_V, '0123456789.'), document.fonts.load(F_BIG, '7.677'),
+    document.fonts.load(F_L, 'El 12/07 la mayoría'), document.fonts.load(F_M, '09/07 ≈01:30 UTC acciones'), document.fonts.load(F_S, 'JUL UTC'),
+  ]);
+
+  const { PAL, rgba, bloom, bg, text } = Neon;
+  const TAU = Math.PI * 2;
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, m) => a + (b - a) * m;
+  const seg = (t, a, b) => clamp((t - a) / (b - a));
+  const eA = gsap.parseEase('apple'), eO = gsap.parseEase('appleOut'), eI = gsap.parseEase('appleIn');
+  const fmt = (n) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  // ventana de aparición con entrada y salida suaves
+  const win = (t, a, b, i = 0.55, o = 0.4) => eO(seg(t, a, a + i)) * (1 - eI(seg(t, b - o, b)));
+
+  // datos (FICHA-HF: acciones por día)
+  const DAYS = [['09/07', 3779], ['10/07', 1135], ['11/07', 7677], ['12/07', 3892], ['13/07', 1130]];
+  const BASE = 820, HMAX = 490, VMAX = 7677;
+  const SLOT = 328, X0 = 140, BW = 290;
+  const barX = (i) => X0 + i * SLOT + (SLOT - BW) / 2;
+  const T0 = 1.3, DT = 0.45, DG = 1.0;           // crecimiento de barras
+  const STOP = 14.8;                             // 12/07 ≈01:30 UTC
+  const MARK_X = X0 + 3 * SLOT + SLOT * (1.5 / 24);  // 01:30 dentro del día 12/07
+  // énfasis por barra en cada beat
+  const EM = [[0.8, 0.8, 0.8, 0.8, 0.8], [0.3, 0.3, 1, 0.3, 0.3], [0.28, 0.28, 0.4, 1, 0.28]];
+
+  // enjambre (beat 3)
+  const r = M.rng(23), DOTS = [];
+  for (let i = 0; i < 84; i++) DOTS.push({ x: 130 + r() * 1660, y: 214 + r() * 40, ph: r() * TAU, sp: 0.8 + r() * 1.6, ax: 6 + r() * 14, ay: 3 + r() * 5, s: 2.2 + r() * 2.2 });
+
+  // sonido: un motivo por idea
+  M.sfx(0.45, 'tick', { gain: -1 });
+  M.sfx(T0, 'grow', { dur: 3.0, density: 70 });
+  DAYS.forEach((d, i) => M.sfx(T0 + DT * i + DG * 0.8, 'tap', { deg: [0, 2, 4, 2, 0][i], oct: 5, bright: 0.7, gain: -2 }));
+  M.sfx(7.05, 'tick', { gain: -1 });
+  M.sfx(7.2, 'shimmer', { gain: -5 });
+  M.sfx(12.5, 'tick', { gain: -1 });
+  M.sfx(STOP - 1.3, 'riser', { dur: 1.3, semis: 7 });
+  M.sfx(STOP, 'impact', { weight: 0.8, gain: -3 });
+  tl.to({ v: 0 }, { v: 1, duration: 19.6, ease: 'none' }, 0);
+  tl.fromTo('#fade', { opacity: 1 }, { opacity: 0, duration: 0.5, ease: 'appleOut' }, 0);
+  tl.to('#fade', { opacity: 1, duration: 0.33, ease: 'appleIn' }, 19.6);
+
+  const HEAD = [[0.4, 6.8, 'Acciones por día'], [7.0, 12.2, '11/07: el día principal'], [12.4, 19.5, 'Todo se detiene a la vez']];
+  const SEAL = [[0.6, 6.8, '9–13 JUL · UTC'], [7.0, 12.2, '11 JUL · UTC'], [12.4, 19.5, '12 JUL · ≈01:30 UTC']];
+  const LEG = [[1.0, 6.8, ['Unas 17.600 acciones en unos 6.280 grupos, del 9 al 13 de julio.']],
+               [7.2, 12.2, ['El 11 de julio fue el día principal de la campaña.']],
+               [12.6, 19.5, ['El 12/07, a las ≈01:30 UTC,', 'la mayoría de los agentes se detiene a la vez.']]];
+
+  M.onFrame((t) => {
+    bg(ctx, t, { grid: 0.04 * eO(seg(t, 0.2, 1.2)) });
+    const chartA = eO(seg(t, 0.4, 1.2)) * (1 - eI(seg(t, 19.1, 19.55)));
+
+    // textos de cada beat
+    HEAD.forEach(([a, b, s]) => text(ctx, s, 120, 150 + 14 * (1 - eO(seg(t, a, a + 0.6))), F_H, PAL.INK, win(t, a, b, 0.6, 0.35), { glow: 8 }));
+    SEAL.forEach(([a, b, s]) => text(ctx, s, 1800, 108, F_S, PAL.CYAN, win(t, a, b, 0.5, 0.35) * 0.9, { align: 'right', spacing: '4px', glow: 12 }));
+    LEG.forEach(([a, b, ls]) => ls.forEach((s, k) => text(ctx, s, 120, ls.length === 1 ? 980 : 928 + 52 * k, F_L, PAL.INK, win(t, a + 0.12 * k, b, 0.6, 0.35) * 0.95, { glow: 4 })));
+
+    // rejilla tenue y línea base
+    ctx.save(); ctx.globalAlpha = chartA;
+    ctx.strokeStyle = rgba(PAL.INK, 0.07); ctx.lineWidth = 1; ctx.beginPath();
+    [2000, 4000, 6000].forEach((v) => { const y = BASE - HMAX * v / VMAX + 0.5; ctx.moveTo(X0, y); ctx.lineTo(X0 + 5 * SLOT, y); });
+    ctx.stroke();
+    ctx.strokeStyle = rgba(PAL.INK, 0.4); ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(X0, BASE + 1); ctx.lineTo(X0 + 5 * SLOT * eO(seg(t, 0.5, 1.5)), BASE + 1); ctx.stroke();
+    ctx.restore();
+
+    // énfasis interpolado entre beats
+    const m1 = eA(seg(t, 7.0, 7.8)), m2 = eA(seg(t, 12.4, 13.2));
+    const em = (i) => t < 10 ? lerp(EM[0][i], EM[1][i], m1) : lerp(EM[1][i], EM[2][i], m2);
+
+    // barras
+    DAYS.forEach(([lab, v], i) => {
+      const g = eO(seg(t, T0 + DT * i, T0 + DT * i + DG));
+      const h = HMAX * v / VMAX * g, x = barX(i), y = BASE - h, e = em(i), hot = e > 0.9;
+      if (h > 0.5) {
+        ctx.save(); ctx.globalAlpha = chartA;
+        ctx.fillStyle = rgba(PAL.CYAN, (0.1 + 0.2 * (hot ? 1 : 0)) * (0.4 + 0.6 * e)); ctx.fillRect(x, y, BW, h);
+        ctx.strokeStyle = rgba(PAL.CYAN, 0.35 + 0.65 * e); ctx.lineWidth = hot ? 4 : 3;
+        if (hot) { ctx.shadowColor = rgba(PAL.CYAN, 0.9); ctx.shadowBlur = 18; }
+        ctx.strokeRect(x, y, BW, h);
+        ctx.fillStyle = rgba(hot ? PAL.INK : PAL.CYAN, 0.45 + 0.55 * e); ctx.fillRect(x, y - 3, BW, 6);
+        ctx.restore();
+      }
+      // valor sobre la barra (el 11/07 cede el lugar a la cifra grande en el beat 2)
+      let la = eO(seg(t, T0 + DT * i + 0.3, T0 + DT * i + DG)) * (0.45 + 0.55 * e) * chartA;
+      if (i === 2) la *= 1 - win(t, 7.4, 12.2, 0.5, 0.5);
+      text(ctx, fmt(v * g), x + BW / 2, y - 24, F_V, PAL.INK, la, { align: 'center', glow: hot ? 12 : 4 });
+      text(ctx, lab, x + BW / 2, 876, F_M, hot ? PAL.CYAN : PAL.INK, eO(seg(t, T0 + DT * i - 0.2, T0 + DT * i + 0.5)) * (0.4 + 0.5 * e) * chartA, { align: 'center', spacing: '2px', glow: hot ? 10 : 0 });
+    });
+
+    // beat 2: cifra protagonista junto a la barra del 11/07
+    const bw = win(t, 7.4, 12.2, 0.7, 0.5);
+    if (bw > 0.01) {
+      const yT = BASE - HMAX;
+      ctx.save(); ctx.globalAlpha = bw; ctx.strokeStyle = rgba(PAL.CYAN, 0.9); ctx.lineWidth = 3; ctx.beginPath();
+      ctx.moveTo(barX(2) + BW + 6, yT); ctx.lineTo(barX(2) + BW + 6 + 52 * eO(seg(t, 7.4, 8.1)), yT); ctx.stroke(); ctx.restore();
+      text(ctx, '7.677', 1180, 420 + 16 * (1 - eO(seg(t, 7.4, 8.1))), F_BIG, PAL.CYAN, bw, { glow: 20 });
+      text(ctx, 'acciones', 1190, 468, F_M, PAL.INK, bw * 0.85, { spacing: '4px', glow: 6 });
+    }
+
+    // beat 3: enjambre que se congela a la vez
+    const dA = eO(seg(t, 12.7, 13.5)) * (1 - eI(seg(t, 19.1, 19.55)));
+    if (dA > 0.01) {
+      const tt = Math.min(t, STOP), dead = eO(seg(t, STOP, STOP + 0.35));
+      const a = dA * lerp(0.85, 0.22, dead);
+      for (const p of DOTS) {
+        const x = p.x + Math.sin(tt * p.sp + p.ph) * p.ax, y = p.y + Math.cos(tt * p.sp * 1.3 + p.ph) * p.ay;
+        ctx.fillStyle = rgba(PAL.CYAN, a); ctx.beginPath(); ctx.arc(x, y, p.s, 0, TAU); ctx.fill();
+      }
+    }
+    // marca del instante de la parada
+    if (t >= STOP) {
+      const d = eO(seg(t, STOP, STOP + 0.45)), mA = 1 - eI(seg(t, 19.1, 19.55));
+      const yTop = 300, y = lerp(yTop, BASE, 1 - d);
+      ctx.save(); ctx.globalAlpha = mA; ctx.strokeStyle = rgba(PAL.INK, 0.95); ctx.lineWidth = 3;
+      ctx.shadowColor = rgba(PAL.INK, 0.8); ctx.shadowBlur = 12; ctx.beginPath(); ctx.moveTo(MARK_X, BASE + 12); ctx.lineTo(MARK_X, y); ctx.stroke();
+      const rp = seg(t, STOP, STOP + 1.2);
+      ctx.shadowBlur = 0; ctx.strokeStyle = rgba(PAL.INK, 0.6 * (1 - rp)); ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(MARK_X, BASE, 10 + 150 * eO(rp), Math.PI, TAU); ctx.stroke();
+      ctx.restore();
+      text(ctx, '≈01:30 UTC', MARK_X + 18, yTop + 12, F_M, PAL.INK, eO(seg(t, STOP + 0.3, STOP + 0.9)) * mA, { spacing: '3px', glow: 10 });
+    }
+    bloom(ctx, cv, { k: 0.75 });
+  });
+});
+</script>
+</body>
+</html>
