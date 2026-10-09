@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>C01 · Tokens</title>
+<link rel="stylesheet" href="../lib/theme.css">
+<link rel="stylesheet" href="../lib/fonts-spartan.css">
+<style>
+  /* Serie LLM, escena 1. Misma lámina que b03: grafito, trazo hueso, colores funcionales apagados. */
+  body { background: #15171A; }
+  #cv { position: absolute; inset: 0; }
+  #grain { position: absolute; inset: -20px; opacity: 0.05; mix-blend-mode: overlay; pointer-events: none; }
+  #vig { position: absolute; inset: 0; background: radial-gradient(120% 110% at 50% 48%, transparent 55%, rgba(8,9,10,0.55) 100%); pointer-events: none; }
+  #fade { position: absolute; inset: 0; background: #15171A; opacity: 1; }
+</style>
+</head>
+<body>
+<div id="world">
+  <canvas id="cv" width="1920" height="1080"></canvas>
+  <div id="vig"></div>
+  <canvas id="grain" width="512" height="512" style="width:1960px;height:1120px"></canvas>
+  <div id="fade"></div>
+</div>
+<script src="../node_modules/gsap/dist/gsap.min.js"></script>
+<script src="../node_modules/gsap/dist/SplitText.min.js"></script>
+<script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
+<script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
+<script src="../lib/stage.js"></script>
+<script src="../lib/audio.js"></script>
+<script>
+/* Storyboard (14 s, sin voz). Texto en pantalla: "El gato se sentó en la" · TOKENS · 7 números · SOLO NÚMEROS.
+   1  0.55–3.3  la frase se tipea con cursor
+   2  3.3–4.7   cortes verticales entre palabras; cada palabra se vuelve un bloque (token)
+   3  5.4–6.9   "sentó" se parte en dos: sent | ó (un token no es una palabra)
+   4  6.9–9.4   cada bloque recibe su número ID debajo (DM Mono)
+   5  9.5–13.6  los bloques se van; los números suben, crecen y quedan solos: el modelo no ve letras */
+M.scene({ duration: 14, push: 0, audio: { key: 'D', mode: 'lydian', gain: 3, bed: { cycle: 8, bright: 0.8, sub: 0.15 } } }, async (tl, M) => {
+  const $ = (s) => document.querySelector(s);
+  const ctx = $('#cv').getContext('2d');
+  { const g = $('#grain').getContext('2d'); const im = g.createImageData(512, 512); const rn = M.rng(3);
+    for (let i = 0; i < im.data.length; i += 4) { const v = 128 + (rn() - 0.5) * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+    g.putImageData(im, 0, 0); }
+
+  /* fuentes: cargarlas de verdad antes de medir o dibujar (document.fonts.ready no basta si nadie las usó) */
+  const FS = 104, FSID = 30, FSBIG = 76;
+  const F_TOK = `600 ${FS}px "League Spartan"`, F_LAB = '500 26px "DM Mono"';
+  await Promise.all([document.fonts.load(F_TOK, 'El gato sentó ó'), document.fonts.load(`500 ${FSID}px "DM Mono"`, '0123456789'), document.fonts.load(F_LAB, 'TOKENS SOLO NÚMEROS')]);
+
+  /* ---------- paleta y utilidades (idénticas a b03) ---------- */
+  const BG = [21, 23, 26], BONE = [233, 230, 223], AMB = [201, 154, 75];
+  const rgba = (c, a) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${Math.max(0, Math.min(1, a)).toFixed(3)})`;
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, m) => a + (b - a) * m;
+  const seg = (t, a, b) => clamp((t - a) / (b - a));
+  const eA = gsap.parseEase('apple'), eO = gsap.parseEase('appleOut'), eI = gsap.parseEase('appleIn'), eSp = M.spring(0.15);
+  const spring = (t, a, d) => (t <= a ? 0 : eSp(clamp((t - a) / d)));
+  function line(ax, ay, bx, by, c, a, w, e = 1) {
+    if (a <= 0.004 || e <= 0 || w <= 0.05) return;
+    ctx.strokeStyle = rgba(c, a); ctx.lineWidth = w; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(ax + (bx - ax) * e, ay + (by - ay) * e); ctx.stroke();
+  }
+  function box(x0, y0, x1, y1, r, fillA, strokeA, sw = 1.6) {
+    if (x1 - x0 < 2) return;
+    ctx.beginPath(); ctx.roundRect(x0, y0, x1 - x0, y1 - y0, Math.min(r, (x1 - x0) / 2, (y1 - y0) / 2));
+    if (fillA > 0.004) { ctx.fillStyle = rgba(BG, 1); ctx.fill(); ctx.fillStyle = rgba(BONE, fillA); ctx.fill(); }
+    if (strokeA > 0.004) { ctx.strokeStyle = rgba(BONE, strokeA); ctx.lineWidth = sw; ctx.stroke(); }
+  }
+
+  /* ---------- tokens ---------- */
+  const TOK = [' El', ' gato', ' se', ' sent', 'ó', ' en', ' la'].map((s, i) => (i === 0 ? s.trim() : s));
+  const IDS = ['9370', '62470', '513', '1908', '78', '3059', '264'];
+  const NT = TOK.length, PAD = 22, GAP = 18, HH = 84, YT = 440;       // HH = medio alto del bloque
+  ctx.font = F_TOK;
+  const WTXT = TOK.map((s) => ctx.measureText(s.trim()).width);
+  const WSP = ctx.measureText(' ').width;
+  const hasSp = TOK.map((s) => s.startsWith(' '));
+  const STR = TOK.join('');                                            // "El gato se sentó en la"
+  const START = []; { let n = 0; TOK.forEach((s) => { START.push(n + (s.startsWith(' ') ? 1 : 0)); n += s.length; }); }
+
+  /* ---------- tiempos ---------- */
+  const rt = M.rng(11);
+  const TYPE0 = 0.55, TCH = []; { let t = TYPE0; for (let i = 0; i < STR.length; i++) { TCH.push(t); t += (STR[i] === ' ' ? 0.15 : 0.085) + rt() * 0.05; } }
+  const TYPE1 = TCH[TCH.length - 1];
+  const CUT0 = 3.3, CUTD = 0.55, CUTST = 0.1;                          // cortes entre palabras
+  const M0 = 3.95, MD = 0.8;                                           // palabras → bloques
+  const S0 = 5.45, S1 = 5.85, SD = 0.7;                                // corte sent|ó y separación
+  const I0 = 7.0, IST = 0.14, ID = 0.6;                                // números
+  const T0 = 9.6, TD = 1.15;                                           // transición a los números solos
+  const LAB0 = 4.35, LAB1 = 9.35, LABF0 = 10.5;
+
+  /* ---------- sonido ---------- */
+  [1, 4, 7, 10, 14, 17].forEach((end, k) => M.sfx(TCH[Math.min(end, TCH.length - 1)] + 0.02, 'tick', { gain: -13, pan: -0.5 + k * 0.2 }));
+  M.sfx(CUT0, 'scan', { dur: 0.7, from: 700, to: 2600, q: 5, gain: -8 });
+  M.sfx(M0 + 0.1, 'tap', { deg: 0, oct: 4, bright: 0.7, gain: -5 });
+  M.sfx(S1 - 0.05, 'tick', { gain: -4, pan: 0.1 });
+  M.sfx(S1 + 0.1, 'tap', { deg: 4, oct: 5, bright: 0.7, gain: -3 });
+  for (let i = 0; i < NT; i++) M.sfx(I0 + i * IST + 0.04, 'tap', { deg: [0, 2, 4, 2, 5, 4, 7][i], oct: 5, bright: 0.6, gain: -6, pan: -0.45 + i * 0.15 });
+  M.sfx(T0, 'whoosh', { dur: 0.9, peak: 0.35, gain: -9, dir: 1 });
+  M.sfx(T0 + TD, 'swell', { dur: 1.0, gain: -6 }).sfx(T0 + TD, 'impact', { weight: 0.75, deg: 0, oct: 3, gain: -2, dur: 2.0 });
+
+  /* ---------- tramos con movimiento (cues de qa) y fundidos ---------- */
+  [[0.3, TYPE1 + 0.3], [CUT0, S1 + SD + 0.2], [I0, I0 + 6 * IST + ID + 0.1], [T0, T0 + TD + 0.4]]
+    .forEach(([a, b]) => tl.to({ v: 0 }, { v: 1, duration: b - a, ease: 'none' }, a));
+  tl.fromTo('#fade', { opacity: 1 }, { opacity: 0, duration: 0.45, ease: 'appleOut' }, 0);
+  tl.to('#fade', { opacity: 1, duration: 0.33, ease: 'appleIn' }, 13.67);
+
+  /* ---------- fila final: números compactos, centrados ---------- */
+  ctx.font = `500 ${FSBIG}px "DM Mono"`;
+  const BW = IDS.map((s) => ctx.measureText(s).width), BGAP = 56;
+  const BTOT = BW.reduce((a, b) => a + b, 0) + BGAP * (NT - 1);
+  const BX = []; { let x = (1920 - BTOT) / 2; BW.forEach((w) => { BX.push(x + w / 2); x += w + BGAP; }); }
+  const YF = 540;
+
+  /* ---------- layout de la fila de tokens en el tiempo t ---------- */
+  function layout(t) {
+    const m = eA(seg(t, M0, M0 + MD));                                  // palabras → bloques con aire
+    const s2 = spring(t, S1, SD);                                       // sent | ó
+    const s2c = clamp(s2, 0, 1.12);
+    const P = [];
+    let total = 0;
+    for (let i = 0; i < NT; i++) {
+      const gap = i === 0 ? 0 : i === 4 ? GAP * s2c : lerp(hasSp[i] ? WSP : 0, GAP, m);
+      const pl = i === 4 ? PAD * s2c : PAD * m, pr = i === 3 ? PAD * s2c : PAD * m;
+      P.push({ gap, pl, pr, w: WTXT[i] }); total += gap + pl + WTXT[i] + pr;
+    }
+    let x = (1920 - total) / 2;
+    P.forEach((p) => { x += p.gap; p.bx0 = x; p.tx = x + p.pl; p.bx1 = x + p.pl + p.w + p.pr; x = p.bx1; p.cx = p.tx + p.w / 2; });
+    return { P, m, s2 };
+  }
+
+  /* ---------- dibujo por cuadro ---------- */
+  const DOTS = []; for (let x = 120; x <= 1800; x += 60) for (let y = 60; y <= 1020; y += 60) DOTS.push([x, y]);
+  function label(txt, x, y, a) {
+    if (a <= 0.004) return;
+    ctx.font = F_LAB; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    if (ctx.letterSpacing !== undefined) ctx.letterSpacing = '6px';
+    const w = ctx.measureText(txt).width;
+    ctx.fillStyle = rgba(BONE, 0.62 * a); ctx.fillText(txt, x + 3, y);
+    const rule = 56 * eO(a);
+    line(x - w / 2 - 28, y - 9, x - w / 2 - 28 - rule, y - 9, BONE, 0.3 * a, 1.4);
+    line(x + w / 2 + 28, y - 9, x + w / 2 + 28 + rule, y - 9, BONE, 0.3 * a, 1.4);
+    if (ctx.letterSpacing !== undefined) ctx.letterSpacing = '0px';
+  }
+
+  M.onFrame((t) => {
+    ctx.fillStyle = rgba(BG, 1); ctx.fillRect(0, 0, 1920, 1080);
+    ctx.fillStyle = rgba(BONE, 0.045); for (const [x, y] of DOTS) ctx.fillRect(x - 1, y - 1, 2, 2);
+
+    const { P, m, s2 } = layout(t);
+    const trans = eA(seg(t, T0, T0 + TD));                              // 0 → 1: tokens se van, números suben
+    const rowY = YT + 0 * trans;
+    const tokA = 1 - eI(seg(t, T0, T0 + 0.55));
+    ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
+
+    /* --- bloques --- */
+    if (tokA > 0.004 && m > 0.004) {
+      const sp = Math.min(1, s2);
+      const y0 = rowY - HH, y1 = rowY + HH, sh = 1 - 0.1 * trans;
+      for (let i = 0; i < NT; i++) {
+        const p = P[i];
+        const flash = i < NT ? Math.exp(-Math.max(0, t - (I0 + i * IST)) * 5) * (t >= I0 + i * IST ? 1 : 0) : 0;   // el bloque destella al recibir su ID
+        const fa = (0.07 + 0.09 * flash) * m * tokA, sa = (0.5 + 0.4 * flash) * m * tokA;
+        if (i === 3 || i === 4) continue;
+        box(p.bx0, y0, p.bx1, y1, 22, fa, sa);
+      }
+      // bloque de "sentó": uno solo, hasta que se parte
+      const a3 = P[3], a4 = P[4];
+      const fl3 = (t >= I0 + 3 * IST ? Math.exp(-(t - (I0 + 3 * IST)) * 5) : 0), fl4 = (t >= I0 + 4 * IST ? Math.exp(-(t - (I0 + 4 * IST)) * 5) : 0);
+      box(a3.bx0, y0, a4.bx1, y1, 22, (0.07) * m * tokA * (1 - sp), 0.5 * m * tokA * (1 - sp));
+      box(a3.bx0, y0, a3.bx1, y1, 22, (0.07 + 0.09 * fl3) * m * tokA * sp, (0.5 + 0.4 * fl3) * m * tokA * sp);
+      box(a4.bx0, y0, a4.bx1, y1, 22, (0.07 + 0.09 * fl4) * m * tokA * sp, (0.5 + 0.4 * fl4) * m * tokA * sp);
+    }
+
+    /* --- cortes entre palabras (antes de que existan los bloques) --- */
+    for (let k = 0; k < 5; k++) {                                       // 5 cortes de palabra: entre El|gato, gato|se, se|sent, ó|en, en|la
+      const i = [1, 2, 3, 5, 6][k], pL = P[i - 1], pR = P[i];
+      const x = (pL.tx + pL.w + pL.pr + pR.tx - pR.pl) / 2 - (m > 0 ? 0 : 0);
+      const cut0 = CUT0 + k * CUTST, e = eO(seg(t, cut0, cut0 + CUTD)), out = 1 - eA(seg(t, M0 + 0.1, M0 + 0.55));
+      line(x, rowY - HH - 6, x, rowY + HH + 6, BONE, 0.7 * out * tokA, 1.8, e);
+    }
+    {   // corte sent | ó, más marcado
+      const p3 = P[3], p4 = P[4], x = (p3.tx + p3.w + p3.pr + p4.tx - p4.pl) / 2;
+      const e = eO(seg(t, S0, S0 + 0.35)), out = 1 - eA(seg(t, S1 - 0.1, S1 + 0.25));
+      line(x, rowY - HH - 22, x, rowY + HH + 22, BONE, 0.95 * out * tokA, 2.4, e);
+    }
+
+    /* --- texto de los tokens (tipeado) --- */
+    ctx.font = F_TOK;
+    let cursorX = P[0].tx, cursorOn = false;
+    const typed = TCH.filter((c) => t >= c).length;
+    for (let i = 0; i < NT; i++) {
+      const p = P[i], vis = clamp(typed - START[i], 0, TOK[i].trim().length);
+      if (vis <= 0) continue;
+      const s = TOK[i].trim().slice(0, vis);
+      ctx.fillStyle = rgba(BONE, 0.96 * tokA);
+      ctx.fillText(s, p.tx, rowY + FS * 0.34);
+      cursorX = p.tx + ctx.measureText(s).width;
+    }
+    // cursor: fijo mientras se tipea, parpadea después y se retira cuando llegan los cortes
+    {
+      const ca = typed === 0 ? eO(seg(t, 0.25, 0.5)) : 1 - eA(seg(t, CUT0 + 0.05, CUT0 + 0.4));
+      const typing = t < TYPE1 + 0.25 && typed > 0;
+      const on = typing || typed === 0 ? true : Math.floor((t - TYPE1) / 0.5) % 2 === 0;
+      const x = typed === 0 ? P[0].tx : cursorX + 5;
+      if (on && ca > 0.004) { ctx.fillStyle = rgba(BONE, 0.8 * ca); ctx.fillRect(x, rowY - FS * 0.56, 4, FS * 1.0); }
+    }
+
+    /* --- rótulo TOKENS --- */
+    label('TOKENS', 960, 250, eO(seg(t, LAB0, LAB0 + 0.6)) * (1 - eI(seg(t, LAB1, LAB1 + 0.4))));
+
+    /* --- números ID: debajo de cada bloque; luego suben, crecen y quedan solos --- */
+    for (let i = 0; i < NT; i++) {
+      const a0 = I0 + i * IST, k = seg(t, a0, a0 + ID);
+      if (k <= 0) continue;
+      const p = P[i], ea = eO(k), rise = (1 - eO(k)) * 16;
+      // estado "debajo del token"
+      const yU = rowY + HH + 78 + rise, xU = p.cx, sU = FSID;
+      // estado final, compacto y grande
+      const xF = BX[i], yF = YF, sF = FSBIG;
+      const x = lerp(xU, xF, trans), y = lerp(yU, yF + sF * 0.34, trans) - (trans > 0 ? 0 : 0), sz = lerp(sU, sF, trans);
+      ctx.font = `500 ${sz.toFixed(1)}px "DM Mono"`; ctx.textAlign = 'center';
+      const warm = lerp(0.78, 0.96, trans);
+      ctx.fillStyle = rgba(BONE, warm * ea);
+      ctx.fillText(IDS[i], x, y);
+      // hilo fino del bloque al número
+      const la = 0.4 * eO(seg(t, a0, a0 + 0.35)) * (1 - eI(seg(t, T0, T0 + 0.45)));
+      line(p.cx, rowY + HH + 8, p.cx, rowY + HH + 8 + 36 * eO(seg(t, a0, a0 + 0.35)), BONE, la, 1.4);
+    }
+    ctx.textAlign = 'left';
+
+    /* --- rótulo final --- */
+    label('SOLO NÚMEROS', 960, 700, eO(seg(t, LABF0, LABF0 + 0.7)));
+  });
+});
+</script>
+</body>
+</html>

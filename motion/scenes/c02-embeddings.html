@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>C02 · Números a significado</title>
+<link rel="stylesheet" href="../lib/theme.css">
+<link rel="stylesheet" href="../lib/fonts-spartan.css">
+<style>
+  /* Serie LLM: grafito, trazo hueso, colores con significado fijo. */
+  body { background: #15171A; }
+  #cv { position: absolute; inset: 0; }
+  #grain { position: absolute; inset: -20px; opacity: 0.05; mix-blend-mode: overlay; pointer-events: none; }
+  #vig { position: absolute; inset: 0; background: radial-gradient(120% 110% at 50% 48%, transparent 55%, rgba(8,9,10,0.55) 100%); pointer-events: none; }
+  .fl { position: absolute; left: -999px; top: 0; opacity: 0; pointer-events: none; font-size: 20px; }
+  #fade { position: absolute; inset: 0; background: #15171A; opacity: 1; }
+</style>
+</head>
+<body>
+<div id="world">
+  <canvas id="cv" width="1920" height="1080"></canvas>
+  <div id="vig"></div>
+  <canvas id="grain" width="512" height="512" style="width:1960px;height:1120px"></canvas>
+  <span class="fl" style="font:600 20px 'League Spartan'">gato</span><span class="fl" style="font:500 20px 'DM Mono'">123</span>
+  <div id="fade"></div>
+</div>
+<script src="../node_modules/gsap/dist/gsap.min.js"></script>
+<script src="../node_modules/gsap/dist/SplitText.min.js"></script>
+<script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
+<script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
+<script src="../lib/stage.js"></script>
+<script src="../lib/audio.js"></script>
+<script>
+/* Storyboard (15 s, sin voz). Números -> vectores -> espacio de significado.
+   1  0.3–2.5   tres IDs (gato, perro, alfombra) como bloques con número; la palabra aparece debajo
+   2  2.5–4.7   cada ID se aplana en un vector de 12 barras con signo
+   3  4.4–6.2   rótulo SIGNIFICADO; aparece el espacio 3D (pizarra); cada vector vuela y queda como punto
+   4  6.5–9.4   se suman león, sofá, mesa, corre, salta: cúmulos; CERCA (gato-perro) y LEJOS (gato-alfombra)
+   5  9.4–14.6  cámara frontal; flecha gato→gatos (ámbar); se copia sobre perro y cae en perros: paralelogramo
+   Color: pizarra = espacio de significado, ámbar = lo derivado (flecha, plurales), hueso = palabras. */
+M.scene({ duration: 15, push: 0, audio: { key: 'D', mode: 'lydian', gain: 3, bed: { cycle: 8, bright: 0.8, sub: 0.15 } } }, (tl, M) => {
+  const $ = (s) => document.querySelector(s);
+  const ctx = $('#cv').getContext('2d');
+  { const g = $('#grain').getContext('2d'); const im = g.createImageData(512, 512); const rn = M.rng(3);
+    for (let i = 0; i < im.data.length; i += 4) { const v = 128 + (rn() - 0.5) * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+    g.putImageData(im, 0, 0); }
+
+  const BG = [21, 23, 26], BONE = [233, 230, 223], AMB = [201, 154, 75], SLATE = [122, 146, 178];
+  const TAU = Math.PI * 2;
+  const rgba = (c, a) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${Math.max(0, Math.min(1, a)).toFixed(3)})`;
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, m) => a + (b - a) * m;
+  const mixc = (A, B, m) => [lerp(A[0], B[0], m), lerp(A[1], B[1], m), lerp(A[2], B[2], m)];
+  const seg = (t, a, b) => clamp((t - a) / (b - a));
+  const eA = gsap.parseEase('apple'), eO = gsap.parseEase('appleOut'), eI = gsap.parseEase('appleIn'), eSp = M.spring(0.15);
+  const pop = (t, d, dur = 0.5) => (t <= d ? 0 : eSp(clamp((t - d) / dur)));
+
+  function line(ax, ay, bx, by, c, a, w, e = 1, dash) {
+    if (a <= 0.004 || e <= 0 || w <= 0.05) return;
+    ctx.strokeStyle = rgba(c, a); ctx.lineWidth = w; ctx.lineCap = 'round'; ctx.setLineDash(dash || []);
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(ax + (bx - ax) * e, ay + (by - ay) * e); ctx.stroke(); ctx.setLineDash([]);
+  }
+  function dot(x, y, r, c, a) { if (a <= 0.004 || r <= 0.1) return; ctx.fillStyle = rgba(c, a); ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill(); }
+  function ring(x, y, r, c, a, w = 2) { if (a <= 0.004 || r <= 0.1) return; ctx.strokeStyle = rgba(c, a); ctx.lineWidth = w; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.stroke(); }
+  const qpt = (p0, c, p1, k) => [lerp(lerp(p0[0], c[0], k), lerp(c[0], p1[0], k), k), lerp(lerp(p0[1], c[1], k), lerp(c[1], p1[1], k), k)];
+  function qcurve(p0, c, p1, col, a, w, e = 1, e0 = 0) {
+    if (a <= 0.004 || e <= e0) return; ctx.strokeStyle = rgba(col, a); ctx.lineWidth = w; ctx.lineCap = 'round'; ctx.beginPath();
+    const n = 40; let p = qpt(p0, c, p1, e0); ctx.moveTo(p[0], p[1]);
+    for (let i = 1; i <= n; i++) { p = qpt(p0, c, p1, lerp(e0, e, i / n)); ctx.lineTo(p[0], p[1]); } ctx.stroke();
+  }
+  function block(x, yc, w, hh, col, a, r = 14) {
+    if (a <= 0.004 || w <= 0.5 || hh <= 0.3) return;
+    ctx.beginPath(); ctx.roundRect(x, yc - hh, w, 2 * hh, Math.min(r, hh, w / 2));
+    ctx.fillStyle = rgba(BG, 1); ctx.fill(); ctx.fillStyle = rgba(col, a); ctx.fill();
+  }
+  const SP = '600 40px "League Spartan"', MO = '500 26px "DM Mono"';
+  function txt(s, x, y, font, col, a, align = 'left', ls = 0) {
+    if (a <= 0.004) return;
+    ctx.font = font; ctx.fillStyle = rgba(col, a); ctx.textAlign = align; ctx.textBaseline = 'middle'; ctx.letterSpacing = ls + 'px';
+    ctx.fillText(s, x, y); ctx.letterSpacing = '0px';
+  }
+
+  /* ---------- vectores (12 barras con signo) ---------- */
+  const rv = M.rng(19);
+  const WORDS = ['gato', 'perro', 'alfombra'], IDS = ['8.754', '11.302', '31.869'];
+  const VEC = WORDS.map(() => Array.from({ length: 12 }, () => (rv() < 0.5 ? -1 : 1) * (0.2 + 0.8 * rv())));
+  VEC[1] = VEC[0].map((v, n) => clamp(v + (rv() - 0.5) * 0.45, -1, 1));       // gato y perro: vectores parecidos
+  const RX = [560, 960, 1360], RY = 340, VW = 216;
+  const born = (i) => 0.35 + i * 0.14;
+  const V0 = 2.5, VST = 0.12, VD = 0.6, FLY0 = 4.7, FST = 0.22, FD = 0.95;
+  const FLY = (i) => FLY0 + i * FST;
+  const vecM = (i, t) => eA(seg(t, V0 + i * VST, V0 + i * VST + VD)) * (1 - eA(seg(t, FLY(i), FLY(i) + 0.55)));
+
+  /* ---------- espacio 3D ---------- */
+  const SC = 330, CX = 960, CYY = 560, F = 2600, FLOOR = -1.3;
+  const cam = (t) => { const s = seg(t, 4.4, 10.0), o = 1 - (1 - s) * (1 - s); return { yaw: -0.55 * (1 - o), pitch: lerp(0.36, 0.1, o) }; };
+  function proj(p, t) {
+    const { yaw, pitch } = cam(t), cY = Math.cos(yaw), sY = Math.sin(yaw), cP = Math.cos(pitch), sP = Math.sin(pitch);
+    const x1 = p[0] * cY + p[2] * sY, z1 = -p[0] * sY + p[2] * cY;
+    const y2 = p[1] * cP + z1 * sP, z2 = z1 * cP - p[1] * sP;
+    const s = F / (F + z2 * SC);
+    return [CX + x1 * SC * s, CYY - y2 * SC * s, s];
+  }
+  const D = [0.12, 0.9, 0];                                            // dirección plural (misma para gato y perro)
+  const add = (a, b, k = 1) => [a[0] + b[0] * k, a[1] + b[1] * k, a[2] + b[2] * k];
+  const P = {
+    gato: [-1.65, -0.1, 0], perro: [-0.85, -0.55, 0], alfombra: [1.5, -0.6, 0.2],
+    leon: [-1.95, -0.85, 0.7], sofa: [1.95, -0.1, -0.35], mesa: [1.15, 0.15, 0.55],
+    corre: [0.1, 1.0, -0.8], salta: [0.6, 0.8, -1.0],
+  };
+  P.gatos = add(P.gato, D); P.perros = add(P.perro, D);
+  // [clave, texto, aparece, cúmulo, dx, dy, align, importante]
+  const PTS = [
+    ['gato', 'gato', FLY(0) + FD, 0, -18, 0, 'right', 1], ['perro', 'perro', FLY(1) + FD, 0, 18, 0, 'left', 1], ['alfombra', 'alfombra', FLY(2) + FD, 1, 0, 40, 'center', 1],
+    ['leon', 'león', 6.6, 0, -18, 0, 'right', 0], ['sofa', 'sofá', 6.85, 1, 18, 0, 'left', 0], ['mesa', 'mesa', 7.1, 1, 0, -32, 'center', 0],
+    ['corre', 'corre', 7.35, 2, 0, -32, 'center', 0], ['salta', 'salta', 7.6, 2, 18, 0, 'left', 0],
+    ['gatos', 'gatos', 10.7, 0, -18, 0, 'right', 1], ['perros', 'perros', 12.7, 0, 18, 0, 'left', 1],
+  ];
+  const CLU = [['gato', 'perro', 'leon'], ['alfombra', 'sofa', 'mesa'], ['corre', 'salta']];
+  const spaceA = (t) => eO(seg(t, 4.4, 5.0)) * (1 - eI(seg(t, 14.55, 14.67)));
+
+  /* ---------- sonido ---------- */
+  for (let i = 0; i < 3; i++) M.sfx(born(i), 'tick', { gain: -8, pan: -0.4 + i * 0.4 });
+  M.sfx(V0, 'scan', { dur: 0.9, from: 600, to: 2400, q: 5, gain: -11 });
+  M.sfx(4.4, 'whoosh', { dur: 0.8, peak: 0.4, gain: -12, dir: 1 });
+  for (let i = 0; i < 3; i++) M.sfx(FLY(i) + FD, 'tap', { deg: [0, 2, 4][i], oct: 5, bright: 0.7, gain: -3, pan: -0.3 + i * 0.3 });
+  [6.6, 6.85, 7.1, 7.35, 7.6].forEach((a, k) => M.sfx(a, 'tick', { tone: 'glass', gain: -12 + (k % 2), pan: -0.4 + k * 0.2 }));
+  M.sfx(7.8, 'scan', { dur: 0.6, from: 700, to: 1800, q: 6, gain: -14 });
+  M.sfx(10.2, 'scan', { dur: 0.6, from: 700, to: 2200, q: 6, gain: -12, dir: -1 });
+  M.sfx(10.7, 'tap', { deg: 7, oct: 5, bright: 0.7, gain: -3 });
+  M.sfx(12.0, 'whoosh', { dur: 0.8, peak: 0.45, gain: -13, dir: 1 });
+  M.sfx(12.75, 'swell', { dur: 0.9, gain: -3 }).sfx(12.75, 'impact', { weight: 0.8, gain: -3 }).sfx(12.75, 'tap', { deg: 9, oct: 5, bright: 0.8, gain: -2 });
+
+  [[0.3, 1.0], [V0, FLY(2) + FD + 0.3], [6.5, 8.4], [9.3, 10.2], [10.2, 10.9], [12.0, 13.4]].forEach(([a, b]) => tl.to({ v: 0 }, { v: 1, duration: b - a, ease: 'none' }, a));
+  tl.fromTo('#fade', { opacity: 1 }, { opacity: 0, duration: 0.45, ease: 'appleOut' }, 0);
+  tl.to('#fade', { opacity: 1, duration: 0.33, ease: 'appleIn' }, 14.67);
+
+  const DOTS = []; for (let x = 120; x <= 1800; x += 60) for (let y = 60; y <= 1020; y += 60) DOTS.push([x, y]);
+
+  function arrow(a, b, t, col, al, w, e = 1) {
+    const pa = proj(a, t), pb = proj(b, t);
+    const tx = lerp(pa[0], pb[0], e), ty = lerp(pa[1], pb[1], e);
+    line(pa[0], pa[1], tx, ty, col, al, w);
+    if (e > 0.12 && al > 0.01) {
+      const ang = Math.atan2(pb[1] - pa[1], pb[0] - pa[0]), L = 18;
+      ctx.strokeStyle = rgba(col, al); ctx.lineWidth = w; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.beginPath(); ctx.moveTo(tx - Math.cos(ang - 0.45) * L, ty - Math.sin(ang - 0.45) * L); ctx.lineTo(tx, ty);
+      ctx.lineTo(tx - Math.cos(ang + 0.45) * L, ty - Math.sin(ang + 0.45) * L); ctx.stroke();
+    }
+  }
+
+  M.onFrame((t) => {
+    ctx.fillStyle = rgba(BG, 1); ctx.fillRect(0, 0, 1920, 1080);
+    ctx.fillStyle = rgba(BONE, 0.045); for (const [x, y] of DOTS) ctx.fillRect(x - 1, y - 1, 2, 2);
+
+    /* --- espacio: suelo, cúmulos, puntos --- */
+    const sa = spaceA(t);
+    if (sa > 0.004) {
+      const G = 8, R = 2.4;
+      for (let k = 0; k <= G; k++) {
+        const u = -R + (2 * R * k) / G, e = eO(seg(t, 4.4 + k * 0.03, 5.2 + k * 0.03)), edge = k === 0 || k === G;
+        const a = proj([u, FLOOR, -R], t), b = proj([u, FLOOR, R], t), c = proj([-R, FLOOR, u], t), d = proj([R, FLOOR, u], t);
+        line(a[0], a[1], b[0], b[1], SLATE, sa * (edge ? 0.45 : 0.17), edge ? 1.6 : 1, e);
+        line(c[0], c[1], d[0], d[1], SLATE, sa * (edge ? 0.45 : 0.17), edge ? 1.6 : 1, e);
+      }
+      // cúmulos: mancha plana muy tenue
+      const hullA = sa * eO(seg(t, 7.9, 8.6)) * (1 - 0.7 * eA(seg(t, 9.4, 10.2)));
+      if (hullA > 0.004) CLU.forEach((ks) => {
+        const ps = ks.map((k) => proj(P[k], t)), mx = ps.reduce((s, p) => s + p[0], 0) / ps.length, my = ps.reduce((s, p) => s + p[1], 0) / ps.length;
+        const rx = Math.max(...ps.map((p) => Math.abs(p[0] - mx))) + 86, ry = Math.max(...ps.map((p) => Math.abs(p[1] - my))) + 62;
+        ctx.fillStyle = rgba(SLATE, 0.075 * hullA); ctx.beginPath(); ctx.ellipse(mx, my, rx, ry, 0, 0, TAU); ctx.fill();
+        ctx.strokeStyle = rgba(SLATE, 0.2 * hullA); ctx.lineWidth = 1.2; ctx.setLineDash([3, 7]); ctx.stroke(); ctx.setLineDash([]);
+      });
+      // caídas al suelo
+      PTS.forEach(([k, , at, , , , , imp]) => {
+        const s = pop(t, at, 0.5); if (s <= 0.01) return;
+        const p = proj(P[k], t), f = proj([P[k][0], FLOOR, P[k][2]], t), da = sa * s * (imp ? 0.2 : 0.12);
+        line(p[0], p[1], f[0], f[1], SLATE, da, 1, 1, [2, 6]);
+        ctx.strokeStyle = rgba(SLATE, da * 1.6); ctx.lineWidth = 1; ctx.beginPath(); ctx.ellipse(f[0], f[1], 8, 3.2, 0, 0, TAU); ctx.stroke();
+      });
+      // cerca / lejos
+      const dA = sa * eO(seg(t, 7.9, 8.4)) * (1 - eI(seg(t, 9.2, 9.6)));
+      if (dA > 0.004) {
+        const g = proj(P.gato, t), p = proj(P.perro, t), a = proj(P.alfombra, t);
+        line(g[0], g[1], a[0], a[1], BONE, 0.34 * dA, 1.4, eO(seg(t, 8.1, 8.8)), [4, 9]);
+        line(g[0], g[1], p[0], p[1], BONE, 0.9 * dA, 2.2, eO(seg(t, 7.9, 8.3)));
+        txt('CERCA', (g[0] + p[0]) / 2 + 14, (g[1] + p[1]) / 2 + 34, MO, BONE, 0.9 * dA, 'left', 4);
+        txt('LEJOS', (g[0] + a[0]) / 2, (g[1] + a[1]) / 2 - 32, MO, BONE, 0.7 * dA * eO(seg(t, 8.5, 9)), 'center', 4);
+      }
+      // paralelogramo
+      const pl = proj(P.gatos, t), pr = proj(P.perros, t), pg = proj(P.gato, t), pp = proj(P.perro, t);
+      const fillA = sa * eA(seg(t, 12.9, 13.6));
+      if (fillA > 0.004) { ctx.fillStyle = rgba(SLATE, 0.11 * fillA); ctx.beginPath(); ctx.moveTo(pg[0], pg[1]); ctx.lineTo(pl[0], pl[1]); ctx.lineTo(pr[0], pr[1]); ctx.lineTo(pp[0], pp[1]); ctx.closePath(); ctx.fill(); }
+      const sideA = sa * eO(seg(t, 12.8, 13.1));
+      line(pg[0], pg[1], pp[0], pp[1], SLATE, 0.7 * sideA, 1.6, eO(seg(t, 12.85, 13.5)), [6, 8]);
+      line(pl[0], pl[1], pr[0], pr[1], SLATE, 0.7 * sideA, 1.6, eO(seg(t, 12.85, 13.5)), [6, 8]);
+      // flechas
+      const a1 = eA(seg(t, 10.2, 10.8)), arA = sa * eO(seg(t, 10.2, 10.35));
+      if (a1 > 0) arrow(P.gato, P.gatos, t, AMB, arA * 0.95, 3, a1);
+      const sl = eA(seg(t, 12.0, 12.75));
+      if (t >= 12.0) {
+        const o = add(P.perro, P.gato, -1), A = add(P.gato, o, sl), B = add(P.gatos, o, sl);
+        arrow(A, B, t, AMB, sa * (sl < 1 ? 0.6 : 0.95), 3, 1);
+        if (sl < 1) { const pa = proj(A, t), ph = proj(P.gato, t); line(ph[0], ph[1], pa[0], pa[1], AMB, 0.22 * sa, 1.2, 1, [2, 7]); }
+      }
+      // puntos
+      const labels = [];
+      PTS.forEach(([k, name, at, , dx, dy, al, imp]) => {
+        if (k === 'gatos' || k === 'perros') { /* se dibujan igual, color distinto */ }
+        const s = pop(t, at, 0.5); if (s <= 0.01) return;
+        const p = proj(P[k], t), der = k === 'gatos' || k === 'perros';
+        const col = der ? mixc(AMB, BONE, eA(seg(t, at + 0.5, at + 1.4))) : (imp ? BONE : mixc(SLATE, BONE, 0.45));
+        const r = (imp ? 8 : 6) * p[2] * s;
+        dot(p[0], p[1], r, col, sa);
+        if (imp) ring(p[0], p[1], 15 * p[2] * s, col, 0.5 * sa, 1.4);
+        const kr = seg(t, at, at + 0.6); if (kr < 1 && imp) ring(p[0], p[1], 16 + 34 * eO(kr), col, (1 - kr) * 0.5 * sa, 1.4);
+        labels.push([name, p[0] + dx, p[1] + dy, al, sa * eO(seg(t, at + 0.12, at + 0.5)) * (imp ? 1 : 0.75), imp]);
+      });
+      labels.forEach(([n, x, y, al, a, imp]) => txt(n, x, y, imp ? SP : '500 36px "League Spartan"', BONE, a, al));
+    }
+
+    /* --- título --- */
+    const ta = eO(seg(t, 4.3, 4.9)) * (1 - eI(seg(t, 14.55, 14.67)));
+    if (ta > 0.004) { dot(124, 128, 5, SLATE, ta); txt('SIGNIFICADO', 148, 128, '500 28px "DM Mono"', BONE, 0.85 * ta, 'left', 7); }
+
+    /* --- fila inicial: ID -> vector --- */
+    for (let i = 0; i < 3; i++) {
+      const b = born(i); if (t < b) continue;
+      const vm = vecM(i, t), x = RX[i], gone = t > FLY(i) + 0.55;
+      const grow = eO(seg(t, b, b + 0.34)), wordA = eO(seg(t, 1.0 + i * 0.1, 1.4 + i * 0.1)) * (1 - eA(seg(t, FLY(i) + 0.1, FLY(i) + 0.5)));
+      txt(WORDS[i], x, RY + 118, SP, BONE, 0.62 * wordA, 'center');
+      if (gone) continue;
+      const up = eA(seg(t, V0 + i * VST, V0 + i * VST + VD));
+      const flat = eA(seg(up, 0, 0.5)), bars = eO(seg(up, 0.4, 1)) * (vm / Math.max(up, 1e-4));
+      const w = 188 * grow, fw = lerp(w, VW, flat);
+      if (flat < 1 || vm > 0) {
+        block(x - fw / 2, RY, fw, Math.max(1.2, 46 * (1 - flat)), BONE, 0.94 * eO(seg(t, b, b + 0.2)) * (1 - 0.6 * flat), 12);
+        if (flat < 0.5) txt(IDS[i], x, RY + 2, '500 44px "DM Mono"', BG, 1 - flat * 2, 'center');
+      }
+      if (bars > 0.004 && up > 0.4) {
+        const bc = mixc(BONE, SLATE, eA(seg(t, FLY(i), FLY(i) + 0.4)));
+        for (let n = 0; n < 12; n++) {
+          const v = VEC[i][n] * bars * eO(seg(up, 0.4 + n * 0.02, 1)), bx = x - VW / 2 + (n + 0.5) * (VW / 12) - 4.5, h = 72 * Math.abs(v);
+          if (h < 0.5) continue;
+          ctx.fillStyle = rgba(bc, 0.92); ctx.beginPath(); ctx.roundRect(bx, v < 0 ? RY : RY - h, 9, h, 2.5); ctx.fill();
+        }
+      }
+    }
+
+    /* --- vuelo: el vector se vuelve punto --- */
+    for (let i = 0; i < 3; i++) {
+      const kf = seg(t, FLY(i), FLY(i) + FD); if (kf <= 0) continue;
+      const p1 = proj(P[PTS[i][0]], t), p0 = [RX[i], RY], c = [lerp(p0[0], p1[0], 0.5), Math.min(p0[1], p1[1]) - 150 - i * 20];
+      const e = eA(kf), trailA = sa * (1 - eI(seg(t, FLY(i) + FD, FLY(i) + FD + 0.5)));
+      qcurve(p0, c, p1, SLATE, 0.5 * trailA, 1.6, e, Math.max(0, e - 0.4));
+      if (kf < 1) { const p = qpt(p0, c, p1, e); dot(p[0], p[1], 7, BONE, 1); }
+    }
+  });
+});
+</script>
+</body>
+</html>
