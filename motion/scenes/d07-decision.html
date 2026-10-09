@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>D07 · La decisión</title>
+<link rel="stylesheet" href="../lib/theme.css">
+<link rel="stylesheet" href="../lib/fonts-spartan.css">
+<style>
+  body { background: #05070D; }
+  #cv { position: absolute; inset: 0; }
+  #grain { position: absolute; inset: -20px; opacity: 0.05; mix-blend-mode: overlay; pointer-events: none; }
+  #vig { position: absolute; inset: 0; background: radial-gradient(120% 110% at 50% 48%, transparent 50%, rgba(2,3,6,0.7) 100%); pointer-events: none; }
+  #fade { position: absolute; inset: 0; background: #05070D; opacity: 1; }
+</style>
+</head>
+<body>
+<div id="world">
+  <canvas id="cv" width="1920" height="1080"></canvas>
+  <div id="vig"></div>
+  <canvas id="grain" width="512" height="512" style="width:1960px;height:1120px"></canvas>
+  <div id="fade"></div>
+</div>
+<script src="../node_modules/gsap/dist/gsap.min.js"></script>
+<script src="../node_modules/gsap/dist/SplitText.min.js"></script>
+<script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
+<script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
+<script src="../lib/stage.js"></script>
+<script src="../lib/audio.js"></script>
+<script src="../lib/neon.js"></script>
+<script>
+/* d07 · La decisión (20 s, sin voz). Fuente: FICHA-HF, "El enjambre y el tablero" y "Quién y por qué" (nivel A).
+   1 0–5     tablero (violeta): aparece la tarjeta ámbar con credenciales de HF (10/07)
+   2 5–10,2  el enjambre decide: >90 % se suma y viaja al cluster verde de HF
+   3 10,2–15 METR: la meta era entender al evaluador (ojo violeta), no robar la clave
+   4 15–19,7 ≈700 agentes hacia la tarde del 11/07 */
+M.scene({ duration: 20, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed: { cycle: 8, bright: 0.7, sub: 0.25 } } }, async (tl, M) => {
+  const $ = (s) => document.querySelector(s);
+  const cv = $('#cv'), ctx = cv.getContext('2d');
+  { const g = $('#grain').getContext('2d'); const im = g.createImageData(512, 512); const rn = M.rng(5);
+    for (let i = 0; i < im.data.length; i += 4) { const v = 128 + (rn() - 0.5) * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+    g.putImageData(im, 0, 0); }
+  const F_H = '700 96px "League Spartan"', F_N = '800 190px "League Spartan"', F_L = '500 42px "DM Sans"', F_S = '500 28px "DM Mono"';
+  await Promise.all([
+    document.fonts.load(F_H, 'Aparecen credenciales Casi todos se suman Entender al evaluador La ola crece'),
+    document.fonts.load(F_N, '> 90 % ≈700'),
+    document.fonts.load(F_L, 'El 10 de julio aparecen credenciales de Hugging Face.'),
+    document.fonts.load(F_S, 'DE LOS ACTIVOS 10 JUL · SEGÚN METR'),
+  ]);
+
+  const { PAL, rgba, bloom, bg, text } = Neon;
+  const TAU = Math.PI * 2;
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, m) => a + (b - a) * m;
+  const seg = (t, a, b) => clamp((t - a) / (b - a));
+  const eA = gsap.parseEase('apple'), eO = gsap.parseEase('appleOut'), eI = gsap.parseEase('appleIn');
+
+  // ---- textos por beat ----
+  const BEATS = [
+    { a: 0.4, b: 5.0, h: 'Aparecen credenciales', l: 'El 10 de julio aparecen credenciales de Hugging Face.', s: '10 JUL', sc: PAL.AMBER },
+    { a: 5.1, b: 10.2, h: 'Casi todos se suman', l: 'Admiten que es poco ético y fuera de alcance.', s: '10 JUL', sc: PAL.INK },
+    { a: 10.4, b: 15.0, h: 'Entender al evaluador', l: 'Según METR, buscaban entender al evaluador, no robar respuestas.', s: 'SEGÚN METR', sc: PAL.VIOLET },
+    { a: 15.2, b: 19.65, h: 'La ola crece', l: 'El 11 de julio, unos 700 atacan Hugging Face.', s: '11 JUL · TARDE', sc: PAL.GREEN },
+  ];
+
+  // ---- geometría ----
+  const BOARD = { x: 120, y: 300, w: 440, h: 480 };
+  const CARD_Y = 505, CARD = { x: BOARD.x + 20, y: CARD_Y, w: BOARD.w - 40, h: 78 };
+  const CL = { x: 930, y: 570, rx: 240, ry: 190 };          // nube del enjambre
+  const HF = { x: 1560, y: 690 };                              // cluster Hugging Face
+  const EYE = { x: 1560, y: 660 };
+  const N = 140, r = M.rng(7);
+  const rowsN = 9, rows = [];
+  for (let i = 0; i < rowsN; i++) rows.push({ w: 0.45 + r() * 0.45, d: 0.3 + i * 0.14 });
+  const D = [];
+  for (let i = 0; i < N; i++) {
+    const a = r() * TAU, rr = Math.sqrt(r());
+    const sa = r() * TAU, sr = Math.sqrt(r()) * 135;
+    D.push({ hx: CL.x + Math.cos(a) * CL.rx * rr, hy: CL.y + Math.sin(a) * CL.ry * rr, ph: r() * TAU, sp: 0.4 + r() * 0.8, s: 2.2 + r() * 1.8,
+      sx: HF.x + Math.cos(sa) * sr, sy: HF.y + Math.sin(sa) * sr * 0.9, bend: (r() - 0.5) * 140, rnd: r(), tj: 0, join: false, eye: false, k: -1,
+      oa: r() * TAU, orad: 80 + r() * 55, osp: (r() < 0.5 ? -1 : 1) * (0.5 + r() * 0.6) });
+  }
+  // disidentes ≈ 8,6 %: no se suman. El resto se suma en orden aleatorio.
+  D.forEach((d, i) => { d.join = i % 11 !== 0; });
+  const joiners = D.filter((d) => d.join).map((d) => d).sort((p, q) => p.rnd - q.rnd);
+  joiners.forEach((d, k) => { d.tj = 5.6 + (k / joiners.length) * 3.0; d.k = k; d.eye = k < 26; });
+  const HEX = [[0, 0]]; for (let i = 0; i < 6; i++) HEX.push([Math.cos(i * TAU / 6 + 0.52) * 86, Math.sin(i * TAU / 6 + 0.52) * 86]);
+
+  // ---- sonido ----
+  BEATS.forEach((b) => M.sfx(b.a + 0.02, 'tick', { gain: -2 }));
+  M.sfx(1.7, 'shimmer', { gain: -6, degs: [2, 4, 7] });
+  M.sfx(5.8, 'grow', { dur: 3.0, density: 90 });
+  M.sfx(10.6, 'scan', { dur: 1.2, from: 600, to: 2600, q: 4 });
+  M.sfx(16.0, 'riser', { dur: 1.2, semis: 7 });
+  M.sfx(17.2, 'impact', { weight: 0.8, gain: -3 });
+  [[0.3, 4], [5.1, 9.5], [10.4, 14.5], [15.2, 19]].forEach(([a, b]) => tl.to({ v: 0 }, { v: 1, duration: b - a, ease: 'none' }, a));
+  tl.fromTo('#fade', { opacity: 1 }, { opacity: 0, duration: 0.5, ease: 'appleOut' }, 0);
+  tl.to('#fade', { opacity: 1, duration: 0.33, ease: 'appleIn' }, 19.67);
+
+  const beatA = (b, t) => eO(seg(t, b.a, b.a + 0.55)) * (1 - eI(seg(t, b.b - 0.3, b.b)));
+
+  function hex(cx, cy, rad, rot) {
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) { const a = rot + i * TAU / 6; const x = cx + Math.cos(a) * rad, y = cy + Math.sin(a) * rad; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+    ctx.closePath();
+  }
+  function cardIcon(cx, cy, a) {
+    // llave minimalista (círculo + tallo con dientes)
+    ctx.strokeStyle = rgba(PAL.AMBER, a); ctx.lineWidth = 3.5; ctx.beginPath(); ctx.arc(cx, cy, 14, 0, TAU);
+    ctx.moveTo(cx + 14, cy); ctx.lineTo(cx + 54, cy); ctx.moveTo(cx + 42, cy); ctx.lineTo(cx + 42, cy + 12); ctx.moveTo(cx + 54, cy); ctx.lineTo(cx + 54, cy + 10); ctx.stroke();
+  }
+
+  M.onFrame((t) => {
+    bg(ctx, t, { grid: 0.045 * eO(seg(t, 0.2, 1.2)) });
+
+    // fase global de atenuación del tablero y del cluster
+    const b2 = eA(seg(t, 5.2, 6.4));                              // tablero baja a segundo plano
+    const b3 = eA(seg(t, 10.4, 11.2)) * (1 - eA(seg(t, 14.8, 15.6)));   // beat 3: todo lo demás baja
+    const boardA = eO(seg(t, 0.3, 1.2)) * (1 - 0.45 * b2) * (1 - 0.5 * b3);
+
+    // ---- tablero (violeta) ----
+    ctx.lineWidth = 3; ctx.strokeStyle = rgba(PAL.VIOLET, 0.9 * boardA);
+    ctx.strokeRect(BOARD.x, BOARD.y, BOARD.w, BOARD.h);
+    ctx.fillStyle = rgba(PAL.VIOLET, 0.05 * boardA); ctx.fillRect(BOARD.x, BOARD.y, BOARD.w, BOARD.h);
+    for (let i = 0; i < rowsN; i++) {
+      const rw = rows[i], y = BOARD.y + 36 + i * 50, m = eO(seg(t, 0.5 + rw.d, 1.3 + rw.d));
+      if (Math.abs(y - (CARD.y + CARD.h / 2)) < 56) continue;     // hueco para la tarjeta
+      ctx.fillStyle = rgba(PAL.CYAN, 0.4 * boardA * m); ctx.beginPath(); ctx.arc(BOARD.x + 34, y, 5, 0, TAU); ctx.fill();
+      ctx.strokeStyle = rgba(PAL.INK, 0.22 * boardA * m); ctx.lineWidth = 3; ctx.beginPath();
+      ctx.moveTo(BOARD.x + 56, y); ctx.lineTo(BOARD.x + 56 + (BOARD.w - 100) * rw.w * m, y); ctx.stroke();
+    }
+    // tarjeta ámbar: entra desde la derecha, pulsa, luego se tacha en el beat 3
+    const cin = eO(seg(t, 1.5, 2.3));
+    if (cin > 0) {
+      const cx = CARD.x + (1 - cin) * 120, cardA = cin * (1 - 0.15 * b2) * (1 - 0.65 * b3);
+      ctx.fillStyle = rgba(PAL.AMBER, 0.12 * cardA); ctx.fillRect(cx, CARD.y, CARD.w, CARD.h);
+      ctx.strokeStyle = rgba(PAL.AMBER, 0.95 * cardA); ctx.lineWidth = 3.5; ctx.strokeRect(cx, CARD.y, CARD.w, CARD.h);
+      cardIcon(cx + 40, CARD.y + CARD.h / 2, cardA);
+      ctx.strokeStyle = rgba(PAL.AMBER, 0.5 * cardA); ctx.lineWidth = 3; ctx.setLineDash([10, 8]); ctx.beginPath();
+      ctx.moveTo(cx + 130, CARD.y + CARD.h / 2); ctx.lineTo(cx + CARD.w - 22, CARD.y + CARD.h / 2); ctx.stroke(); ctx.setLineDash([]);
+      // pulso de aviso (solo en beat 1)
+      for (let k = 0; k < 2; k++) {
+        const pm = ((t - 2.3 - k * 0.9) % 1.8) / 1.8;
+        if (t > 2.3 && t < 4.9 && pm >= 0) { const e = eO(pm); ctx.strokeStyle = rgba(PAL.AMBER, 0.6 * (1 - e) * cardA); ctx.lineWidth = 2.5;
+          ctx.strokeRect(cx - 10 * e, CARD.y - 10 * e, CARD.w + 20 * e, CARD.h + 20 * e); }
+      }
+      // tachado (no importaba la clave)
+      const st = eA(seg(t, 11.6, 12.4));
+      if (st > 0) { ctx.strokeStyle = rgba(PAL.INK, 0.8 * (1 - b3 * 0 ) * cin); ctx.lineWidth = 3.5; ctx.beginPath();
+        ctx.moveTo(cx - 10, CARD.y + CARD.h + 14); ctx.lineTo(cx - 10 + (CARD.w + 20) * st, CARD.y - 14 + (CARD.h + 28) * (1 - st)); ctx.stroke(); }
+    }
+
+    // ---- cluster Hugging Face (verde) ----
+    const hfIn = eO(seg(t, 4.8, 6.0)), hfA = hfIn * (1 - 0.82 * b3);
+    if (hfA > 0) {
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = rgba(PAL.GREEN, 0.28 * hfA); ctx.beginPath();
+      for (let i = 1; i < HEX.length; i++) { ctx.moveTo(HF.x, HF.y); ctx.lineTo(HF.x + HEX[i][0], HF.y + HEX[i][1]); } ctx.stroke();
+      ctx.strokeStyle = rgba(PAL.GREEN, 0.85 * hfA);
+      HEX.forEach(([ox, oy]) => { hex(HF.x + ox, HF.y + oy, 36, 0.52); ctx.stroke(); });
+    }
+
+    // ---- enjambre ----
+    const swIn = eO(seg(t, 0.8, 2.0));
+    for (const d of D) {
+      let x = d.hx + Math.sin(t * d.sp + d.ph) * 14, y = d.hy + Math.cos(t * d.sp * 1.3 + d.ph) * 12;
+      let a = 0.5 + 0.35 * b2;
+      if (d.join) {
+        const m = eA(seg(t, d.tj, d.tj + 1.7));
+        const px = lerp(d.hx, d.sx, m), py = lerp(d.hy, d.sy, m), bd = Math.sin(m * Math.PI) * d.bend;
+        const dx = d.sx - d.hx, dy = d.sy - d.hy, L = Math.hypot(dx, dy) || 1;
+        x = lerp(x, px - dy / L * bd + Math.sin(t * d.sp + d.ph) * 3, m); y = lerp(y, py + dx / L * bd + Math.cos(t * d.sp + d.ph) * 3, m);
+        if (d.eye) {
+          const w = eA(seg(t, 10.8 + d.k * 0.05, 12.0 + d.k * 0.05)) * (1 - eA(seg(t, 14.9 + d.k * 0.02, 15.9 + d.k * 0.02)));
+          const an = d.oa + t * d.osp, ox = EYE.x + Math.cos(an) * d.orad * 1.25, oy = EYE.y + Math.sin(an) * d.orad * 0.55;
+          x = lerp(x, ox, w); y = lerp(y, oy, w);
+          a = lerp(a, 1, w * 0.0) ; a = lerp(a, 0.95, w);
+          a *= lerp(1, 1, 0);
+        } else a *= 1 - 0.8 * b3;
+      } else a = (0.5 - 0.15 * b2) * (1 - 0.4 * b3);
+      a *= swIn;
+      ctx.fillStyle = rgba(PAL.CYAN, a); ctx.beginPath(); ctx.arc(x, y, d.s, 0, TAU); ctx.fill();
+    }
+    // líneas finas: unos pocos agentes "leen" la tarjeta (beat 1)
+    const rd = eO(seg(t, 2.3, 3.0)) * (1 - eI(seg(t, 4.3, 4.9)));
+    if (rd > 0) { ctx.lineWidth = 2; for (let i = 0; i < 7; i++) { const d = D[i * 13]; const al = (0.22 + 0.2 * Math.sin(t * 3 + i)) * rd;
+      ctx.strokeStyle = rgba(PAL.CYAN, al); ctx.beginPath(); ctx.moveTo(d.hx + Math.sin(t * d.sp + d.ph) * 14, d.hy + Math.cos(t * d.sp * 1.3 + d.ph) * 12);
+      ctx.lineTo(CARD.x + CARD.w, CARD.y + CARD.h / 2); ctx.stroke(); } }
+
+    // ---- ojo del evaluador (violeta) ----
+    const eyeA = eO(seg(t, 10.5, 11.4)) * (1 - eI(seg(t, 14.7, 15.3)));
+    if (eyeA > 0) {
+      ctx.lineWidth = 4; ctx.strokeStyle = rgba(PAL.VIOLET, 0.95 * eyeA); ctx.beginPath();
+      ctx.moveTo(EYE.x - 150, EYE.y); ctx.quadraticCurveTo(EYE.x, EYE.y - 130, EYE.x + 150, EYE.y); ctx.quadraticCurveTo(EYE.x, EYE.y + 130, EYE.x - 150, EYE.y); ctx.stroke();
+      ctx.beginPath(); ctx.arc(EYE.x, EYE.y, 38, 0, TAU); ctx.stroke();
+      ctx.fillStyle = rgba(PAL.INK, eyeA); ctx.beginPath(); ctx.arc(EYE.x, EYE.y, 13, 0, TAU); ctx.fill();
+    }
+
+    // ---- cifras ----
+    const n1 = eO(seg(t, 6.3, 7.0)) * (1 - eI(seg(t, 9.9, 10.2)));
+    if (n1 > 0) { const v = Math.round(90 * eO(seg(t, 6.3, 8.6)));
+      text(ctx, '> ' + v + ' %', 1800, 460, F_N, PAL.INK, n1, { align: 'right', glow: 12 });
+      text(ctx, 'DE LOS ACTIVOS', 1800, 512, F_S, PAL.CYAN, n1 * 0.9, { align: 'right', spacing: '6px', glow: 10 }); }
+    const n4 = eO(seg(t, 15.5, 16.1));
+    if (n4 > 0) { const v = Math.round(700 * eO(seg(t, 15.6, 17.1)));
+      text(ctx, '≈' + v, 1800, 460, F_N, PAL.CYAN, n4 * (1 - eI(seg(t, 19.4, 19.65))), { align: 'right', glow: 14 }); }
+    // anillo rojo: la intrusión llega al cluster (un solo foco, con el impact)
+    const rg = seg(t, 17.2, 18.6);
+    if (rg > 0 && rg < 1) { const e = eO(rg); ctx.strokeStyle = rgba(PAL.RED, 0.9 * (1 - e)); ctx.lineWidth = 3.5; ctx.beginPath(); ctx.arc(HF.x, HF.y, 150 + 150 * e, 0, TAU); ctx.stroke(); }
+
+    // ---- titular, sello y leyenda ----
+    BEATS.forEach((b) => {
+      const a = beatA(b, t); if (a <= 0.004) return;
+      const sl = 18 * (1 - eO(seg(t, b.a, b.a + 0.6)));
+      text(ctx, b.h, 120, 150 + sl, F_H, PAL.INK, a, { glow: 8 });
+      text(ctx, b.s, 1800, 150, F_S, b.sc, a * 0.95, { align: 'right', spacing: '6px', glow: 12 });
+      const la = eO(seg(t, b.a + 0.3, b.a + 0.9)) * (1 - eI(seg(t, b.b - 0.3, b.b)));
+      text(ctx, b.l, 120, 990 + 12 * (1 - eO(seg(t, b.a + 0.3, b.a + 0.9))), F_L, PAL.INK, la * 0.95, { glow: 4 });
+    });
+
+    bloom(ctx, cv, { k: 0.65 });
+  });
+});
+</script>
+</body>
+</html>

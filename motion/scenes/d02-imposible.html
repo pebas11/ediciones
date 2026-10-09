@@ -95,6 +95,7 @@ M.scene({ duration: 18, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed:
     ctx.strokeStyle = rgba(PAL.VIOLET, 0.35 * a); ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(ix, iy, 33, 0, TAU); ctx.stroke();
     ctx.fillStyle = rgba(PAL.INK, a); ctx.beginPath(); ctx.arc(ix, iy, 17, 0, TAU); ctx.fill();
     ctx.restore();
+    ctx.beginPath(); ctx.moveTo(cx - w / 2, cy); ctx.quadraticCurveTo(cx, cy - h, cx + w / 2, cy); ctx.quadraticCurveTo(cx, cy + h, cx - w / 2, cy); ctx.closePath();
     ctx.strokeStyle = rgba(PAL.VIOLET, 0.95 * a); ctx.lineWidth = 4; ctx.lineJoin = 'round'; ctx.stroke();
     ctx.restore();
     return { x: cx + look.x * 62, y: cy + look.y * 34 };

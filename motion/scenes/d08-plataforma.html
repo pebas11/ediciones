@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>D08 · Plataforma de lanzamiento</title>
+<link rel="stylesheet" href="../lib/theme.css">
+<link rel="stylesheet" href="../lib/fonts-spartan.css">
+<style>
+  body { background: #05070D; }
+  #cv { position: absolute; inset: 0; }
+  #grain { position: absolute; inset: -20px; opacity: 0.05; mix-blend-mode: overlay; pointer-events: none; }
+  #vig { position: absolute; inset: 0; background: radial-gradient(120% 110% at 50% 48%, transparent 50%, rgba(2,3,6,0.7) 100%); pointer-events: none; }
+  #fade { position: absolute; inset: 0; background: #05070D; opacity: 1; }
+</style>
+</head>
+<body>
+<div id="world">
+  <canvas id="cv" width="1920" height="1080"></canvas>
+  <div id="vig"></div>
+  <canvas id="grain" width="512" height="512" style="width:1960px;height:1120px"></canvas>
+  <div id="fade"></div>
+</div>
+<script src="../node_modules/gsap/dist/gsap.min.js"></script>
+<script src="../node_modules/gsap/dist/SplitText.min.js"></script>
+<script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
+<script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
+<script src="../lib/stage.js"></script>
+<script src="../lib/audio.js"></script>
+<script src="../lib/neon.js"></script>
+<script>
+/* D08 · Plataforma de lanzamiento (18 s, sin voz). Hechos: FICHA-HF (nivel A, cronograma de HF).
+   A 0,4–5     mapa: sandbox violeta → Internet → endpoint externo cian, sin proteger (candado rojo abierto)
+   B 5–8,6     9 JUL 04:01 UTC: primera ejecución de código como root (anillos rojos, consola)
+   C 8,8–12    mando y control improvisado: sobres que saltan por tres servicios públicos
+   D 12–17,2   Modal no fue comprometido: marco verde con visto alrededor del endpoint del cliente */
+M.scene({ duration: 18, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed: { cycle: 8, bright: 0.7, sub: 0.25 } } }, async (tl, M) => {
+  const $ = (s) => document.querySelector(s);
+  const cv = $('#cv'), ctx = cv.getContext('2d');
+  { const g = $('#grain').getContext('2d'); const im = g.createImageData(512, 512); const rn = M.rng(5);
+    for (let i = 0; i < im.data.length; i += 4) { const v = 128 + (rn() - 0.5) * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+    g.putImageData(im, 0, 0); }
+  const F_T = '700 92px "League Spartan"', F_C = '500 42px "DM Sans"', F_S = '500 28px "DM Mono"', F_L = '500 24px "DM Mono"', F_X = '500 30px "DM Mono"';
+  await Promise.all([
+    document.fonts.load(F_T, 'UN ENDPOINT SIN PROTEGER CÓDIGO COMO ROOT MANDO Y CONTROL MODAL NO FUE COMPROMETIDO'),
+    document.fonts.load(F_C, 'Un cliente de Modal dejó un endpoint sin proteger. Primera ejecución de código como root.'),
+    document.fonts.load(F_S, '9 JUL · 04:01 UTC'), document.fonts.load(F_L, 'SANDBOX INTERNET ENDPOINT PASTEBINS PETICIONES ARCHIVOS MODAL'),
+  ]);
+
+  const { PAL, rgba, bloom, bg, text } = Neon;
+  const TAU = Math.PI * 2;
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, m) => a + (b - a) * m;
+  const seg = (t, a, b) => clamp((t - a) / (b - a));
+  const eA = gsap.parseEase('apple'), eO = gsap.parseEase('appleOut'), eI = gsap.parseEase('appleIn');
+
+  // ---- geometría
+  const SB = { x: 160, y: 430, w: 320, h: 300 };           // sandbox violeta
+  const EX = { x: 1480, y: 580 };                           // endpoint externo
+  const EW = 170, EH = 120;
+  const GAP = { x: SB.x + SB.w, y: 580 };                   // salida del sandbox (ya abierta, ver d04)
+  const route = [[GAP.x, GAP.y], [640, 560], [820, 610], [1000, 560], [1180, 610], [EX.x - EW / 2, EX.y]];
+  const R1 = [780, 430], R2 = [1020, 740], R3 = [1240, 430];
+  const hop = [[GAP.x, GAP.y], R1, R2, R3, [EX.x - EW / 2, EX.y]];
+  const mkLen = (p) => { const L = [0]; for (let i = 1; i < p.length; i++) L.push(L[i - 1] + Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1])); return L; };
+  const LR = mkLen(route), LH = mkLen(hop);
+  const posOn = (p, L, u) => { const d = clamp(u) * L[L.length - 1]; let i = 1; while (i < L.length - 1 && L[i] < d) i++; const m = (d - L[i - 1]) / ((L[i] - L[i - 1]) || 1); return [lerp(p[i - 1][0], p[i][0], m), lerp(p[i - 1][1], p[i][1], m)]; };
+  const strokePart = (p, L, u) => { const d = clamp(u) * L[L.length - 1]; ctx.beginPath(); ctx.moveTo(p[0][0], p[0][1]);
+    for (let i = 1; i < p.length; i++) { if (L[i] <= d) ctx.lineTo(p[i][0], p[i][1]); else { const m = (d - L[i - 1]) / (L[i] - L[i - 1]); if (m > 0) ctx.lineTo(lerp(p[i - 1][0], p[i][0], m), lerp(p[i - 1][1], p[i][1], m)); break; } }
+    ctx.stroke(); };
+
+  // enjambre en el sandbox y red de Internet (determinista)
+  const r = M.rng(23), P = [], NET = [];
+  for (let i = 0; i < 46; i++) P.push({ x: SB.x + 26 + r() * (SB.w - 52), y: SB.y + 26 + r() * (SB.h - 52), ph: r() * TAU, sp: 0.4 + r() * 0.8, s: 2 + r() * 2 });
+  for (let i = 0; i < 30; i++) NET.push({ x: 580 + r() * 700, y: 380 + r() * 400, ph: r() * TAU });
+  const LINKS = []; NET.forEach((a, i) => NET.forEach((b, j) => { if (j > i && Math.hypot(a.x - b.x, a.y - b.y) < 150) LINKS.push([a, b]); }));
+
+  // ---- beats
+  const B = { A: [0.4, 5.0], B: [5.0, 8.7], C: [8.7, 12.0], D: [12.0, 17.3] };
+  const TITLES = [['UN ENDPOINT SIN PROTEGER', B.A], ['CÓDIGO COMO ROOT', B.B], ['MANDO Y CONTROL', B.C], ['MODAL NO FUE COMPROMETIDO', B.D]];
+  const CAPS = [['Un cliente de Modal dejó un endpoint sin proteger.', B.A], ['Primera ejecución de código como root.', B.B],
+                ['Improvisado sobre servicios públicos.', B.C], ['El endpoint sin proteger era de un cliente.', B.D]];
+  const slot = (t, [a, b]) => eO(seg(t, a, a + 0.55)) * (1 - eI(seg(t, b - 0.35, b)));
+  const T_HIT = 5.2;
+
+  // ---- audio (pocos, con motivo)
+  M.sfx(0.5, 'tick');
+  M.sfx(1.9, 'scan', { dur: 1.2, dir: 1 });
+  M.sfx(T_HIT - 1.3, 'riser', { dur: 1.3, semis: 7 });
+  M.sfx(T_HIT, 'impact', { weight: 0.8, gain: -3 });
+  M.sfx(B.C[0] + 0.05, 'tick');
+  [[9.7, 0], [10.3, 2], [10.9, 4]].forEach(([a, d]) => M.sfx(a, 'tap', { deg: d, oct: 5, bright: 0.7 }));
+  M.sfx(12.6, 'shimmer', { gain: -6, degs: [2, 4, 7] });
+  [[0.3, 5], [5, 8.7], [8.7, 12], [12, 17.3]].forEach(([a, b]) => tl.to({ v: 0 }, { v: 1, duration: b - a, ease: 'none' }, a));
+  tl.fromTo('#fade', { opacity: 1 }, { opacity: 0, duration: 0.5, ease: 'appleOut' }, 0);
+  tl.to('#fade', { opacity: 1, duration: 0.33, ease: 'appleIn' }, 17.65);
+
+  const lock = (x, y, open, col, a, s) => { // candado: cuerpo + arco (abierto = arco levantado y desplazado)
+    ctx.save(); ctx.translate(x, y); ctx.scale(s, s); ctx.lineWidth = 3.5 / s; ctx.strokeStyle = rgba(col, a); ctx.fillStyle = rgba(col, a * 0.25);
+    ctx.beginPath(); ctx.rect(-14, -2, 28, 22); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); if (open) { ctx.arc(8, -8, 9, Math.PI, 0); ctx.lineTo(17, -12); } else { ctx.arc(0, -4, 9, Math.PI, 0); ctx.lineTo(9, -2); }
+    ctx.moveTo(-9, -4); ctx.lineTo(-9, open ? -8 : -4); ctx.stroke(); ctx.restore(); };
+  const rr = (x, y, w, h, rad) => { ctx.beginPath(); ctx.roundRect(x, y, w, h, rad); };
+
+  M.onFrame((t) => {
+    bg(ctx, t, { grid: 0.045 * eO(seg(t, 0.2, 1.2)) });
+
+    const inC = seg(t, B.C[0], B.C[0] + 0.7), inD = seg(t, B.D[0], B.D[0] + 0.7);
+    const routeA = eO(seg(t, 1.8, 3.0)), routeDim = 1 - 0.75 * eA(inC);
+    const hot = eO(seg(t, T_HIT, T_HIT + 0.5));              // endpoint comprometido (rojo)
+    const hotFade = 1 - 0.55 * eA(inD);
+
+    // --- Internet (secundario, tenue)
+    const netA = eO(seg(t, 0.8, 1.9)) * 0.38;
+    ctx.lineWidth = 1.2; ctx.strokeStyle = rgba(PAL.INK, netA * 0.5); ctx.beginPath();
+    LINKS.forEach(([a, b]) => { ctx.moveTo(a.x, a.y + Math.sin(t * 0.6 + a.ph) * 4); ctx.lineTo(b.x, b.y + Math.sin(t * 0.6 + b.ph) * 4); }); ctx.stroke();
+    NET.forEach((n) => { ctx.fillStyle = rgba(PAL.INK, netA); ctx.beginPath(); ctx.arc(n.x, n.y + Math.sin(t * 0.6 + n.ph) * 4, 3.4, 0, TAU); ctx.fill(); });
+    text(ctx, 'INTERNET', 930, 850, F_L, PAL.INK, eO(seg(t, 1.3, 2.2)) * 0.5 * (1 - 0.6 * eA(inC)), { align: 'center', spacing: '6px', glow: 0 });
+
+    // --- sandbox violeta con el enjambre dentro
+    const sbA = eO(seg(t, 0.3, 1.3));
+    ctx.lineWidth = 3.5; ctx.strokeStyle = rgba(PAL.VIOLET, 0.9 * sbA); ctx.beginPath();
+    ctx.moveTo(SB.x + SB.w, SB.y); ctx.lineTo(SB.x, SB.y); ctx.lineTo(SB.x, SB.y + SB.h); ctx.lineTo(SB.x + SB.w, SB.y + SB.h);
+    ctx.moveTo(SB.x + SB.w, SB.y); ctx.lineTo(SB.x + SB.w, GAP.y - 26);
+    ctx.moveTo(SB.x + SB.w, SB.y + SB.h); ctx.lineTo(SB.x + SB.w, GAP.y + 26); ctx.stroke();
+    P.forEach((p) => { const x = p.x + Math.sin(t * p.sp + p.ph) * 12, y = p.y + Math.cos(t * p.sp * 1.3 + p.ph) * 10;
+      ctx.fillStyle = rgba(PAL.CYAN, 0.7 * sbA); ctx.beginPath(); ctx.arc(x, y, p.s, 0, TAU); ctx.fill(); });
+    text(ctx, 'SANDBOX', SB.x, SB.y - 22, F_L, PAL.VIOLET, sbA * 0.9, { spacing: '6px', glow: 0 });
+
+    // --- ruta directa (A, B) y ruta de saltos (C)
+    if (routeA > 0) { ctx.lineWidth = 3; ctx.strokeStyle = rgba(PAL.CYAN, 0.85 * routeDim); strokePart(route, LR, routeA); }
+    const hopA = eO(seg(t, B.C[0] + 0.1, B.C[0] + 1.3));
+    const hopOut = 1 - 0.7 * eA(inD);
+    if (hopA > 0) { ctx.lineWidth = 3; ctx.strokeStyle = rgba(PAL.CYAN, 0.9 * hopOut); ctx.setLineDash([2, 0]); strokePart(hop, LH, hopA); }
+
+    // --- servicios públicos (C): tres nodos INK con rótulo
+    [[R1, 'PASTEBINS'], [R2, 'PETICIONES'], [R3, 'ARCHIVOS']].forEach(([p, lb], i) => {
+      const a = eO(seg(t, B.C[0] + 0.3 + i * 0.25, B.C[0] + 1.1 + i * 0.25)) * hopOut;
+      if (a <= 0) return; const w = 150, h = 74;
+      ctx.lineWidth = 3; ctx.strokeStyle = rgba(PAL.INK, 0.8 * a); ctx.fillStyle = rgba(PAL.BG, a * 0.9);
+      rr(p[0] - w / 2, p[1] - h / 2, w, h, 12); ctx.fill(); ctx.stroke();
+      ctx.lineWidth = 2; ctx.strokeStyle = rgba(PAL.INK, 0.35 * a); ctx.beginPath(); ctx.moveTo(p[0] - 40, p[1] - 8); ctx.lineTo(p[0] + 40, p[1] - 8); ctx.moveTo(p[0] - 40, p[1] + 12); ctx.lineTo(p[0] + 18, p[1] + 12); ctx.stroke();
+      text(ctx, lb, p[0], p[1] + (p[1] < 580 ? -58 : 74), F_L, PAL.INK, a * 0.85, { align: 'center', spacing: '4px', glow: 0 });
+    });
+
+    // --- endpoint externo (cian; rojo al caer)
+    const eA_ = eO(seg(t, 1.3, 2.3));
+    const ec = hot > 0 ? PAL.RED : PAL.CYAN;
+    ctx.lineWidth = 3.5; ctx.strokeStyle = rgba(PAL.CYAN, 0.95 * eA_ * (1 - hot)); rr(EX.x - EW / 2, EX.y - EH / 2, EW, EH, 14); ctx.fillStyle = rgba(PAL.BG, 0.9 * eA_); ctx.fill(); ctx.stroke();
+    if (hot > 0) { ctx.lineWidth = 3.5; ctx.strokeStyle = rgba(PAL.RED, 0.95 * hot * hotFade); ctx.fillStyle = rgba(PAL.RED, 0.14 * hot * hotFade); rr(EX.x - EW / 2, EX.y - EH / 2, EW, EH, 14); ctx.fill(); ctx.stroke(); }
+    ctx.lineWidth = 2; ctx.strokeStyle = rgba(PAL.INK, 0.3 * eA_); ctx.beginPath();
+    ctx.moveTo(EX.x - 46, EX.y - 12); ctx.lineTo(EX.x + 46, EX.y - 12); ctx.moveTo(EX.x - 46, EX.y + 14); ctx.lineTo(EX.x + 14, EX.y + 14); ctx.stroke();
+    // candado: abierto y rojo (sin proteger), pulsa suave antes del impacto
+    const lkA = eO(seg(t, 3.2, 3.9)) * (1 - 0.5 * hot) * (1 - 0.7 * eA(inD));
+    if (lkA > 0) lock(EX.x + EW / 2 - 6, EX.y - EH / 2 - 26, true, PAL.RED, lkA * (0.75 + 0.25 * Math.sin(t * 6) * (1 - hot)), 1.15);
+    text(ctx, 'ENDPOINT', EX.x, EX.y + (inD > 0 ? 112 : 96), F_L, PAL.INK, eA_ * 0.9, { align: 'center', spacing: '6px', glow: 0 });
+
+    // --- B: impacto, anillos rojos y consola
+    for (let k = 0; k < 3; k++) { const q = seg(t, T_HIT + k * 0.28, T_HIT + k * 0.28 + 1.4); if (q > 0 && q < 1) {
+      ctx.lineWidth = 3; ctx.strokeStyle = rgba(PAL.RED, 0.8 * (1 - q) * (k === 0 ? 1 : 0.6)); ctx.beginPath(); ctx.arc(EX.x, EX.y, 70 + 190 * eO(q), 0, TAU); ctx.stroke(); } }
+    const conA = eO(seg(t, T_HIT + 0.35, T_HIT + 1.0)) * (1 - eI(seg(t, B.C[0] + 0.1, B.C[0] + 0.6)));
+    if (conA > 0) { const cx = EX.x - 130, cy = 330, cw = 260, ch = 100;
+      ctx.lineWidth = 3; ctx.strokeStyle = rgba(PAL.RED, 0.9 * conA); ctx.fillStyle = rgba(PAL.BG, 0.92 * conA); rr(cx, cy, cw, ch, 10); ctx.fill(); ctx.stroke();
+      ctx.lineWidth = 2; ctx.strokeStyle = rgba(PAL.RED, 0.45 * conA); ctx.beginPath(); ctx.moveTo(EX.x, cy + ch); ctx.lineTo(EX.x, EX.y - EH / 2 - 4); ctx.stroke();
+      const cur = (Math.floor(t * 2) % 2) ? '_' : ' ';
+      text(ctx, 'root# ' + cur, cx + 30, cy + 64, F_X, PAL.RED, conA, { glow: 8 }); }
+
+    // --- paquetes cian: agentes en tránsito
+    const pk = (p, L, t0, n, T, a) => { if (t < t0) return; for (let i = 0; i < n; i++) { const u = ((t - t0) / T + i / n) % 1; const [x, y] = posOn(p, L, u);
+      const fin = Math.min(1, u * 8), fout = Math.min(1, (1 - u) * 8);
+      ctx.fillStyle = rgba(PAL.INK, a * fin * fout); ctx.beginPath(); ctx.arc(x, y, 6, 0, TAU); ctx.fill();
+      ctx.strokeStyle = rgba(PAL.CYAN, 0.9 * a * fin * fout); ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, 11, 0, TAU); ctx.stroke(); } };
+    const direct = (t < B.C[0] + 0.3 ? 1 : 1 - eA(seg(t, B.C[0] + 0.3, B.C[0] + 1.0)));
+    if (t < T_HIT) { const u = seg(t, 3.1, T_HIT); if (u > 0) { const [x, y] = posOn(route, LR, eA(u)); // el primer agente llega al endpoint
+        ctx.fillStyle = rgba(PAL.INK, 1); ctx.beginPath(); ctx.arc(x, y, 8, 0, TAU); ctx.fill(); ctx.strokeStyle = rgba(PAL.CYAN, 0.95); ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(x, y, 15 + 3 * Math.sin(t * 6), 0, TAU); ctx.stroke(); } }
+    else if (direct > 0.01) pk(route, LR, T_HIT + 0.6, 3, 3.2, 0.9 * direct);
+    if (t > B.C[0] + 0.9) pk(hop, LH, B.C[0] + 0.9, 3, 3.4, 0.95 * (1 - 0.8 * eA(inD)));
+
+    // --- D: Modal no fue comprometido (marco verde + visto)
+    const fr = eO(seg(t, B.D[0] + 0.15, B.D[0] + 1.1));
+    if (fr > 0) { const fx = EX.x - 170, fy = EX.y - 170, fw = 340, fh = 330;
+      ctx.lineWidth = 3.5; ctx.strokeStyle = rgba(PAL.GREEN, 0.95 * fr); ctx.lineJoin = 'round'; ctx.setLineDash([]);
+      rr(fx, fy, fw, fh, 22); ctx.stroke();
+      text(ctx, 'MODAL', fx + 4, fy - 20, F_L, PAL.GREEN, fr, { spacing: '6px', glow: 8 });
+      const ck = eO(seg(t, B.D[0] + 0.7, B.D[0] + 1.5)); // visto dibujado
+      const bx = fx + fw - 20, by = fy + 6; ctx.lineWidth = 7; ctx.lineCap = 'round'; ctx.strokeStyle = rgba(PAL.GREEN, ck); ctx.fillStyle = rgba(PAL.BG, ck);
+      ctx.beginPath(); ctx.arc(bx, by, 40, 0, TAU); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(bx - 17, by + 2); ctx.lineTo(bx - 5, by + 15); ctx.lineTo(bx + 19, by - 14); ctx.strokeStyle = rgba(PAL.GREEN, ck * clamp(ck * 1.5)); ctx.stroke(); ctx.lineCap = 'butt'; }
+
+    // --- texto: sello, titular, leyenda
+    const stamp = t < B.B[0] ? ['9 JUL', slot(t, B.A)] : t < B.C[0] ? ['9 JUL · 04:01 UTC', slot(t, B.B)] : null;
+    if (stamp) text(ctx, stamp[0], 1800, 120, F_S, stamp[0].length > 5 ? PAL.RED : PAL.INK, stamp[1] * 0.9, { align: 'right', spacing: '4px', glow: 6 });
+    TITLES.forEach(([s, bt], i) => { const a = slot(t, bt); text(ctx, s, 120, 170 - 14 * (1 - a), F_T, i === 3 ? PAL.GREEN : PAL.INK, a, { glow: 8 }); });
+    CAPS.forEach(([s, bt]) => { const a = slot(t, [bt[0] + 0.25, bt[1]]); text(ctx, s, 120, 990 - 10 * (1 - a), F_C, PAL.INK, a * 0.92, { glow: 0 }); });
+
+    bloom(ctx, cv, { k: 0.6 });
+  });
+});
+</script>
+</body>
+</html>
