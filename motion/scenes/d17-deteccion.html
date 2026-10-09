@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>D17 · Detección</title>
+<link rel="stylesheet" href="../lib/theme.css">
+<link rel="stylesheet" href="../lib/fonts-spartan.css">
+<style>
+  body { background: #05070D; }
+  #cv { position: absolute; inset: 0; }
+  #grain { position: absolute; inset: -20px; opacity: 0.05; mix-blend-mode: overlay; pointer-events: none; }
+  #vig { position: absolute; inset: 0; background: radial-gradient(120% 110% at 50% 48%, transparent 50%, rgba(2,3,6,0.7) 100%); pointer-events: none; }
+  #fade { position: absolute; inset: 0; background: #05070D; opacity: 1; }
+</style>
+</head>
+<body>
+<div id="world">
+  <canvas id="cv" width="1920" height="1080"></canvas>
+  <div id="vig"></div>
+  <canvas id="grain" width="512" height="512" style="width:1960px;height:1120px"></canvas>
+  <div id="fade"></div>
+</div>
+<script src="../node_modules/gsap/dist/gsap.min.js"></script>
+<script src="../node_modules/gsap/dist/SplitText.min.js"></script>
+<script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
+<script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
+<script src="../lib/stage.js"></script>
+<script src="../lib/audio.js"></script>
+<script src="../lib/neon.js"></script>
+<script>
+/* d17 · Detección (20 s). Verde = defensa.
+   1 0,4–6,4    cuatro capas verdes; un punto cian las cruza y cada una emite una señal tenue
+   2 6,4–12,8   la correlación las une; criticidad y guardia no se activan; línea de tiempo con RETRASO
+   3 12,8–19,7  se identifica el renderizador, se apaga, se corta el acceso (13 JUL · 14:14 UTC) */
+M.scene({ duration: 20, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed: { cycle: 8, bright: 0.7, sub: 0.25 } } }, async (tl, M) => {
+  const $ = (s) => document.querySelector(s);
+  const cv = $('#cv'), ctx = cv.getContext('2d');
+  { const g = $('#grain').getContext('2d'); const im = g.createImageData(512, 512); const rn = M.rng(17);
+    for (let i = 0; i < im.data.length; i += 4) { const v = 128 + (rn() - 0.5) * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+    g.putImageData(im, 0, 0); }
+  const F_H = '700 96px "League Spartan"', F_C = '500 42px "DM Sans"', F_S = '500 28px "DM Mono"', F_L = '500 26px "DM Mono"';
+  await Promise.all([
+    document.fonts.load(F_H, 'SEÑALES MUY TENUES LA IA LAS VINCULÓ CORTE DEL ACCESO'),
+    document.fonts.load(F_C, 'Varias capas de seguridad dieron señales demasiado tenues. ñáéíóú'),
+    document.fonts.load(F_S, 'JUL · 9–13 UTC 14:14 RETRASO RENDERIZADOR'),
+  ]);
+
+  const { PAL, rgba, bloom, bg, text } = Neon;
+  const TAU = Math.PI * 2;
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, m) => a + (b - a) * m;
+  const seg = (t, a, b) => clamp((t - a) / (b - a));
+  const eA = gsap.parseEase('apple'), eO = gsap.parseEase('appleOut'), eI = gsap.parseEase('appleIn');
+  const win = (t, a, b, f = 0.45) => eO(seg(t, a, a + f)) * (1 - eI(seg(t, b - f * 0.8, b)));
+
+  // ---------- Textos ----------
+  const HEAD = [[0.4, 6.2, 'SEÑALES MUY TENUES'], [6.5, 12.6, 'LA IA LAS VINCULÓ'], [12.9, 19.5, 'CORTE DEL ACCESO']];
+  const CAP = [
+    [0.9, 6.2, 'Varias capas de seguridad dieron señales demasiado tenues.'],
+    [6.7, 12.6, 'La IA las vinculó, pero no escaló la criticidad ni activó la guardia a tiempo.'],
+    [13.1, 19.5, 'Identificaron el renderizador, lo apagaron y cortaron el acceso.'],
+  ];
+  const STAMP = [[0.7, 15.7, '9–13 JUL · UTC'], [15.9, 19.5, '13 JUL · 14:14 UTC']];
+  const wrap = (s, maxW) => { ctx.font = F_C; const w = s.split(' '), L = []; let cur = '';
+    for (const x of w) { const n = cur ? cur + ' ' + x : x; if (ctx.measureText(n).width > maxW && cur) { L.push(cur); cur = x; } else cur = n; }
+    L.push(cur); return L; };
+  const CAPL = CAP.map((c) => wrap(c[2], 1500));
+
+  // ---------- Geometría ----------
+  const LY = [290, 370, 450, 530];                 // carriles (capas)
+  const NX = [330, 520, 710, 900];                 // nodo sensor por capa
+  const COR = { x: 1230, y: 410, r: 66 };          // correlación por IA
+  const TLY = 800, TX0 = 160, TX1 = 1760;          // línea de tiempo
+  const hexPath = (c, x, y, r, rot = -Math.PI / 2) => { c.beginPath(); for (let k = 0; k < 6; k++) { const a = rot + k * TAU / 6; c[k ? 'lineTo' : 'moveTo'](x + r * Math.cos(a), y + r * Math.sin(a)); } c.closePath(); };
+  const bez = (p0, p1, p2, p3, u) => { const v = 1 - u; return { x: v*v*v*p0.x + 3*v*v*u*p1.x + 3*v*u*u*p2.x + u*u*u*p3.x, y: v*v*v*p0.y + 3*v*v*u*p1.y + 3*v*u*u*p2.y + u*u*u*p3.y }; };
+  // carril i: recta hasta x=1020, luego curva hasta la correlación
+  const lanePt = (i, u) => {
+    const y = LY[i], xs = 160, xe = 1020, curveLen = 260, straight = xe - xs, tot = straight + curveLen, d = u * tot;
+    if (d <= straight) return { x: xs + d, y };
+    return bez({ x: xe, y }, { x: xe + 90, y }, { x: COR.x - COR.r - 90, y: COR.y }, { x: COR.x - COR.r, y: COR.y }, (d - straight) / curveLen);
+  };
+  const laneStroke = (i, u0, u1, steps = 60) => { ctx.beginPath(); for (let k = 0; k <= steps; k++) { const p = lanePt(i, lerp(u0, u1, k / steps)); ctx[k ? 'lineTo' : 'moveTo'](p.x, p.y); } ctx.stroke(); };
+
+  // punto cian intruso: cruza los nodos en orden
+  const CROSS = [2.5, 3.4, 4.3, 5.2];
+  const dotPos = (t) => {
+    const pts = [{ t: 1.9, x: 200, y: 250 }, ...CROSS.map((c, i) => ({ t: c, x: NX[i], y: LY[i] })), { t: 6.0, x: 1010, y: 590 }];
+    for (let k = 0; k < pts.length - 1; k++) if (t <= pts[k + 1].t) { const m = eA(seg(t, pts[k].t, pts[k + 1].t)); return { x: lerp(pts[k].x, pts[k + 1].x, m), y: lerp(pts[k].y, pts[k + 1].y, m) }; }
+    return pts[pts.length - 1];
+  };
+  // enjambre de apoyo, muy tenue, junto al punto
+  const rr = M.rng(41), TR = []; for (let i = 0; i < 14; i++) TR.push({ a: rr() * TAU, d: 20 + rr() * 60, sp: 0.5 + rr(), s: 1.4 + rr() * 1.6 });
+
+  // beat 3: cluster verde de HF
+  const CL = { x: 1160, y: 440, R: 64 };
+  const CLN = [{ x: CL.x, y: CL.y }]; for (let k = 0; k < 6; k++) { const a = k * TAU / 6; CLN.push({ x: CL.x + 1.732 * CL.R * Math.cos(a), y: CL.y + 1.732 * CL.R * Math.sin(a) }); }
+  const REN = CLN[4];                              // k=3 -> ángulo 180°: borde izquierdo
+  const WALL = 700;
+  const T_FLAG = 14.1, T_OFF = 15.0, T_CUT = 15.7;
+  const rs = M.rng(7), ST = []; for (let i = 0; i < 26; i++) ST.push({ ph: rs(), sp: 0.12 + rs() * 0.1, dy: (rs() - 0.5) * 70, s: 2 + rs() * 2 });
+
+  // ---------- Audio ----------
+  M.sfx(0.55, 'tick', { gain: -2 });
+  CROSS.forEach((c, i) => M.sfx(c, 'tap', { deg: 2 + i, oct: 5, bright: 0.6, gain: -9 }));
+  M.sfx(6.6, 'tick', { gain: -2 });
+  M.sfx(7.0, 'scan', { dur: 1.6, from: 600, to: 3000, gain: -4 });
+  M.sfx(8.8, 'shimmer', { gain: -8, degs: [2, 4, 7] });
+  M.sfx(12.95, 'tick', { gain: -2 });
+  M.sfx(T_FLAG, 'tap', { deg: 4, oct: 5, gain: -4 });
+  M.sfx(T_CUT - 1.0, 'riser', { dur: 1.0, semis: 7, gain: -4 });
+  M.sfx(T_CUT, 'impact', { weight: 0.7, gain: -4 });
+  M.sfx(16.2, 'shimmer', { gain: -8 });
+  [[0.3, 4], [6.4, 8], [12.8, 14.5]].forEach(([a, b]) => tl.to({ v: 0 }, { v: 1, duration: b - a, ease: 'none' }, a));
+  tl.fromTo('#fade', { opacity: 1 }, { opacity: 0, duration: 0.5, ease: 'appleOut' }, 0);
+  tl.to('#fade', { opacity: 1, duration: 0.33, ease: 'appleIn' }, 19.65);
+
+  // ---------- Dibujo ----------
+  const drawBell = (x, y, s, col, a) => {
+    ctx.save(); ctx.translate(x, y); ctx.scale(s, s); ctx.strokeStyle = rgba(col, a); ctx.lineWidth = 3 / s; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-30, 22); ctx.quadraticCurveTo(-24, 14, -24, -4); ctx.bezierCurveTo(-24, -34, 24, -34, 24, -4); ctx.quadraticCurveTo(24, 14, 30, 22); ctx.closePath();
+    ctx.moveTo(-9, 32); ctx.quadraticCurveTo(0, 42, 9, 32); ctx.moveTo(0, -30); ctx.lineTo(0, -38); ctx.stroke(); ctx.restore();
+  };
+  const drawX = (x, y, r, col, a, w = 4) => { ctx.strokeStyle = rgba(col, a); ctx.lineWidth = w; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(x - r, y - r); ctx.lineTo(x + r, y + r); ctx.moveTo(x + r, y - r); ctx.lineTo(x - r, y + r); ctx.stroke(); };
+
+  M.onFrame((t) => {
+    bg(ctx, t, { grid: 0.04 * eO(seg(t, 0.2, 1.2)) });
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+    // ===== BEAT 1 + 2: capas y correlación =====
+    const upA = 1 - eA(seg(t, 12.7, 13.4));
+    if (upA > 0.003) {
+      const gate = eO(seg(t, 8.6, 9.6));
+      // carriles
+      for (let i = 0; i < 4; i++) {
+        const drawn = eO(seg(t, 0.9 + i * 0.2, 2.0 + i * 0.2));
+        const lit = eA(seg(t, 7.3 + i * 0.18, 8.6 + i * 0.18));        // la correlación enciende el carril completo
+        ctx.lineWidth = 2 + lit; ctx.strokeStyle = rgba(PAL.GREEN, (0.22 + 0.5 * lit) * upA);
+        laneStroke(i, 0, drawn * 0.74 + (lit > 0 ? 0.26 * lit : 0));
+        // pulso viajando hacia la correlación
+        if (lit > 0 && t < 12.7) {
+          const u = ((t - 7.6 - i * 0.18) * 0.32) % 1; if (u > 0 && t > 7.6 + i * 0.18) { const p = lanePt(i, 0.26 + u * 0.74);
+            ctx.fillStyle = rgba(PAL.GREEN, 0.9 * upA); ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, TAU); ctx.fill(); }
+        }
+        // nodo sensor
+        const nA = eO(seg(t, 1.3 + i * 0.2, 2.0 + i * 0.2));
+        const since = t - CROSS[i];
+        const blip = since > 0 ? Math.exp(-since * 1.3) : 0;
+        const nodeA = (0.35 + 0.15 * (since > 0 ? 1 : 0)) * nA * upA;
+        hexPath(ctx, NX[i], LY[i], 17); ctx.fillStyle = rgba(PAL.BG, 1); ctx.fill();
+        ctx.lineWidth = 2.5; ctx.strokeStyle = rgba(PAL.GREEN, nodeA + 0.3 * lit * upA); ctx.stroke();
+        // señal tenue: anillo corto y flojo
+        if (since > 0 && since < 2.2) { const k = since / 2.2; ctx.lineWidth = 2; ctx.strokeStyle = rgba(PAL.GREEN, 0.28 * (1 - k) * upA);
+          ctx.beginPath(); ctx.arc(NX[i], LY[i], 22 + 26 * eO(k), 0, TAU); ctx.stroke(); }
+        if (blip > 0.02) { ctx.fillStyle = rgba(PAL.GREEN, 0.5 * blip * upA); ctx.beginPath(); ctx.arc(NX[i], LY[i], 4, 0, TAU); ctx.fill(); }
+        else if (nA > 0) { ctx.fillStyle = rgba(PAL.GREEN, 0.3 * nA * upA); ctx.beginPath(); ctx.arc(NX[i], LY[i], 3.5, 0, TAU); ctx.fill(); }
+      }
+      // intruso cian
+      const dA = eO(seg(t, 1.9, 2.4)) * (1 - eA(seg(t, 6.0, 6.6))) * upA;
+      if (dA > 0.01) {
+        const p = dotPos(t);
+        for (const q of TR) { const a = q.a + t * q.sp; ctx.fillStyle = rgba(PAL.CYAN, 0.35 * dA); ctx.beginPath(); ctx.arc(p.x + Math.cos(a) * q.d, p.y + Math.sin(a * 1.3) * q.d * 0.7, q.s, 0, TAU); ctx.fill(); }
+        ctx.fillStyle = rgba(PAL.INK, dA); ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, TAU); ctx.fill();
+        ctx.strokeStyle = rgba(PAL.CYAN, 0.85 * dA); ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(p.x, p.y, 13 + 3 * Math.sin(t * 5), 0, TAU); ctx.stroke();
+      }
+      // correlación (foco del beat 2)
+      const cA = eO(seg(t, 6.9, 7.9));
+      if (cA > 0.003) {
+        const glowPulse = 0.85 + 0.15 * Math.sin(t * 3);
+        hexPath(ctx, COR.x, COR.y, COR.r); ctx.fillStyle = rgba(PAL.BG, 1); ctx.fill();
+        ctx.lineWidth = 4; ctx.strokeStyle = rgba(PAL.GREEN, cA * upA * glowPulse); ctx.stroke();
+        hexPath(ctx, COR.x, COR.y, COR.r * 0.55); ctx.lineWidth = 2; ctx.strokeStyle = rgba(PAL.GREEN, 0.55 * cA * upA); ctx.stroke();
+        // nodos interiores: la red vinculada
+        const ang = [0, 1.57, 3.14, 4.71];
+        ctx.fillStyle = rgba(PAL.GREEN, 0.9 * cA * upA);
+        ang.forEach((a0, k) => { const a = a0 + 0.4; ctx.beginPath(); ctx.arc(COR.x + 18 * Math.cos(a), COR.y + 18 * Math.sin(a), 3.5, 0, TAU); ctx.fill(); });
+      }
+      // compuertas: criticidad y guardia, apagadas
+      const g1 = { x: 1580, y: 330 }, g2 = { x: 1580, y: 490 };
+      if (gate > 0.003) {
+        // enlaces discontinuos que no llegan
+        const stop = 0.62 * eO(seg(t, 8.8, 10.0));
+        ctx.setLineDash([10, 12]); ctx.lineWidth = 2.5; ctx.strokeStyle = rgba(PAL.GREEN, 0.4 * upA);
+        [g1, g2].forEach((g) => { ctx.beginPath(); ctx.moveTo(COR.x + COR.r, COR.y); const e = { x: lerp(COR.x + COR.r, g.x - 80, stop / 0.62), y: lerp(COR.y, g.y, stop) }; ctx.lineTo(e.x, e.y); ctx.stroke(); });
+        ctx.setLineDash([]);
+        const xm = eO(seg(t, 9.8, 10.4));
+        [[1500, 392], [1500, 428]].forEach(([x, y]) => drawX(x + 12, y, 11 * xm, PAL.RED, 0.9 * xm * upA, 4));
+        // medidor de criticidad: un solo segmento tenue
+        for (let k = 0; k < 5; k++) { const yy = g1.y + 40 - k * 20; ctx.lineWidth = 2.5; ctx.strokeStyle = rgba(PAL.GREEN, (k === 0 ? 0.55 : 0.22) * gate * upA);
+          ctx.strokeRect(g1.x - 34, yy - 7, 68, 14); if (k === 0) { ctx.fillStyle = rgba(PAL.GREEN, 0.28 * gate * upA); ctx.fillRect(g1.x - 34, yy - 7, 68, 14); } }
+        // campana de guardia: apagada
+        drawBell(g2.x, g2.y, 1.3, PAL.GREEN, 0.3 * gate * upA);
+      }
+    }
+
+    // ===== LÍNEA DE TIEMPO =====
+    const tlA = eO(seg(t, 9.4, 10.4)) * (1 - eA(seg(t, 19.2, 19.6)));
+    if (tlA > 0.003) {
+      const X = { first: 300, corr: 700, resp: 1180, off: 1420, cut: 1640 };
+      const ax = eO(seg(t, 9.4, 10.6));
+      ctx.lineWidth = 2.5; ctx.strokeStyle = rgba(PAL.INK, 0.28 * tlA); ctx.beginPath(); ctx.moveTo(TX0, TLY); ctx.lineTo(lerp(TX0, TX1, ax), TLY); ctx.stroke();
+      if (ax > 0.95) { ctx.beginPath(); ctx.moveTo(TX1, TLY); ctx.lineTo(TX1 - 14, TLY - 8); ctx.moveTo(TX1, TLY); ctx.lineTo(TX1 - 14, TLY + 8); ctx.stroke(); }
+      const dot = (x, a, r = 9, ring = false) => { if (a <= 0.003) return; ctx.fillStyle = rgba(PAL.GREEN, a * tlA); ctx.beginPath(); ctx.arc(x, TLY, r, 0, TAU); ctx.fill();
+        if (ring) { ctx.strokeStyle = rgba(PAL.GREEN, 0.7 * a * tlA); ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(x, TLY, r + 10, 0, TAU); ctx.stroke(); } };
+      dot(X.first, 0.45 * eO(seg(t, 9.8, 10.4)), 8);
+      dot(X.corr, 0.9 * eO(seg(t, 10.2, 10.8)), 10);
+      // retraso: tramo rojo discontinuo que crece + reloj
+      const dl = eA(seg(t, 10.9, 12.5));
+      if (dl > 0.003) {
+        const xe = lerp(X.corr, X.resp, dl);
+        ctx.setLineDash([16, 12]); ctx.lineDashOffset = -t * 18; ctx.lineWidth = 5; ctx.strokeStyle = rgba(PAL.RED, 0.95 * tlA);
+        ctx.beginPath(); ctx.moveTo(X.corr, TLY); ctx.lineTo(xe, TLY); ctx.stroke(); ctx.setLineDash([]); ctx.lineDashOffset = 0;
+        // llaves del tramo
+        const mid = (X.corr + xe) / 2, ca = eO(seg(t, 11.3, 11.9)) * tlA;
+        ctx.strokeStyle = rgba(PAL.RED, 0.55 * ca); ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(X.corr, TLY - 32); ctx.lineTo(X.corr, TLY - 44); ctx.lineTo(xe, TLY - 44); ctx.lineTo(xe, TLY - 32); ctx.stroke();
+        // reloj
+        const cx = mid, cy = TLY - 112, cr = 44;
+        ctx.lineWidth = 4; ctx.strokeStyle = rgba(PAL.RED, 0.95 * ca); ctx.beginPath(); ctx.arc(cx, cy, cr, 0, TAU); ctx.stroke();
+        for (let k = 0; k < 12; k++) { const a = k * TAU / 12 - Math.PI / 2; ctx.lineWidth = 2; ctx.strokeStyle = rgba(PAL.RED, 0.5 * ca); ctx.beginPath(); ctx.moveTo(cx + (cr - 8) * Math.cos(a), cy + (cr - 8) * Math.sin(a)); ctx.lineTo(cx + (cr - 3) * Math.cos(a), cy + (cr - 3) * Math.sin(a)); ctx.stroke(); }
+        const ha = -Math.PI / 2 + (t - 10.9) * 2.2, hb = ha / 12;
+        ctx.lineWidth = 4; ctx.strokeStyle = rgba(PAL.INK, 0.95 * ca); ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + 30 * Math.cos(ha), cy + 30 * Math.sin(ha)); ctx.stroke();
+        ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + 19 * Math.cos(hb - Math.PI / 2 + 1), cy + 19 * Math.sin(hb - Math.PI / 2 + 1)); ctx.stroke();
+        text(ctx, 'RETRASO', mid, TLY + 56, F_L, PAL.RED, ca, { align: 'center', spacing: '6px', glow: 10 });
+      }
+      dot(X.resp, 0.9 * eO(seg(t, 12.3, 12.9)), 10);
+      if (t > 12.5) { const e = eA(seg(t, 12.6, 13.4)); ctx.lineWidth = 3; ctx.strokeStyle = rgba(PAL.GREEN, 0.5 * tlA); ctx.beginPath(); ctx.moveTo(X.resp, TLY); ctx.lineTo(lerp(X.resp, X.cut, e * (t < T_OFF ? 0.0 + 0.0 : 1)), TLY); ctx.stroke(); }
+      // tramo hacia el corte
+      const toOff = eA(seg(t, T_FLAG, T_OFF)), toCut = eA(seg(t, T_OFF, T_CUT));
+      if (t > T_FLAG) { ctx.lineWidth = 4; ctx.strokeStyle = rgba(PAL.GREEN, 0.9 * tlA); ctx.beginPath(); ctx.moveTo(X.resp, TLY); ctx.lineTo(lerp(X.resp, X.off, toOff), TLY);
+        if (t > T_OFF) ctx.lineTo(lerp(X.off, X.cut, toCut), TLY); ctx.stroke(); }
+      dot(X.off, 0.9 * eO(seg(t, T_OFF - 0.1, T_OFF + 0.3)), 9);
+      const cutA = eO(seg(t, T_CUT, T_CUT + 0.4));
+      dot(X.cut, cutA, 13, true);
+      if (cutA > 0) { const k = seg(t, T_CUT, T_CUT + 1.4); ctx.strokeStyle = rgba(PAL.GREEN, 0.6 * (1 - k) * tlA); ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(X.cut, TLY, 24 + 70 * eO(k), 0, TAU); ctx.stroke(); }
+    }
+
+    // ===== BEAT 3: renderizador y corte =====
+    const b3 = eO(seg(t, 13.1, 14.0)) * (1 - eA(seg(t, 19.2, 19.6)));
+    if (b3 > 0.003) {
+      const off = eA(seg(t, T_OFF, T_OFF + 0.5)), flag = eO(seg(t, T_FLAG, T_FLAG + 0.5));
+      CLN.forEach((n, k) => {
+        const isR = k === 4 - 0 && false; // (el renderizador se resuelve abajo)
+        const r = n === REN;
+        const a = (r ? 1 : 0.55) * b3;
+        hexPath(ctx, n.x, n.y, CL.R - 8); ctx.fillStyle = rgba(PAL.BG, 1); ctx.fill();
+        if (r) {
+          const col = off > 0.5 ? PAL.INK : (flag > 0.05 ? PAL.RED : PAL.GREEN);
+          ctx.lineWidth = r && off < 0.5 ? 4 : 2.5; ctx.strokeStyle = rgba(col, (off > 0.5 ? 0.35 : 0.95) * b3); ctx.stroke();
+          if (off > 0.5) drawX(n.x, n.y, 16, PAL.INK, 0.5 * b3 * off, 4);
+        } else { ctx.lineWidth = 2.5; ctx.strokeStyle = rgba(PAL.GREEN, a * 0.75); ctx.stroke();
+          ctx.fillStyle = rgba(PAL.GREEN, 0.5 * b3); ctx.beginPath(); ctx.arc(n.x, n.y, 4, 0, TAU); ctx.fill(); }
+      });
+      // anillo de identificación
+      if (flag > 0.003 && off < 0.5) { const k = (t - T_FLAG) % 1.2 / 1.2; ctx.strokeStyle = rgba(PAL.GREEN, 0.9 * (1 - k) * flag * b3); ctx.lineWidth = 3;
+        hexPath(ctx, REN.x, REN.y, CL.R + 6 + 26 * eO(k)); ctx.stroke(); }
+      text(ctx, 'RENDERIZADOR', REN.x, REN.y + CL.R + 46, F_L, off > 0.5 ? PAL.INK : PAL.GREEN, flag * b3 * (off > 0.5 ? 0.5 : 1), { align: 'center', spacing: '5px', glow: 8 });
+      // datasets cian que entran (hasta el corte)
+      const cutK = eO(seg(t, T_CUT, T_CUT + 0.35));
+      ST.forEach((q, i) => {
+        const u = (q.ph + t * q.sp) % 1, x0 = 140, tx = REN.x - CL.R + 6;
+        let x = lerp(x0, tx, u), y = lerp(REN.y + q.dy, REN.y, u * u);
+        let al = 0.85 * Math.sin(Math.PI * clamp(u, 0, 1)) ** 0.5;
+        if (off > 0.5) al *= 0.0 + (1 - off) * 0.3 + 0.7 * 1;                         // sigue llegando, ya sin efecto
+        if (cutK > 0) { const stopX = WALL - 14 - (i % 6) * 9; if (x > stopX) { x = stopX - (i % 3) * 3; y = lerp(REN.y + q.dy, REN.y, 0.5) + Math.sin(t * 3 + i) * 3; } }
+        ctx.fillStyle = rgba(PAL.CYAN, al * b3 * (x < WALL - 10 || cutK === 0 ? 1 : 0.4)); ctx.beginPath(); ctx.arc(x, y, q.s, 0, TAU); ctx.fill();
+      });
+      // muro verde: acceso cortado
+      if (cutK > 0.003) {
+        const h = 250 * cutK; ctx.lineWidth = 6; ctx.strokeStyle = rgba(PAL.GREEN, 0.95 * b3); ctx.beginPath(); ctx.moveTo(WALL, REN.y - h); ctx.lineTo(WALL, REN.y + h); ctx.stroke();
+        ctx.lineWidth = 2; ctx.strokeStyle = rgba(PAL.GREEN, 0.4 * b3); ctx.beginPath(); ctx.moveTo(WALL + 14, REN.y - h * 0.9); ctx.lineTo(WALL + 14, REN.y + h * 0.9); ctx.stroke();
+      }
+      // sendero que ya no llega: línea punteada tras el muro
+      if (cutK > 0.003) { ctx.setLineDash([6, 14]); ctx.lineWidth = 2; ctx.strokeStyle = rgba(PAL.INK, 0.2 * b3); ctx.beginPath(); ctx.moveTo(WALL + 30, REN.y); ctx.lineTo(REN.x - CL.R - 14, REN.y); ctx.stroke(); ctx.setLineDash([]); }
+    }
+
+    // ===== Textos =====
+    HEAD.forEach(([a, b, s], i) => {
+      const w = win(t, a, b); if (w <= 0.004) return;
+      text(ctx, s, 120, 150 + 14 * (1 - w), F_H, i === 1 ? PAL.GREEN : PAL.INK, w, { glow: i === 1 ? 14 : 6 });
+    });
+    STAMP.forEach(([a, b, s], i) => {
+      const w = win(t, a, b, 0.4); if (w <= 0.004) return;
+      text(ctx, s, 1800, 150, F_S, PAL.GREEN, 0.9 * w, { align: 'right', spacing: '4px', glow: 12 });
+    });
+    CAP.forEach(([a, b], i) => {
+      const w = win(t, a, b, 0.5); if (w <= 0.004) return; const L = CAPL[i];
+      L.forEach((ln, k) => text(ctx, ln, 120, (L.length === 1 ? 994 : 938 + k * 56) + 10 * (1 - w), F_C, PAL.INK, 0.92 * w, { glow: 3 }));
+    });
+
+    bloom(ctx, cv, { k: 0.65 });
+  });
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>D19 · Remediación</title>
+<link rel="stylesheet" href="../lib/theme.css">
+<link rel="stylesheet" href="../lib/fonts-spartan.css">
+<style>
+  body { background: #05070D; }
+  #cv { position: absolute; inset: 0; }
+  #grain { position: absolute; inset: -20px; opacity: 0.05; mix-blend-mode: overlay; pointer-events: none; }
+  #vig { position: absolute; inset: 0; background: radial-gradient(120% 110% at 50% 48%, transparent 50%, rgba(2,3,6,0.7) 100%); pointer-events: none; }
+  #fade { position: absolute; inset: 0; background: #05070D; opacity: 1; }
+</style>
+</head>
+<body>
+<div id="world">
+  <canvas id="cv" width="1920" height="1080"></canvas>
+  <div id="vig"></div>
+  <canvas id="grain" width="512" height="512" style="width:1960px;height:1120px"></canvas>
+  <div id="fade"></div>
+</div>
+<script src="../node_modules/gsap/dist/gsap.min.js"></script>
+<script src="../node_modules/gsap/dist/SplitText.min.js"></script>
+<script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
+<script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
+<script src="../lib/stage.js"></script>
+<script src="../lib/audio.js"></script>
+<script src="../lib/neon.js"></script>
+<script>
+/* d19 · Remediación (18 s, sin voz).
+   1 0,4–10,5   siete medidas: cada fila cierra un candado y llena una celda del panal (HF)
+   2 10,8–17,4  el panal pasa a la izquierda: aviso al FBI (primero) y contacto de OpenAI (después) */
+M.scene({ duration: 18, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed: { cycle: 8, bright: 0.7, sub: 0.25 } } }, async (tl, M) => {
+  const $ = (s) => document.querySelector(s);
+  const cv = $('#cv'), ctx = cv.getContext('2d');
+  { const g = $('#grain').getContext('2d'); const im = g.createImageData(512, 512); const rn = M.rng(19);
+    for (let i = 0; i < im.data.length; i += 4) { const v = 128 + (rn() - 0.5) * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+    g.putImageData(im, 0, 0); }
+  const F_H = '700 92px "League Spartan"', F_L = '500 44px "DM Sans"', F_M = '500 28px "DM Mono"', F_N = '800 180px "League Spartan"',
+        F_R = '600 46px "DM Sans"', F_B = '800 96px "League Spartan"', F_O = '700 64px "League Spartan"';
+  const SAMPLE = 'LAS BRECHAS SE CIERRAN REPORTE AL FBI Renderizador corregido IMDSv2 bloqueado Admisión y credenciales acotadas Rotación masiva: tokens, claves, JWT Cluster núcleo reconstruido Conector: credenciales por cluster Sandbox cerrado con el proveedor Hugging Face cerró cada vía de entrada. Reportó al FBI antes de que OpenAI lo contactara. HUGGING FACE · REMEDIACIÓN ANTES DESPUÉS OpenAI 0123456789/';
+  await Promise.all([F_H, F_L, F_M, F_N, F_R, F_B, F_O].map((f) => document.fonts.load(f, SAMPLE)));
+
+  const { PAL, rgba, bloom, bg, text } = Neon;
+  const TAU = Math.PI * 2;
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, m) => a + (b - a) * m;
+  const seg = (t, a, b) => clamp((t - a) / (b - a));
+  const mix = (a, b, m) => [lerp(a[0], b[0], m), lerp(a[1], b[1], m), lerp(a[2], b[2], m)];
+  const eA = gsap.parseEase('apple'), eO = gsap.parseEase('appleOut'), eI = gsap.parseEase('appleIn');
+
+  const LABELS = ['Renderizador corregido', 'IMDSv2 bloqueado', 'Admisión y credenciales acotadas', 'Rotación masiva: tokens, claves, JWT',
+                  'Cluster núcleo reconstruido', 'Conector: credenciales por cluster', 'Sandbox cerrado con el proveedor'];
+  const ROW0 = 292, PITCH = 96, X_LOCK = 168, X_TXT = 236;
+  const TA = LABELS.map((_, i) => 1.3 + 1.2 * i);      // aparece la fila
+  const TC = TA.map((a) => a + 0.55);                  // se cierra el candado
+  const DONE = TC[6] + 0.4;                            // 9,7 s
+  const B2 = 10.8;                                     // cambio de beat
+
+  // Panal de 7 celdas: seis alrededor, la séptima al centro.
+  const R = 80, DH = R * Math.sqrt(3);
+  const CELLS = [-60, 0, 60, 120, 180, 240].map((a) => [Math.cos(a * Math.PI / 180) * DH, Math.sin(a * Math.PI / 180) * DH]);
+  CELLS.push([0, 0]);
+
+  // ---- sonido: pocos cues, cada uno con motivo
+  M.sfx(0.45, 'tick', { gain: -3 });
+  [0, 1, 2, 3, 4, 5, 7].forEach((d, i) => M.sfx(TC[i], 'tap', { deg: d, oct: 5, bright: 0.8, gain: -2 }));
+  M.sfx(DONE, 'shimmer', { gain: -6 });
+  M.sfx(B2 - 0.1, 'whoosh', { dur: 0.9, peak: 0.35, dir: -1, gain: -4 });
+  M.sfx(B2 + 0.2, 'tick', { gain: -3 });
+  M.sfx(13.8, 'tap', { deg: 4, oct: 6, bright: 0.9 });
+  M.sfx(13.85, 'shimmer', { gain: -8, degs: [2, 4, 7] });
+  M.sfx(15.0, 'whoosh', { dur: 1.3, peak: 0.3, dir: -1, gain: -9 });
+  M.sfx(16.4, 'tap', { deg: 0, oct: 4, bright: 0.6, gain: -4 });
+  [[0.3, 4], [4, 9], [9, 14], [14, 17]].forEach(([a, b]) => tl.to({ v: 0 }, { v: 1, duration: b - a, ease: 'none' }, a));
+  tl.fromTo('#fade', { opacity: 1 }, { opacity: 0, duration: 0.5, ease: 'appleOut' }, 0);
+  tl.to('#fade', { opacity: 1, duration: 0.33, ease: 'appleIn' }, 17.62);
+
+  // ---- dibujo
+  function hexPath(cx, cy, r) {
+    ctx.beginPath();
+    for (let k = 0; k < 6; k++) { const a = (-90 + 60 * k) * Math.PI / 180; const x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r; k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+    ctx.closePath();
+  }
+  // candado: c = 0 abierto, 1 cerrado. s = medio ancho del cuerpo.
+  function lock(x, y, s, c, col, a, lw) {
+    ctx.save(); ctx.strokeStyle = rgba(col, a); ctx.lineWidth = lw; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    const bw = s, bh = s * 1.4, top = y - bh / 2;
+    // cuerpo
+    ctx.beginPath(); ctx.roundRect(x - bw, top, bw * 2, bh, s * 0.22); ctx.stroke();
+    ctx.fillStyle = rgba(col, a * (0.10 + 0.30 * c)); ctx.fill();
+    // ojo de la cerradura
+    ctx.fillStyle = rgba(col, a); ctx.beginPath(); ctx.arc(x, top + bh * 0.46, s * 0.17, 0, TAU); ctx.fill();
+    ctx.fillRect(x - s * 0.06, top + bh * 0.46, s * 0.12, bh * 0.28);
+    // arco: pivota sobre la pata derecha y se levanta al estar abierto
+    const o = 1 - c, sh = s * 0.62;
+    ctx.translate(x + sh, top); ctx.rotate(o * 0.62); ctx.translate(0, -o * s * 0.28);
+    ctx.beginPath(); ctx.moveTo(-sh * 2, 0); ctx.lineTo(-sh * 2, -s * 0.62); ctx.arc(-sh, -s * 0.62, sh, Math.PI, 0); ctx.lineTo(0, 0); ctx.stroke();
+    ctx.restore();
+  }
+  function ring(x, y, r0, r1, p, col, a, lw) {
+    if (p <= 0 || p >= 1) return; ctx.save(); ctx.strokeStyle = rgba(col, a * (1 - p)); ctx.lineWidth = lw; ctx.beginPath(); ctx.arc(x, y, lerp(r0, r1, eO(p)), 0, TAU); ctx.stroke(); ctx.restore();
+  }
+  function bez(p, a, b, c, d) { const u = 1 - p; return u * u * u * a + 3 * u * u * p * b + 3 * u * p * p * c + p * p * p * d; }
+
+  M.onFrame((t) => {
+    bg(ctx, t, { grid: 0.045 * eO(seg(t, 0.2, 1.2)) });
+
+    // ===== titulares, sello y leyendas
+    const h1 = eO(seg(t, 0.4, 1.2)) * (1 - eI(seg(t, B2 - 0.4, B2 + 0.1)));
+    const h2 = eO(seg(t, B2 + 0.2, B2 + 1.0));
+    text(ctx, 'LAS BRECHAS SE CIERRAN', 120, 150 + 16 * (1 - eO(seg(t, 0.4, 1.2))) - 14 * eI(seg(t, B2 - 0.4, B2 + 0.1)), F_H, PAL.INK, h1, { glow: 8 });
+    text(ctx, 'REPORTE AL FBI', 120, 150 + 16 * (1 - h2), F_H, PAL.INK, h2, { glow: 8 });
+    text(ctx, 'HUGGING FACE · REMEDIACIÓN', 1800, 150, F_M, PAL.GREEN, eO(seg(t, 0.7, 1.5)) * 0.9, { align: 'right', spacing: '4px', glow: 10 });
+    const c1 = eO(seg(t, 0.9, 1.6)) * (1 - eI(seg(t, B2 - 0.5, B2 + 0.1)));
+    const c2 = eO(seg(t, B2 + 0.4, B2 + 1.1));
+    text(ctx, 'Hugging Face cerró cada vía de entrada.', 120, 985 + 12 * (1 - c1), F_L, PAL.INK, c1 * 0.92, { glow: 4 });
+    text(ctx, 'Reportó al FBI antes de que OpenAI lo contactara.', 120, 985 + 12 * (1 - c2), F_L, PAL.INK, c2 * 0.92, { glow: 4 });
+
+    // ===== beat 1: lista de medidas
+    const L = 1 - eI(seg(t, B2 - 0.2, B2 + 0.5));
+    if (L > 0.002) {
+      let nClosed = 0;
+      for (let i = 0; i < 7; i++) {
+        const y = ROW0 + PITCH * i, ra = eO(seg(t, TA[i], TA[i] + 0.4)) * L;
+        const cl = eA(seg(t, TC[i], TC[i] + 0.35)); if (t >= TC[i] + 0.2) nClosed++;
+        if (ra <= 0.002) continue;
+        const dx = -18 * (1 - eO(seg(t, TA[i], TA[i] + 0.45))) - 30 * (1 - L);
+        // línea de separación
+        ctx.strokeStyle = rgba(PAL.INK, 0.10 * ra); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(120 + dx, y + PITCH / 2 - 2); ctx.lineTo(1120 + dx, y + PITCH / 2 - 2); ctx.stroke();
+        const col = mix(PAL.RED, PAL.GREEN, cl);
+        const fresh = 1 - seg(t, TC[i] + 0.2, TC[i] + 1.4);                  // foco del momento
+        lock(X_LOCK + dx, y, 22, cl, col, ra * (0.55 + 0.45 * cl), 3.5);
+        ring(X_LOCK + dx, y, 24, 70, seg(t, TC[i] + 0.2, TC[i] + 1.0), PAL.GREEN, ra * 0.9, 3);
+        const lc = mix(PAL.INK, PAL.GREEN, 0.0);
+        text(ctx, LABELS[i], X_TXT + dx, y + 15, F_R, lc, ra * (0.5 + 0.5 * cl) , { glow: 2 + 10 * cl * fresh });
+        // subrayado verde que barre el rótulo al cerrar
+        if (cl > 0) {
+          ctx.font = F_R; const w = ctx.measureText(LABELS[i]).width;
+          ctx.strokeStyle = rgba(PAL.GREEN, ra * (0.2 + 0.7 * fresh)); ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(X_TXT + dx, y + 32); ctx.lineTo(X_TXT + dx + w * cl, y + 32); ctx.stroke();
+        }
+      }
+      // contador
+      const na = eO(seg(t, 1.0, 1.8)) * L;
+      const bump = 1 + 0.06 * Math.max(0, 1 - Math.abs(t - (TC[Math.max(0, nClosed - 1)] + 0.3)) / 0.3) * (nClosed > 0 ? 1 : 0);
+      ctx.save(); ctx.translate(1500, 800); ctx.scale(bump, bump);
+      text(ctx, nClosed + '/7', 0, 0, F_N, nClosed === 7 ? PAL.GREEN : PAL.INK, na * (nClosed === 7 ? 1 : 0.75), { align: 'center', glow: nClosed === 7 ? 18 : 6 });
+      ctx.restore();
+    }
+
+    // ===== panal (HF): en el beat 1 a la derecha; en el beat 2 pasa a la izquierda
+    const m = eA(seg(t, B2 + 0.1, B2 + 1.3));
+    const hx = lerp(1500, 460, m), hy = lerp(470, 560, m), hs = lerp(1, 0.9, m);
+    ctx.save(); ctx.translate(hx, hy); ctx.scale(hs, hs);
+    for (let i = 0; i < 7; i++) {
+      const [ox, oy] = CELLS[i];
+      const ha = eO(seg(t, 0.6 + 0.08 * i, 1.3 + 0.08 * i));
+      const cl = eA(seg(t, TC[i], TC[i] + 0.35));
+      const col = mix(PAL.RED, PAL.GREEN, cl);
+      hexPath(ox, oy, R - 5); ctx.fillStyle = rgba(col, ha * (0.04 + 0.16 * cl)); ctx.fill();
+      ctx.lineWidth = 3; ctx.strokeStyle = rgba(col, ha * (0.35 + 0.6 * cl)); ctx.stroke();
+      lock(ox, oy + 3, 15, cl, col, ha * (0.5 + 0.5 * cl), 3);
+      ring(ox, oy, R - 5, R * 1.5, seg(t, TC[i] + 0.1, TC[i] + 0.9), PAL.GREEN, ha, 3);
+    }
+    // cierre del panal completo: contorno exterior respira un instante
+    const full = seg(t, DONE, DONE + 1.2);
+    if (full > 0 && full < 1) { ring(0, 0, 230, 360, full, PAL.GREEN, 0.9, 3); }
+    ctx.restore();
+
+    // ===== beat 2: FBI primero, OpenAI después
+    const FBI = { x: 1040, y: 560 }, OAI = { x: 1620, y: 560, w: 280, h: 180 };
+    const fa = eO(seg(t, 12.0, 12.8));
+    if (fa > 0) {
+      const ra = TAU * eA(seg(t, 12.0, 12.8));
+      ctx.lineWidth = 4; ctx.strokeStyle = rgba(PAL.INK, 0.85); ctx.beginPath(); ctx.arc(FBI.x, FBI.y, 92, -Math.PI / 2, -Math.PI / 2 + ra); ctx.stroke();
+      text(ctx, 'FBI', FBI.x, FBI.y + 4, F_B, PAL.INK, fa, { align: 'center', base: 'middle', glow: 8 });
+    }
+    // enlace HF → FBI y paquete
+    const sx = hx + 215 * hs, ex = FBI.x - 100;
+    const lp = eA(seg(t, 12.2, 12.9));
+    ctx.strokeStyle = rgba(PAL.GREEN, 0.25); ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(sx, FBI.y); ctx.lineTo(lerp(sx, ex, lp), FBI.y); ctx.stroke();
+    const pk = eA(seg(t, 12.9, 13.8));
+    if (pk > 0 && pk < 1) {
+      const px = lerp(sx, ex, pk);
+      ctx.strokeStyle = rgba(PAL.GREEN, 0.95); ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(lerp(sx, ex, Math.max(0, pk - 0.35)), FBI.y); ctx.lineTo(px, FBI.y); ctx.stroke();
+      ctx.fillStyle = rgba(PAL.INK, 1); ctx.beginPath(); ctx.arc(px, FBI.y, 9, 0, TAU); ctx.fill();
+      ctx.strokeStyle = rgba(PAL.GREEN, 0.9); ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(px, FBI.y, 17, 0, TAU); ctx.stroke();
+    }
+    if (t >= 13.8) {
+      ctx.strokeStyle = rgba(PAL.GREEN, 0.9 * eO(seg(t, 13.8, 14.4)) + 0.0); ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(FBI.x, FBI.y, 92, 0, TAU); ctx.stroke();
+      ring(FBI.x, FBI.y, 92, 190, seg(t, 13.8, 14.8), PAL.GREEN, 1, 4);
+      ring(FBI.x, FBI.y, 92, 150, seg(t, 14.0, 14.9), PAL.GREEN, 0.7, 2);
+      text(ctx, 'ANTES', FBI.x, FBI.y + 175, F_M, PAL.GREEN, eO(seg(t, 14.0, 14.7)), { align: 'center', spacing: '6px', glow: 12 });
+    }
+    // OpenAI (violeta, tenue) y su contacto, después
+    const oa = eO(seg(t, 14.3, 15.0));
+    if (oa > 0) {
+      ctx.lineWidth = 3; ctx.strokeStyle = rgba(PAL.VIOLET, 0.85 * oa); ctx.beginPath(); ctx.roundRect(OAI.x - OAI.w / 2, OAI.y - OAI.h / 2, OAI.w, OAI.h, 6); ctx.stroke();
+      ctx.fillStyle = rgba(PAL.VIOLET, 0.07 * oa); ctx.fill();
+      text(ctx, 'OpenAI', OAI.x, OAI.y + 3, F_O, PAL.VIOLET, oa * 0.95, { align: 'center', base: 'middle', glow: 8 });
+    }
+    const ap = eA(seg(t, 15.3, 16.6));
+    if (ap > 0) {
+      const X0 = OAI.x - 60, Y0 = OAI.y - OAI.h / 2, X1 = 1450, Y1 = 220, X2 = 700, Y2 = 220, X3 = hx + 40 * hs, Y3 = hy - 195 * hs;
+      const N = 90;
+      ctx.strokeStyle = rgba(PAL.VIOLET, 0.75); ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.beginPath();
+      for (let k = 0; k < N * ap; k += 2) {
+        const p0 = k / N, p1 = Math.min(ap, (k + 1) / N);
+        ctx.moveTo(bez(p0, X0, X1, X2, X3), bez(p0, Y0, Y1, Y2, Y3)); ctx.lineTo(bez(p1, X0, X1, X2, X3), bez(p1, Y0, Y1, Y2, Y3));
+      }
+      ctx.stroke();
+      const qx = bez(ap, X0, X1, X2, X3), qy = bez(ap, Y0, Y1, Y2, Y3);
+      ctx.fillStyle = rgba(PAL.VIOLET, 0.95); ctx.beginPath(); ctx.arc(qx, qy, 8, 0, TAU); ctx.fill();
+      text(ctx, 'DESPUÉS', 1065, 246, F_M, PAL.VIOLET, eO(seg(t, 15.6, 16.2)) * 0.85, { align: 'center', spacing: '6px', glow: 8 });
+    }
+    bloom(ctx, cv, { k: 0.65 });
+  });
+});
+</script>
+</body>
+</html>
