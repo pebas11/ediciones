@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>D09 · Entrada</title>
+<link rel="stylesheet" href="../lib/theme.css">
+<link rel="stylesheet" href="../lib/fonts-spartan.css">
+<style>
+  body { background: #05070D; }
+  #cv { position: absolute; inset: 0; }
+  #grain { position: absolute; inset: -20px; opacity: 0.05; mix-blend-mode: overlay; pointer-events: none; }
+  #vig { position: absolute; inset: 0; background: radial-gradient(120% 110% at 50% 48%, transparent 50%, rgba(2,3,6,0.7) 100%); pointer-events: none; }
+  #fade { position: absolute; inset: 0; background: #05070D; opacity: 1; }
+</style>
+</head>
+<body>
+<div id="world">
+  <canvas id="cv" width="1920" height="1080"></canvas>
+  <div id="vig"></div>
+  <canvas id="grain" width="512" height="512" style="width:1960px;height:1120px"></canvas>
+  <div id="fade"></div>
+</div>
+<script src="../node_modules/gsap/dist/gsap.min.js"></script>
+<script src="../node_modules/gsap/dist/SplitText.min.js"></script>
+<script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
+<script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
+<script src="../lib/stage.js"></script>
+<script src="../lib/audio.js"></script>
+<script src="../lib/neon.js"></script>
+<script>
+/* D09 · Entrada (22 s). Los dos fallos del renderizador de datasets.
+   A 0,4–5,2   dataset malicioso (cian) entra al pod verde
+   B 5,2–10,4  fallo 1: HDF5 -> lee archivos y secretos del pod (fichas ámbar)
+   C 10,4–15,6 fallo 2: plantilla Jinja2 -> exec (el renderizador se vuelve rojo)
+   D 15,6–21,7 SSRF al servicio de metadatos: la lista de permitidos lo frena; cambia a técnicas locales */
+M.scene({ duration: 22, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed: { cycle: 8, bright: 0.7, sub: 0.25 } } }, async (tl, M) => {
+  const $ = (s) => document.querySelector(s);
+  const cv = $('#cv'), ctx = cv.getContext('2d');
+  { const g = $('#grain').getContext('2d'); const im = g.createImageData(512, 512); const rn = M.rng(5);
+    for (let i = 0; i < im.data.length; i += 4) { const v = 128 + (rn() - 0.5) * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+    g.putImageData(im, 0, 0); }
+  const F_T = '700 92px "League Spartan"', F_L = '500 42px "DM Sans"', F_S = '500 28px "DM Mono"', F_C = '500 28px "DM Mono"', F_M = '500 24px "DM Mono"', F_X = '700 34px "DM Mono"';
+  await Promise.all([document.fonts.load(F_T, 'Dos fallos de entrada ÓÁ'), document.fonts.load(F_L, 'Un dataset malicioso ÓÁ'), document.fonts.load(F_S, 'CONFIG.YAML 9–13 JUL · UTC {{ … }}')]);
+
+  const { PAL, rgba, bloom, bg, text } = Neon;
+  const TAU = Math.PI * 2;
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, m) => a + (b - a) * m;
+  const seg = (t, a, b) => clamp((t - a) / (b - a));
+  const eA = gsap.parseEase('apple'), eO = gsap.parseEase('appleOut'), eI = gsap.parseEase('appleIn');
+  const pulse = (t, a, d) => { const u = seg(t, a, a + d); return Math.sin(u * Math.PI); };
+
+  // ---- Textos por beat
+  const BEATS = [
+    { a: 0.4, b: 5.2, h: 'Dos fallos de entrada', l: 'Un dataset malicioso entra al renderizador.' },
+    { a: 5.2, b: 10.4, h: 'Fallo 1: HDF5', l: 'HDF5 lee archivos locales: variables de entorno y secretos.' },
+    { a: 10.4, b: 15.6, h: 'Fallo 2: Jinja2', l: 'Jinja2 llega a exec y ejecuta código en producción.' },
+    { a: 15.6, b: 21.7, h: 'SSRF bloqueado', l: 'La lista de permitidos frena el SSRF; el agente cambia de técnica.' },
+  ];
+  const SEAL = '9–13 JUL · UTC';
+
+  // ---- Geometría
+  const PAN = { x: 140, y: 290, w: 500, h: 500 };
+  const POD = { x: 780, y: 270, w: 640, h: 580 };
+  const R = { x: 930, y: 540 };           // renderizador
+  const GATE = { x: 1520, y: 540 };       // lista de permitidos
+  const META = { x: 1700, y: 540 };       // servicio de metadatos
+  const LY = [PAN.y + 120, PAN.y + 190, PAN.y + 260, PAN.y + 330, PAN.y + 400]; // y de líneas
+  const LINES = ['dataset:', '  datos: hdf5://…', '  plantilla: {{ … }}', '  opciones: …'];
+  // hexágonos del pod
+  const HEX = [], HR = 32;
+  { let k = 0; for (let row = 0; row < 7; row++) for (let col = 0; col < 8; col++) {
+      const x = POD.x + 56 + col * 76 + (row % 2) * 38, y = POD.y + 70 + row * 70;
+      if (x > POD.x + POD.w - 40) continue;
+      if (Math.hypot(x - R.x, y - R.y) < 105) continue;
+      HEX.push({ x, y, fs: x > 1130 && y > 380 && y < 720, k: k++ }); } }
+  const rn = M.rng(77);
+  HEX.forEach((h) => { h.ph = rn() * TAU; });
+  const SPARK = []; for (let i = 0; i < 14; i++) SPARK.push({ a: -Math.PI + (rn() - 0.5) * 1.6, v: 140 + rn() * 180 });
+
+  // ---- Sonido
+  M.sfx(0.45, 'tick');
+  M.sfx(1.5, 'whoosh', { dur: 1.1, peak: 0.35 });
+  M.sfx(5.3, 'tick');
+  M.sfx(6.2, 'scan', { dur: 1.2, dir: 1 });
+  M.sfx(8.3, 'shimmer', { gain: -7 });
+  M.sfx(10.5, 'tick');
+  M.sfx(11.4, 'riser', { dur: 1.2, semis: 7 });
+  M.sfx(12.6, 'impact', { weight: 0.8, gain: -3 });
+  M.sfx(15.7, 'tick', { gain: -2 });
+  M.sfx(17.35, 'tap', { deg: 7, oct: 5, bright: 0.8 });
+  M.sfx(18.6, 'tap', { deg: 4, oct: 5, bright: 0.7 });
+  M.sfx(19.9, 'scan', { dur: 1.0, dir: -1, from: 700, to: 2600, q: 4 });
+  [[0.3, 4.6], [5.2, 10], [10.4, 15], [15.6, 21]].forEach(([a, b]) => tl.to({ v: 0 }, { v: 1, duration: b - a, ease: 'none' }, a));
+  tl.fromTo('#fade', { opacity: 1 }, { opacity: 0, duration: 0.5, ease: 'appleOut' }, 0);
+  tl.to('#fade', { opacity: 1, duration: 0.33, ease: 'appleIn' }, 21.67);
+
+  // ---- Utilidades de dibujo
+  function hex(x, y, r) { ctx.beginPath(); for (let i = 0; i < 6; i++) { const a = TAU / 6 * i + TAU / 12; const px = x + Math.cos(a) * r, py = y + Math.sin(a) * r; i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); } ctx.closePath(); }
+  function rr(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+  function dot(x, y, s, col, a) { ctx.fillStyle = rgba(col, a); ctx.beginPath(); ctx.arc(x, y, s, 0, TAU); ctx.fill(); }
+  function wrap(s) { ctx.font = F_L; if (ctx.measureText(s).width <= 1500) return [s]; const w = s.split(' '); let a = ''; let i = 0;
+    for (; i < w.length; i++) { const n = a ? a + ' ' + w[i] : w[i]; if (ctx.measureText(n).width > 1500) break; a = n; } return [a, w.slice(i).join(' ')]; }
+  // alfa de un bloque de texto de beat: entra en a, sale en b
+  const beatA = (bt, t) => eO(seg(t, bt.a, bt.a + 0.55)) * (1 - eI(seg(t, bt.b - 0.35, bt.b)));
+
+  M.onFrame((t) => {
+    bg(ctx, t, { grid: 0.04 * eO(seg(t, 0.2, 1.2)) });
+
+    // === Pod verde (Hugging Face)
+    const podP = eA(seg(t, 0.5, 2.0));
+    const per = 2 * (POD.w + POD.h);
+    ctx.save(); ctx.lineWidth = 3; ctx.strokeStyle = rgba(PAL.GREEN, 0.8); ctx.setLineDash([per * podP, per]);
+    rr(POD.x, POD.y, POD.w, POD.h, 26); ctx.stroke(); ctx.restore();
+    text(ctx, 'POD', POD.x + 24, POD.y - 18, F_M, PAL.GREEN, 0.75 * eO(seg(t, 1.4, 2.2)), { spacing: '4px', glow: 6 });
+
+    // hexágonos secundarios: tenues; los de "archivos" se tiñen de ámbar en B
+    const amberIn = eO(seg(t, 6.3, 7.4)) * (1 - 0.7 * eA(seg(t, 10.4, 11.4)));
+    for (const h of HEX) {
+      const ha = eO(seg(t, 1.0 + h.k * 0.015, 2.0 + h.k * 0.015));
+      const breath = 0.5 + 0.5 * Math.sin(t * 0.9 + h.ph);
+      const isFs = h.fs ? amberIn : 0;
+      const col = isFs > 0.02 ? PAL.AMBER : PAL.GREEN;
+      ctx.lineWidth = 2; ctx.strokeStyle = rgba(col, (0.22 + 0.08 * breath + 0.45 * isFs) * ha);
+      hex(h.x, h.y, HR); ctx.stroke();
+      if (isFs > 0.02) dot(h.x, h.y, 3.2, PAL.AMBER, 0.75 * isFs * ha);
+    }
+
+    // === Renderizador (nodo)
+    const rIn = eO(seg(t, 1.6, 2.6));
+    const redT = eO(seg(t, 12.6, 13.0));                         // se vuelve rojo en C
+    const redKeep = redT * (1 - 0.35 * eA(seg(t, 15.8, 16.8)));  // en D queda más tenue
+    const arrive = pulse(t, 3.1, 1.0);
+    const rcol = redT > 0.5 ? PAL.RED : PAL.GREEN;
+    const focusR = t < 5.2 ? 1 : (t < 10.4 ? 0.5 : (t < 15.6 ? 1 : 0.4));
+    const rA = rIn * (0.55 + 0.45 * focusR);
+    ctx.lineWidth = 4; ctx.strokeStyle = rgba(rcol, rA); hex(R.x, R.y, 52 + 6 * arrive); ctx.stroke();
+    ctx.fillStyle = rgba(rcol, (0.12 + 0.18 * arrive + 0.2 * redKeep) * rIn); hex(R.x, R.y, 52 + 6 * arrive); ctx.fill();
+    dot(R.x, R.y, 9, rcol, rA);
+    text(ctx, 'RENDERIZADOR', R.x, R.y + 100, F_M, rcol, 0.8 * rIn, { align: 'center', spacing: '3px', glow: 6 });
+
+    // === Panel config.yaml (cian = lo que trae el agente)
+    const panA = eO(seg(t, 0.6, 1.6));
+    const panDim = t < 5.2 ? 1 : 0.75;
+    const dD = 1 - 0.55 * eA(seg(t, 15.8, 16.8));                // en D el panel pasa al fondo
+    ctx.save(); ctx.translate(-40 * (1 - panA), 0);
+    ctx.lineWidth = 3; ctx.strokeStyle = rgba(PAL.CYAN, 0.85 * panA * panDim * dD);
+    rr(PAN.x, PAN.y, PAN.w, PAN.h, 18); ctx.stroke();
+    ctx.fillStyle = rgba(PAL.CYAN, 0.05 * panA * dD); rr(PAN.x, PAN.y, PAN.w, PAN.h, 18); ctx.fill();
+    text(ctx, 'CONFIG.YAML', PAN.x + 32, PAN.y + 58, F_C, PAL.CYAN, 0.95 * panA * dD, { spacing: '3px', glow: 8 });
+    ctx.strokeStyle = rgba(PAL.CYAN, 0.25 * panA * dD); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(PAN.x + 24, PAN.y + 82); ctx.lineTo(PAN.x + PAN.w - 24, PAN.y + 82); ctx.stroke();
+    const hiB = eO(seg(t, 5.7, 6.4)) * (1 - eA(seg(t, 10.2, 10.8)));
+    const hiC = eO(seg(t, 10.9, 11.5)) * (1 - eA(seg(t, 15.4, 16.0)));
+    for (let i = 0; i < LINES.length; i++) {
+      const y = LY[i] + 40;
+      const hi = i === 1 ? hiB : (i === 2 ? hiC : 0);
+      if (hi > 0.01) { ctx.fillStyle = rgba(PAL.CYAN, 0.16 * hi); rr(PAN.x + 18, y - 38, PAN.w - 36, 54, 8); ctx.fill();
+        ctx.strokeStyle = rgba(PAL.CYAN, 0.9 * hi); ctx.lineWidth = 2; rr(PAN.x + 18, y - 38, PAN.w - 36, 54, 8); ctx.stroke(); }
+      const la = eO(seg(t, 1.1 + i * 0.15, 1.9 + i * 0.15)) * panA * dD;
+      text(ctx, LINES[i], PAN.x + 36, y, F_C, hi > 0.2 ? PAL.INK : PAL.CYAN, la * (0.42 + 0.58 * hi + (t < 5.2 ? 0.15 : 0)), { glow: hi > 0.2 ? 8 : 0 });
+    }
+    ctx.restore();
+
+    // === Beat A: paquete de dataset entra al pod
+    const pk = seg(t, 1.5, 3.3);
+    if (pk > 0 && pk < 1.02) {
+      const x0 = PAN.x + PAN.w, x1 = R.x - 52;
+      for (let i = 0; i < 16; i++) {
+        const u = clamp(eA(clamp(pk * 1.35 - i * 0.025)));
+        if (u <= 0 || u >= 1) continue;
+        const x = lerp(x0, x1, u), y = R.y + Math.sin(i * 2.1) * 14 * (1 - u);
+        dot(x, y, 4 + (i % 3), PAL.CYAN, 0.95 * Math.min(1, u * 8) * (1 - seg(u, 0.9, 1)));
+      }
+    }
+    // línea de entrada persistente, tenue
+    const entA = eO(seg(t, 3.2, 3.8)) * (1 - 0.55 * eA(seg(t, 5.2, 6)));
+    ctx.strokeStyle = rgba(PAL.CYAN, 0.35 * entA); ctx.lineWidth = 2; ctx.setLineDash([6, 12]); ctx.lineDashOffset = -t * 20;
+    ctx.beginPath(); ctx.moveTo(PAN.x + PAN.w, R.y); ctx.lineTo(R.x - 54, R.y); ctx.stroke(); ctx.setLineDash([]);
+
+    // === Beat B: HDF5 -> lectura de archivos; fichas ámbar vuelven al agente
+    {
+      const y1 = LY[1] + 2, bx = PAN.x + PAN.w - 18;
+      const fsX = 1230, fsY = 560;
+      const sc = eA(seg(t, 6.2, 7.2));
+      if (sc > 0 && t < 11.6) {
+        const al = (1 - eA(seg(t, 10.4, 11.4)));
+        // codo hacia los archivos
+        ctx.save(); ctx.strokeStyle = rgba(PAL.CYAN, 0.9 * al); ctx.lineWidth = 3; ctx.shadowColor = rgba(PAL.CYAN, 0.8 * al); ctx.shadowBlur = 10;
+        ctx.beginPath(); ctx.moveTo(bx, y1); ctx.lineTo(bx + 90, y1); ctx.moveTo(bx + 90, y1); ctx.lineTo(bx + 90, lerp(y1, fsY, sc)); ctx.lineTo(lerp(bx + 90, fsX - 40, sc), lerp(y1, fsY, sc)); ctx.stroke();
+      }
+      // fichas ámbar de vuelta (variables de entorno, secretos)
+      const chips = [{ d: 7.4, lb: 'ENV', dy: 0 }, { d: 7.7, lb: 'ENV', dy: 26 }, { d: 8.0, lb: 'SECRETOS', dy: -26 }, { d: 8.3, lb: 'SECRETOS', dy: 52 }];
+      const backY = PAN.y + PAN.h - 80;
+      chips.forEach((c, i) => {
+        const u = eA(seg(t, c.d, c.d + 1.7)); if (u <= 0) return;
+        const out = 1 - eA(seg(t, 10.2, 11.0));
+        const sx = fsX, sy = fsY + 60 + (i - 1.5) * 18;
+        const ex = PAN.x + PAN.w + 20 + (i % 2) * 40, ey = backY + (i - 1.5) * 20;
+        const x = lerp(sx, ex, u), y = lerp(sy, ey, u) - Math.sin(u * Math.PI) * 60;
+        ctx.save(); ctx.shadowColor = rgba(PAL.AMBER, 0.9); ctx.shadowBlur = 12;
+        ctx.fillStyle = rgba(PAL.AMBER, 0.95 * out); ctx.fillRect(x - 11, y - 8, 22, 16); ctx.restore();
+      });
+      const lab = eO(seg(t, 8.9, 9.6)) * (1 - eA(seg(t, 10.2, 10.9)));
+      text(ctx, 'ENV · SECRETOS', PAN.x + PAN.w + 30, backY + 70, F_M, PAL.AMBER, 0.95 * lab, { spacing: '3px', glow: 8 });
+    }
+
+    // === Beat C: plantilla -> exec
+    {
+      const y2 = LY[2] + 2, bx = PAN.x + PAN.w - 18;
+      const sc = eA(seg(t, 11.2, 12.5));
+      const al = 1 - eA(seg(t, 15.4, 16.2));
+      if (sc > 0 && al > 0) {
+        const ex = lerp(bx, R.x - 54, sc);
+        const yy = lerp(y2, R.y, eA(seg(t, 11.2, 11.9)));
+        ctx.save(); ctx.strokeStyle = rgba(PAL.CYAN, 0.9 * al); ctx.lineWidth = 3; ctx.shadowColor = rgba(PAL.CYAN, 0.8 * al); ctx.shadowBlur = 10;
+        ctx.beginPath(); ctx.moveTo(bx, y2); ctx.lineTo(bx + 60, y2); ctx.lineTo(bx + 60, R.y - 0); ctx.lineTo(Math.max(bx + 60, ex), R.y); ctx.stroke(); ctx.restore();
+        const h = seg(t, 11.2, 12.6) * 3.2;
+        dot(lerp(bx + 60, R.x - 54, clamp(h - 0.3)), R.y, 6, PAL.INK, al * (1 - seg(t, 12.5, 12.7)));
+      }
+      // onda del impacto
+      const wv = seg(t, 12.6, 14.0);
+      if (wv > 0 && wv < 1) { ctx.strokeStyle = rgba(PAL.RED, 0.9 * (1 - wv)); ctx.lineWidth = 4 * (1 - wv) + 1; hex(R.x, R.y, 52 + 150 * eO(wv)); ctx.stroke(); }
+      const xa = eO(seg(t, 13.1, 13.8)) * (1 - 0.0 * seg(t, 15.4, 16.4));
+      text(ctx, 'exec(…)', R.x, R.y - 80, F_X, PAL.RED, xa * (1 - 0.4 * eA(seg(t, 15.8, 16.8))), { align: 'center', glow: 14 });
+    }
+
+    // === Beat D: SSRF contra metadatos -> lista de permitidos
+    {
+      const dIn = eO(seg(t, 16.0, 16.9)), dOut = 1 - eA(seg(t, 21.0, 21.6));
+      const da = dIn * dOut;
+      // servicio de metadatos (nube, neutro)
+      ctx.lineWidth = 2.5; ctx.strokeStyle = rgba(PAL.INK, 0.55 * da); ctx.setLineDash([8, 8]);
+      ctx.beginPath(); ctx.arc(META.x, META.y, 56, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
+      text(ctx, 'METADATOS', META.x, META.y + 100, F_M, PAL.INK, 0.65 * da, { align: 'center', spacing: '3px', glow: 0 });
+      // puerta verde
+      const hit1 = pulse(t, 17.35, 0.7), hit2 = pulse(t, 18.6, 0.7);
+      const gp = Math.max(hit1, hit2);
+      ctx.save(); ctx.lineWidth = 8; ctx.lineCap = 'round'; ctx.strokeStyle = rgba(PAL.GREEN, (0.75 + 0.25 * gp) * da);
+      ctx.shadowColor = rgba(PAL.GREEN, da); ctx.shadowBlur = 14 + 22 * gp;
+      ctx.beginPath(); ctx.moveTo(GATE.x, GATE.y - 90); ctx.lineTo(GATE.x, GATE.y + 90); ctx.stroke(); ctx.restore();
+      text(ctx, 'PERMITIDOS', GATE.x, GATE.y - 128, F_M, PAL.GREEN, 0.9 * da, { align: 'center', spacing: '3px', glow: 8 });
+      // línea tenue R -> puerta
+      ctx.strokeStyle = rgba(PAL.RED, 0.28 * da); ctx.lineWidth = 2; ctx.setLineDash([6, 12]); ctx.lineDashOffset = -t * 24;
+      ctx.beginPath(); ctx.moveTo(R.x + 54, R.y); ctx.lineTo(GATE.x - 6, GATE.y); ctx.stroke(); ctx.setLineDash([]);
+      // dos intentos: salen de R, chocan, rebotan
+      [[16.6, 17.35], [17.85, 18.6]].forEach(([s, h], k) => {
+        const u = eA(seg(t, s, h));
+        if (t >= s && t < h + 0.05) { const x = lerp(R.x + 60, GATE.x - 14, u);
+          for (let j = 0; j < 4; j++) dot(x - j * 14, R.y, 5 - j * 0.9, PAL.RED, 0.95 * da * (1 - j * 0.2)); }
+        const rb = seg(t, h, h + 0.9);
+        if (rb > 0 && rb < 1) { const e = eO(rb);
+          SPARK.forEach((p, i) => { if (i % 2 !== k) return;
+            const x = GATE.x - 14 + Math.cos(p.a) * p.v * e * 0.7, y = GATE.y + Math.sin(p.a) * p.v * e * 0.7;
+            dot(x, y, 3.2 * (1 - rb) + 0.5, PAL.RED, 0.9 * (1 - rb)); }); }
+      });
+      // técnica local: curva cian desde R hacia los archivos del pod
+      const lc = eA(seg(t, 19.8, 20.9));
+      if (lc > 0) {
+        const al = dOut * eO(seg(t, 19.8, 20.2));
+        ctx.save(); ctx.lineWidth = 3.5; ctx.strokeStyle = rgba(PAL.CYAN, 0.95 * al); ctx.shadowColor = rgba(PAL.CYAN, al); ctx.shadowBlur = 12;
+        ctx.setLineDash([700 * lc, 800]);
+        ctx.beginPath(); ctx.moveTo(R.x + 40, R.y + 40); ctx.bezierCurveTo(R.x + 160, R.y + 190, 1120, 790, 1250, 650); ctx.stroke(); ctx.restore();
+        const pp = clamp(lc * 1.0);
+        const bx = (1 - pp) ** 3 * (R.x + 40) + 3 * (1 - pp) ** 2 * pp * (R.x + 160) + 3 * (1 - pp) * pp * pp * 1120 + pp ** 3 * 1250;
+        const by = (1 - pp) ** 3 * (R.y + 40) + 3 * (1 - pp) ** 2 * pp * (R.y + 190) + 3 * (1 - pp) * pp * pp * 790 + pp ** 3 * 650;
+        dot(bx, by, 7, PAL.INK, al);
+      }
+    }
+
+    // === Texto: titular, leyenda, sello
+    for (const bt of BEATS) {
+      const a = beatA(bt, t); if (a <= 0.004) continue;
+      const inU = 1 - eO(seg(t, bt.a, bt.a + 0.55));
+      text(ctx, bt.h, 120, 150 - 16 * inU, F_T, PAL.INK, a, { glow: 8 });
+      const ls = wrap(bt.l); const col = bt === BEATS[3] ? PAL.INK : PAL.INK;
+      ls.forEach((s, i) => text(ctx, s, 120, (ls.length > 1 ? 960 : 985) + i * 54 + 12 * inU, F_L, col, a * 0.95, { glow: 3 }));
+      const sa = a; text(ctx, SEAL, 1800, 100, F_S, PAL.CYAN, sa * 0.9, { align: 'right', spacing: '4px', glow: 8 });
+    }
+    bloom(ctx, cv, { k: 0.7 });
+  });
+});
+</script>
+</body>
+</html>

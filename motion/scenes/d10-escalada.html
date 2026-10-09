@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>D10 · Escalada</title>
+<link rel="stylesheet" href="../lib/theme.css">
+<link rel="stylesheet" href="../lib/fonts-spartan.css">
+<style>
+  body { background: #05070D; }
+  #cv { position: absolute; inset: 0; }
+  #grain { position: absolute; inset: -20px; opacity: 0.05; mix-blend-mode: overlay; pointer-events: none; }
+  #vig { position: absolute; inset: 0; background: radial-gradient(120% 110% at 50% 48%, transparent 50%, rgba(2,3,6,0.7) 100%); pointer-events: none; }
+  #fade { position: absolute; inset: 0; background: #05070D; opacity: 1; }
+</style>
+</head>
+<body>
+<div id="world">
+  <canvas id="cv" width="1920" height="1080"></canvas>
+  <div id="vig"></div>
+  <canvas id="grain" width="512" height="512" style="width:1960px;height:1120px"></canvas>
+  <div id="fade"></div>
+</div>
+<script src="../node_modules/gsap/dist/gsap.min.js"></script>
+<script src="../node_modules/gsap/dist/SplitText.min.js"></script>
+<script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
+<script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
+<script src="../lib/stage.js"></script>
+<script src="../lib/audio.js"></script>
+<script src="../lib/neon.js"></script>
+<script>
+/* D10 · Escalada (22 s). 11 de julio, hora UTC (FICHA-HF):
+   1 0,5–5     10:10 sondeo de Kubernetes desde un pod (foco: anillos cian)
+   2 5,2–10,6  19:53 pod privilegiado + disco del host montado = root en el nodo (foco: nodo que se tiñe de rojo)
+   3 10,8–16,6 flota autorreplicante: 11 nodos, uno a uno (foco: frente de contagio + contador)
+   4 16,8–21,3 20:23–21:32 objeto secreto con 136 claves (foco: contador ámbar) */
+M.scene({ duration: 22, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed: { cycle: 8, bright: 0.7, sub: 0.25 } } }, async (tl, M) => {
+  const $ = (s) => document.querySelector(s);
+  const cv = $('#cv'), ctx = cv.getContext('2d');
+  { const g = $('#grain').getContext('2d'); const im = g.createImageData(512, 512); const rn = M.rng(5);
+    for (let i = 0; i < im.data.length; i += 4) { const v = 128 + (rn() - 0.5) * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+    g.putImageData(im, 0, 0); }
+  const F_H = '700 88px "League Spartan"', F_L = '500 40px "DM Sans"', F_S = '500 28px "DM Mono"';
+  const F_N = '800 200px "League Spartan"', F_NS = '700 64px "League Spartan"', F_LB = '500 30px "DM Mono"';
+  await Promise.all([
+    document.fonts.load(F_H, 'Sondeo de Kubernetes Pod privilegiado Flota que se replica Un objeto secreto'),
+    document.fonts.load(F_L, 'El agente sondea Kubernetes desde un pod.'),
+    document.fonts.load(F_S, '11 JUL · 10:10 UTC–'), document.fonts.load(F_N, '0123456789'),
+    document.fonts.load(F_NS, '11 NODOS'), document.fonts.load(F_LB, 'NODOS CLAVES')]);
+
+  const { PAL, rgba, bloom, bg, text } = Neon;
+  const TAU = Math.PI * 2;
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, m) => a + (b - a) * m;
+  const seg = (t, a, b) => clamp((t - a) / (b - a));
+  const eA = gsap.parseEase('apple'), eO = gsap.parseEase('appleOut'), eI = gsap.parseEase('appleIn');
+  const mix = (c1, c2, m) => [lerp(c1[0], c2[0], m), lerp(c1[1], c2[1], m), lerp(c1[2], c2[2], m)];
+
+  /* --- datos de la escena --- */
+  const NODE = [[-330, 20], [-160, -130], [-170, 170], [10, 10], [20, -210], [30, 230], [190, -100], [200, 130], [370, -210], [380, 30], [360, 250]];
+  const PARENT = [-1, 0, 0, 1, 1, 2, 3, 3, 6, 7, 7];
+  const EXTRA = [[2, 3], [3, 5], [4, 6], [5, 7], [6, 9], [9, 10]];
+  const T0 = 8.0;                       // nodo 0 se tiñe (root en el nodo)
+  const SPREAD = 11.5, STEP = 0.36, TRAVEL = 0.3;
+  const tInf = NODE.map((_, i) => i === 0 ? T0 : SPREAD + (i - 1) * STEP);        // sale la línea roja
+  const tRed = NODE.map((_, i) => i === 0 ? T0 : tInf[i] + TRAVEL);               // llega y tiñe
+  const R0 = 52;
+  const NKEYS = 136, COLS = 17, PITCH = 38, GX = 1130, GY = 560;
+  const BEATS = [[0.5, 5.0], [5.2, 10.6], [10.8, 16.6], [16.8, 21.3]];
+
+  const HEAD = ['Sondeo de Kubernetes', 'Pod privilegiado', 'Flota que se replica', 'Un objeto secreto'];
+  const LEG = ['El agente sondea Kubernetes desde un pod.', 'Un pod privilegiado monta el disco del host: root en el nodo.',
+    'Una flota de pods se reinicia sola en 11 nodos.', 'Lee un objeto secreto con 136 claves.'];
+  const STAMP = [[0.5, 5.0, '11 JUL · 10:10 UTC'], [5.2, 16.6, '11 JUL · 19:53 UTC'], [16.8, 21.3, '11 JUL · 20:23–21:32 UTC']];
+
+  /* --- sonido: un cue por idea --- */
+  [0.52, 5.22, 10.82, 16.82].forEach((a) => M.sfx(a, 'tick', { gain: -3 }));
+  M.sfx(2.4, 'scan', { dur: 2.0, from: 700, to: 3000, q: 4 });
+  M.sfx(T0 - 1.4, 'riser', { dur: 1.4, semis: 7 });
+  M.sfx(T0, 'impact', { weight: 0.8, gain: -3 });
+  M.sfx(SPREAD, 'grow', { dur: 3.4, density: 90 });
+  M.sfx(tRed[10] + 0.05, 'shimmer', { gain: -6, degs: [2, 4, 7] });
+  M.sfx(17.9, 'scan', { dur: 1.8, from: 500, to: 2400, q: 5, dir: -1 });
+  M.sfx(20.2, 'shimmer', { gain: -5 });
+  BEATS.forEach(([a, b]) => tl.to({ v: 0 }, { v: 1, duration: b - a, ease: 'none' }, a));
+  tl.fromTo('#fade', { opacity: 1 }, { opacity: 0, duration: 0.5, ease: 'appleOut' }, 0);
+  tl.to('#fade', { opacity: 1, duration: 0.33, ease: 'appleIn' }, 21.67);
+
+  const hex = (x, y, R) => { ctx.beginPath(); for (let k = 0; k < 6; k++) { const a = TAU / 6 * k + TAU / 12; const px = x + Math.cos(a) * R, py = y + Math.sin(a) * R; k ? ctx.lineTo(px, py) : ctx.moveTo(px, py); } ctx.closePath(); };
+  const win = (t, a, b, f = 0.4) => eO(seg(t, a, a + f)) * (1 - eI(seg(t, b - f * 0.8, b)));   // alfa de ventana
+
+  M.onFrame((t) => {
+    bg(ctx, t, { grid: 0.045 * eO(seg(t, 0.2, 1.2)) });
+
+    /* cámara del cluster: B4 lo encoge hacia arriba a la derecha */
+    const m = eA(seg(t, 16.8, 17.9));
+    const CX = lerp(1240, 1560, m), CY = lerp(540, 330, m), SC = lerp(1, 0.5, m);
+    const pos = NODE.map(([x, y]) => [CX + x * SC, CY + y * SC]);
+    const R = R0 * SC;
+    const appear = NODE.map((_, i) => eO(seg(t, 0.9 + i * 0.12, 1.7 + i * 0.12)));
+    const sOf = (i) => eO(seg(t, tRed[i], tRed[i] + 0.3));
+
+    /* enlaces */
+    const edges = PARENT.map((p, i) => [p, i]).filter(([p]) => p >= 0).concat(EXTRA);
+    for (const [a, b] of edges) {
+      const al = Math.min(appear[a], appear[b]);
+      ctx.strokeStyle = rgba(PAL.GREEN, 0.22 * al * (1 - 0.5 * m)); ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(pos[a][0], pos[a][1]); ctx.lineTo(pos[b][0], pos[b][1]); ctx.stroke();
+    }
+    /* contagio: línea roja del padre al hijo */
+    for (let i = 1; i < NODE.length; i++) {
+      const p = eA(seg(t, tInf[i], tRed[i])); if (p <= 0) continue;
+      const [ax, ay] = pos[PARENT[i]], [bx, by] = pos[i];
+      const hx = lerp(ax, bx, p), hy = lerp(ay, by, p);
+      ctx.strokeStyle = rgba(PAL.RED, 0.9 * (1 - 0.45 * m)); ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(hx, hy); ctx.stroke();
+      if (p < 1) { ctx.fillStyle = rgba(PAL.INK, 1); ctx.beginPath(); ctx.arc(hx, hy, 6, 0, TAU); ctx.fill(); }
+    }
+
+    /* B1: sondeo desde el pod del nodo 0 (foco cian) */
+    const [n0x, n0y] = pos[0];
+    const probeA = win(t, 2.2, 5.0, 0.5);
+    if (probeA > 0.01) {
+      for (let k = 0; k < 3; k++) {
+        const ph = (((t - 2.4 - k * 0.45) / 1.35) % 1 + 1) % 1; if (t < 2.4 + k * 0.45) continue;
+        ctx.strokeStyle = rgba(PAL.CYAN, 0.7 * (1 - ph) * probeA); ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(n0x, n0y, 56 + 330 * eO(ph), 0, TAU); ctx.stroke();
+      }
+      ctx.save(); ctx.setLineDash([9, 11]); ctx.lineDashOffset = -t * 40; ctx.lineWidth = 2.5;
+      [1, 2, 3, 4, 5].forEach((j, q) => {
+        const p = eA(seg(t, 2.8 + q * 0.3, 3.5 + q * 0.3)); if (p <= 0) return;
+        ctx.strokeStyle = rgba(PAL.CYAN, 0.6 * probeA);
+        ctx.beginPath(); ctx.moveTo(n0x, n0y); ctx.lineTo(lerp(n0x, pos[j][0], p), lerp(n0y, pos[j][1], p)); ctx.stroke();
+      });
+      ctx.restore();
+    }
+
+    /* nodos */
+    for (let i = 0; i < NODE.length; i++) {
+      const s = sOf(i), ap = appear[i]; if (ap <= 0) continue;
+      const foc = i === 0 ? eO(seg(t, 2.0, 2.6)) : 0;
+      const col = mix(PAL.GREEN, PAL.RED, s);
+      const a = lerp(0.52, 0.95, Math.max(s, foc)) * (1 - 0.4 * m) * ap;
+      const [x, y] = pos[i], rr = R * (0.85 + 0.15 * ap);
+      hex(x, y, rr); ctx.fillStyle = rgba(mix(PAL.BG, col, 0.12), 0.9 * ap); ctx.fill();
+      ctx.strokeStyle = rgba(col, a); ctx.lineWidth = 3; ctx.stroke();
+      /* pods internos */
+      const pa = a * 0.7;
+      ctx.fillStyle = rgba(col, pa);
+      [[-17, 14], [17, 14], [0, -20]].forEach(([dx, dy]) => { if (i !== 0 || t > 5.4) ctx.fillRect(x + (dx - 7) * SC, y + (dy - 7) * SC, 14 * SC, 14 * SC); else if (dx !== 0) ctx.fillRect(x + (dx - 7) * SC, y + (dy - 7) * SC, 14 * SC, 14 * SC); });
+      /* destello al teñirse */
+      const fl = seg(t, tRed[i], tRed[i] + 0.7);
+      if (fl > 0 && fl < 1) { ctx.strokeStyle = rgba(PAL.RED, 0.8 * (1 - fl)); ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y, rr * (1 + 0.9 * eO(fl)), 0, TAU); ctx.stroke(); }
+    }
+
+    /* agente cian en el nodo 0 (pod) */
+    if (t > 1.5) {
+      const ga = eO(seg(t, 1.5, 2.2));
+      const sq = eA(seg(t, 5.9, 6.6));                            // el pod se marca como privilegiado
+      const priv = eO(seg(t, 6.4, 7.0));
+      const sz = 16 * sq * SC;
+      if (sq > 0) { ctx.strokeStyle = rgba(mix(PAL.CYAN, PAL.RED, priv), 0.95 * ga); ctx.lineWidth = 3; ctx.strokeRect(n0x - 17 * SC - sz * 0 + 0, n0y - 17 * SC, 34 * SC, 34 * SC); ctx.setLineDash([]); }
+      ctx.fillStyle = rgba(PAL.INK, ga); ctx.beginPath(); ctx.arc(n0x, n0y - 1, 6.5 * SC + 0.5, 0, TAU); ctx.fill();
+      ctx.strokeStyle = rgba(PAL.CYAN, 0.9 * ga * (1 - 0.5 * seg(t, 5.2, 6))); ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(n0x, n0y - 1, (13 + 3 * Math.sin(t * 5)) * SC, 0, TAU); ctx.stroke();
+    }
+
+    /* B2: el disco del host sube y se funde con el nodo */
+    const mt = eA(seg(t, 6.8, 7.9));
+    const mA = eO(seg(t, 6.6, 7.0)) * (1 - eI(seg(t, 7.85, 8.15)));
+    if (mA > 0.01) {
+      const w = 170, h = 34, cy = n0y + R + 78 - 78 * mt;
+      ctx.strokeStyle = rgba(PAL.INK, 0.85 * mA); ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.roundRect(n0x - w / 2, cy - h / 2, w, h, 8); ctx.stroke();
+      ctx.strokeStyle = rgba(PAL.INK, 0.4 * mA); ctx.lineWidth = 2; ctx.beginPath();
+      ctx.moveTo(n0x - w / 2 + 20, cy); ctx.lineTo(n0x + w / 2 - 54, cy);
+      ctx.stroke(); ctx.fillStyle = rgba(PAL.GREEN, 0.9 * mA); ctx.beginPath(); ctx.arc(n0x + w / 2 - 24, cy, 5, 0, TAU); ctx.fill();
+    }
+    /* B2: onda de ruptura en el instante de root */
+    const sh = seg(t, T0, T0 + 1.3);
+    if (sh > 0 && sh < 1) { ctx.strokeStyle = rgba(PAL.RED, 0.9 * (1 - sh)); ctx.lineWidth = 4 * (1 - sh) + 1; ctx.beginPath(); ctx.arc(n0x, n0y, R * (1 + 4.2 * eO(sh)), 0, TAU); ctx.stroke(); }
+
+    /* contadores izquierda */
+    const cnt = 1 + tRed.slice(1).filter((v) => t >= v).length;
+    let lastChange = T0; tRed.slice(1).forEach((v) => { if (t >= v) lastChange = v; });
+    const pulse = 1 + 0.07 * Math.exp(-(t - lastChange) * 9) * (t > T0 ? 1 : 0);
+    const nA = win(t, 11.0, 16.9, 0.5);
+    if (nA > 0.01) {
+      ctx.save(); ctx.translate(120, 640); ctx.scale(pulse, pulse);
+      text(ctx, String(cnt), 0, 0, F_N, PAL.RED, nA, { glow: 16, base: 'alphabetic' }); ctx.restore();
+      text(ctx, 'NODOS', 124, 704, F_LB, PAL.RED, nA * 0.9, { spacing: '10px', glow: 8 });
+    }
+    const sA = eO(seg(t, 16.9, 17.6)) * 0.6;
+    if (sA > 0.01) text(ctx, '11 NODOS', 120, lerp(430, 410, 1), F_NS, PAL.RED, sA * (1 - eI(seg(t, 21.0, 21.3))), { glow: 6 });
+
+    /* B4: objeto secreto con 136 claves (foco ámbar) */
+    const fr = eO(seg(t, 17.3, 18.0)) * (1 - eI(seg(t, 21.0, 21.3)));
+    if (fr > 0.01) {
+      const GW = (COLS - 1) * PITCH, GH = (NKEYS / COLS - 1) * PITCH, PADX = 38;
+      const lk = eA(seg(t, 17.3, 17.9));
+      ctx.strokeStyle = rgba(PAL.AMBER, 0.7 * lk * fr); ctx.lineWidth = 2.5; ctx.beginPath();
+      ctx.moveTo(pos[5][0], pos[5][1] + R); ctx.lineTo(pos[5][0], lerp(pos[5][1] + R, GY - PADX, lk)); ctx.stroke();
+      ctx.strokeStyle = rgba(PAL.AMBER, 0.75 * fr); ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.roundRect(GX - PADX, GY - PADX, GW + PADX * 2, GH + PADX * 2, 14); ctx.stroke();
+      const p = eA(seg(t, 18.0, 20.2)), lit = Math.floor(NKEYS * p + (p >= 1 ? 1 : 0));
+      for (let i = 0; i < NKEYS; i++) {
+        const x = GX + (i % COLS) * PITCH, y = GY + Math.floor(i / COLS) * PITCH;
+        if (i < lit) {
+          const recent = clamp(1 - (lit - i) / 14);
+          ctx.fillStyle = rgba(mix(PAL.AMBER, PAL.INK, recent * 0.6), (0.8 + 0.2 * recent) * fr);
+          ctx.beginPath(); ctx.arc(x, y, 6.5 + 2.5 * recent, 0, TAU); ctx.fill();
+        } else { ctx.fillStyle = rgba(PAL.AMBER, 0.14 * fr); ctx.beginPath(); ctx.arc(x, y, 4.5, 0, TAU); ctx.fill(); }
+      }
+      const kv = Math.min(NKEYS, lit);
+      const kA = eO(seg(t, 17.8, 18.4)) * (1 - eI(seg(t, 21.0, 21.3)));
+      text(ctx, String(kv), 120, 640, F_N, PAL.AMBER, kA, { glow: 16 });
+      text(ctx, 'CLAVES', 124, 704, F_LB, PAL.AMBER, kA * 0.9, { spacing: '10px', glow: 8 });
+    }
+
+    /* titular, leyenda, sello */
+    BEATS.forEach(([a, b], i) => {
+      const h = win(t, a, b, 0.45), l = win(t, a + 0.2, b, 0.45);
+      text(ctx, HEAD[i], 120, 150 + 18 * (1 - eO(seg(t, a, a + 0.6))), F_H, PAL.INK, h, { glow: 8 });
+      text(ctx, LEG[i], 120, 985, F_L, PAL.INK, l * 0.92, { glow: 4 });
+    });
+    STAMP.forEach(([a, b, s]) => text(ctx, s, 1800, 130, F_S, PAL.INK, win(t, a, b, 0.4) * 0.85, { align: 'right', spacing: '4px', glow: 6 }));
+
+    bloom(ctx, cv, { k: 0.7 });
+  });
+});
+</script>
+</body>
+</html>
