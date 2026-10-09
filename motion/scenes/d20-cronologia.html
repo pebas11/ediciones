@@ -145,7 +145,7 @@ M.scene({ duration: 24, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed:
       // tallo e ícono
       const stem = 120 * uIn; ctx.strokeStyle = rgba(b.col, 0.85 * on); ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(x, Y - 18); ctx.lineTo(x, Y - 18 - stem); ctx.stroke();
       if (i !== 5) icon(i, x, Y - 175 - 12 * (1 - uIn), 72, b.col, on * (0.35 + 0.65 * (1 - uOut)), t);
-      else icon(i, x, Y - 205, 120 * (0.6 + 0.4 * uIn), b.col, on * 0.55, t);
+      else icon(i, x, Y - 100, 66, b.col, on * 0.6, t);
       // núcleo
       ctx.fillStyle = rgba(b.col, 1 * on); ctx.beginPath(); ctx.arc(x, Y, 8 + 6 * (1 - uOut), 0, TAU); ctx.fill();
       ctx.strokeStyle = rgba(b.col, 0.95 * on); ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, Y, 17 + 5 * (1 - uOut), 0, TAU); ctx.stroke();
@@ -156,8 +156,8 @@ M.scene({ duration: 24, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed:
 
     // cifra del último beat (protagonista)
     { const b = B[5], u = eO(seg(t, b.s + 1.3, b.s + 2.2)), x = sx(b.wx);
-      text(ctx, '700', x, Y - 255 + 18 * (1 - u), F_N, PAL.CYAN, u, { align: 'center', glow: 16 });
-      text(ctx, 'AGENTES', x, Y - 215 + 18 * (1 - u) + 40, F_S, PAL.CYAN, u * 0.9, { align: 'center', spacing: '8px', glow: 8 }); }
+      text(ctx, '700', x, Y - 262 + 18 * (1 - u), F_N, PAL.CYAN, u, { align: 'center', glow: 16 });
+      text(ctx, 'AGENTES', x, Y - 205 + 18 * (1 - u), F_S, PAL.CYAN, u * 0.9, { align: 'center', spacing: '8px', glow: 8 }); }
 
     // capa cercana (parallax 1,5)
     for (const p of DUST) { const x = (((p.x - c * 1.5) % 2400) + 2400) % 2400 - 240, y = p.y + Math.sin(t * 0.6 + p.ph) * 6;
