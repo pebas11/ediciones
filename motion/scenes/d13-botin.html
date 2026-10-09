@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>D13 · Lo que tocaron y lo que no</title>
+<link rel="stylesheet" href="../lib/theme.css">
+<link rel="stylesheet" href="../lib/fonts-spartan.css">
+<style>
+  body { background: #05070D; }
+  #cv { position: absolute; inset: 0; }
+  #grain { position: absolute; inset: -20px; opacity: 0.05; mix-blend-mode: overlay; pointer-events: none; }
+  #vig { position: absolute; inset: 0; background: radial-gradient(120% 110% at 50% 48%, transparent 50%, rgba(2,3,6,0.7) 100%); pointer-events: none; }
+  #fade { position: absolute; inset: 0; background: #05070D; opacity: 1; }
+</style>
+</head>
+<body>
+<div id="world">
+  <canvas id="cv" width="1920" height="1080"></canvas>
+  <div id="vig"></div>
+  <canvas id="grain" width="512" height="512" style="width:1960px;height:1120px"></canvas>
+  <div id="fade"></div>
+</div>
+<script src="../node_modules/gsap/dist/gsap.min.js"></script>
+<script src="../node_modules/gsap/dist/SplitText.min.js"></script>
+<script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
+<script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
+<script src="../lib/stage.js"></script>
+<script src="../lib/audio.js"></script>
+<script src="../lib/neon.js"></script>
+<script>
+/* d13 · Botín (18 s). Dos columnas: lo que SÍ tocaron (ámbar) vs lo que NO (verde con escudo).
+   1 0,5–7   columna ámbar: 5 datasets · metadatos de búsquedas · MongoDB solo lectura
+   2 7,4–14  columna verde: la base de producción no cede · modelos/datasets/Spaces/paquetes · cadena de suministro
+   3 13–17   escudo, sello final y fundido */
+M.scene({ duration: 18, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed: { cycle: 8, bright: 0.7, sub: 0.25 } } }, async (tl, M) => {
+  const $ = (s) => document.querySelector(s);
+  const cv = $('#cv'), ctx = cv.getContext('2d');
+  { const g = $('#grain').getContext('2d'); const im = g.createImageData(512, 512); const rn = M.rng(13);
+    for (let i = 0; i < im.data.length; i += 4) { const v = 128 + (rn() - 0.5) * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+    g.putImageData(im, 0, 0); }
+  const F_H = '700 100px "League Spartan"', F_N = '800 190px "League Spartan"', F_L = '500 40px "DM Sans"', F_M = '500 30px "DM Mono"', F_S = '500 28px "DM Mono"';
+  await Promise.all([document.fonts.load(F_H, 'LO QUE TOCARON NO'), document.fonts.load(F_N, '5'), document.fonts.load(F_L, 'Tocaron datasets'),
+    document.fonts.load(F_M, 'DATASETS BÚSQUEDAS PRODUCCIÓN'), document.fonts.load(F_S, '9–13 JUL · UTC')]);
+
+  const { PAL, rgba, bloom, bg, text } = Neon;
+  const TAU = Math.PI * 2;
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, m) => a + (b - a) * m;
+  const seg = (t, a, b) => clamp((t - a) / (b - a));
+  const eA = gsap.parseEase('apple'), eO = gsap.parseEase('appleOut'), eI = gsap.parseEase('appleIn');
+
+  // ---- cues
+  M.sfx(0.52, 'tick', { tone: 'glass' });
+  [1.5, 1.75, 2.0, 2.25, 2.5].forEach((a, i) => M.sfx(a, 'tap', { deg: [0, 2, 4, 5, 7][i], oct: 5, bright: 0.8 }));
+  M.sfx(3.2, 'scan', { dur: 1.1, from: 700, to: 2600 });
+  M.sfx(5.3, 'shimmer', { gain: -6, degs: [2, 4, 7] });
+  M.sfx(7.45, 'tick', { tone: 'glass' });
+  const GA = [8.8, 9.9], GP = 1.1;                      // intentos contra la puerta
+  GA.forEach((a) => M.sfx(a + 0.7 * GP, 'tap', { deg: 4, oct: 6, bright: 0.7 }));
+  [10.9, 11.1, 11.3, 11.5].forEach((a, i) => M.sfx(a, 'tap', { deg: [0, 2, 4, 7][i], oct: 6, bright: 0.8 }));
+  M.sfx(12.1, 'tap', { deg: 5, oct: 6, bright: 0.8 });
+  M.sfx(14.4, 'riser', { dur: 1.2, semis: 7 });
+  M.sfx(14.4, 'impact', { weight: 0.7, gain: -4 });
+  M.sfx(14.7, 'shimmer', { gain: -7 });
+
+  tl.to({ v: 0 }, { v: 1, duration: 17.7, ease: 'none' }, 0);
+  tl.fromTo('#fade', { opacity: 1 }, { opacity: 0, duration: 0.5, ease: 'appleOut' }, 0);
+  tl.to('#fade', { opacity: 1, duration: 0.33, ease: 'appleIn' }, 17.67);
+
+  // ---- geometría
+  const LX = 120, RX = 1000, PW = 800, PY = 235, PH = 625;
+  const rr = (x, y, w, h, r) => { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); };
+  const dash = (len, p) => ctx.setLineDash(p >= 0.999 ? [] : [len * p, len * 3]);
+  const stroke = (col, a, w) => { ctx.strokeStyle = rgba(col, a); ctx.lineWidth = w || 3; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke(); ctx.setLineDash([]); };
+
+  // ---- iconos (todos en canvas 2D; p = progreso de trazo, a = alfa, k = relleno iluminado)
+  function doc(x, y, w, h, col, a, p) {
+    const f = 0.28 * w;
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + w - f, y); ctx.lineTo(x + w, y + f); ctx.lineTo(x + w, y + h); ctx.lineTo(x, y + h); ctx.closePath();
+    ctx.fillStyle = rgba(col, 0.2 * a * p); ctx.fill(); dash(2 * (w + h), p); stroke(col, a, 3);
+    if (p > 0.6) { const q = seg(p, 0.6, 1); ctx.beginPath(); [0.45, 0.62, 0.79].forEach((m, i) => { ctx.moveTo(x + 0.2 * w, y + m * h); ctx.lineTo(x + 0.2 * w + (i === 2 ? 0.4 : 0.6) * w * q, y + m * h); }); stroke(col, a * 0.9, 3); }
+  }
+  function mag(cx, cy, r, col, a, p) {
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.fillStyle = rgba(col, 0.14 * a * p); ctx.fill(); dash(TAU * r, p); stroke(col, a, 4);
+    const q = seg(p, 0.5, 1); ctx.beginPath(); ctx.moveTo(cx + r * 0.72, cy + r * 0.72); ctx.lineTo(cx + r * 0.72 + r * 0.85 * q, cy + r * 0.72 + r * 0.85 * q); stroke(col, a, 6);
+  }
+  function cyl(cx, cy, w, h, col, a, p) {
+    const rx = w / 2, ry = h * 0.17, top = cy - h / 2 + ry, bot = cy + h / 2 - ry;
+    ctx.beginPath(); ctx.ellipse(cx, top, rx, ry, 0, 0, TAU); ctx.moveTo(cx - rx, top); ctx.lineTo(cx - rx, bot); ctx.ellipse(cx, bot, rx, ry, 0, Math.PI, 0, true); ctx.lineTo(cx + rx, top);
+    ctx.fillStyle = rgba(col, 0.16 * a * p); ctx.fill(); dash(3 * (w + h), p); stroke(col, a, 3);
+    ctx.beginPath(); ctx.ellipse(cx, (top + bot) / 2, rx, ry, 0, 0, Math.PI); dash(w * 2, p); stroke(col, a * 0.6, 2.5);
+  }
+  function eye(cx, cy, w, col, a, p) {
+    ctx.beginPath(); ctx.moveTo(cx - w / 2, cy); ctx.quadraticCurveTo(cx, cy - w * 0.42, cx + w / 2, cy); ctx.quadraticCurveTo(cx, cy + w * 0.42, cx - w / 2, cy);
+    dash(w * 2.4, p); stroke(col, a, 3);
+    if (p > 0.7) { ctx.beginPath(); ctx.arc(cx, cy, w * 0.11, 0, TAU); ctx.fillStyle = rgba(col, a); ctx.fill(); }
+  }
+  function lock(cx, cy, w, col, a, shut) {
+    const h = w * 0.78, x = cx - w / 2, y = cy - h / 2 + w * 0.18, r = w * 0.3, lift = (1 - shut) * w * 0.2;
+    rr(x, y, w, h, 5); ctx.fillStyle = rgba(col, 0.28 * a); ctx.fill(); stroke(col, a, 3);
+    ctx.beginPath(); ctx.moveTo(cx - r, y); ctx.lineTo(cx - r, y - lift - r * 0.4); ctx.arc(cx, y - lift - r * 0.4, r, Math.PI, 0); ctx.lineTo(cx + r, y - lift * 0.0); stroke(col, a, 3.5);
+  }
+  function check(cx, cy, s, col, a, p) {
+    ctx.beginPath(); ctx.moveTo(cx - s * 0.5, cy); ctx.lineTo(cx - s * 0.12, cy + s * 0.38); ctx.lineTo(cx + s * 0.55, cy - s * 0.4); dash(s * 2.4, p); stroke(col, a, 4);
+  }
+  function modelIc(cx, cy, s, col, a, p) {      // cubo
+    ctx.beginPath(); for (let i = 0; i < 6; i++) { const an = -Math.PI / 2 + i * TAU / 6; ctx[i ? 'lineTo' : 'moveTo'](cx + Math.cos(an) * s, cy + Math.sin(an) * s); } ctx.closePath();
+    ctx.fillStyle = rgba(col, 0.16 * a * p); ctx.fill(); dash(s * 7, p); stroke(col, a, 3);
+    ctx.beginPath(); ctx.moveTo(cx - s * 0.866, cy - s * 0.5); ctx.lineTo(cx, cy); ctx.lineTo(cx + s * 0.866, cy - s * 0.5); ctx.moveTo(cx, cy); ctx.lineTo(cx, cy + s); dash(s * 3, p); stroke(col, a * 0.7, 2.5);
+  }
+  function dataIc(cx, cy, s, col, a, p) {       // pila de capas
+    for (let i = 0; i < 3; i++) { const y = cy - s * 0.5 + i * s * 0.5; ctx.beginPath(); ctx.moveTo(cx - s, y); ctx.lineTo(cx, y - s * 0.4); ctx.lineTo(cx + s, y); ctx.lineTo(cx, y + s * 0.4); ctx.closePath();
+      ctx.fillStyle = rgba(col, 0.14 * a * p); ctx.fill(); dash(s * 6, p); stroke(col, a * (1 - i * 0.15), 3); }
+  }
+  function spaceIc(cx, cy, s, col, a, p) {      // ventana de app
+    rr(cx - s, cy - s * 0.8, s * 2, s * 1.6, 8); ctx.fillStyle = rgba(col, 0.14 * a * p); ctx.fill(); dash(s * 7, p); stroke(col, a, 3);
+    ctx.beginPath(); ctx.moveTo(cx - s, cy - s * 0.35); ctx.lineTo(cx + s, cy - s * 0.35); dash(s * 2, p); stroke(col, a * 0.7, 2.5);
+    ctx.beginPath(); ctx.arc(cx - s * 0.66, cy - s * 0.58, 3, 0, TAU); ctx.fillStyle = rgba(col, a * p); ctx.fill();
+  }
+  function pkgIc(cx, cy, s, col, a, p) {        // caja
+    rr(cx - s * 0.9, cy - s * 0.7, s * 1.8, s * 1.4, 4); ctx.fillStyle = rgba(col, 0.14 * a * p); ctx.fill(); dash(s * 6.4, p); stroke(col, a, 3);
+    ctx.beginPath(); ctx.moveTo(cx, cy - s * 0.7); ctx.lineTo(cx, cy + s * 0.7); ctx.moveTo(cx - s * 0.9, cy - s * 0.15); ctx.lineTo(cx + s * 0.9, cy - s * 0.15); dash(s * 3, p); stroke(col, a * 0.7, 2.5);
+  }
+  function chain(cx, cy, col, a, p) {           // 3 eslabones alternados
+    for (let i = 0; i < 3; i++) { const x = cx + (i - 1) * 66, v = i % 2; ctx.beginPath();
+      if (v) rr(x - 22, cy - 40, 44, 80, 22); else rr(x - 44, cy - 22, 88, 44, 22);
+      dash(300, clamp(p * 3 - i)); stroke(col, a, 4); }
+  }
+  function shield(cx, cy, h, col, a, p, fillA) {
+    const w = h * 0.82, t0 = cy - h / 2;
+    ctx.beginPath(); ctx.moveTo(cx, t0); ctx.quadraticCurveTo(cx + w * 0.3, t0 + h * 0.1, cx + w / 2, t0 + h * 0.1); ctx.lineTo(cx + w / 2, cy + h * 0.05);
+    ctx.quadraticCurveTo(cx + w / 2, cy + h * 0.32, cx, cy + h / 2); ctx.quadraticCurveTo(cx - w / 2, cy + h * 0.32, cx - w / 2, cy + h * 0.05);
+    ctx.lineTo(cx - w / 2, t0 + h * 0.1); ctx.quadraticCurveTo(cx - w * 0.3, t0 + h * 0.1, cx, t0);
+    ctx.fillStyle = rgba(col, (fillA || 0) * a); ctx.fill(); dash(h * 4, p); stroke(col, a, 4.5);
+  }
+  const arrow = (x0, x1, y, col, a) => { ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x1, y); stroke(col, a, 3.5); ctx.beginPath(); ctx.arc(x1, y, 7, 0, TAU); ctx.fillStyle = rgba(col, a); ctx.fill(); };
+  const panel = (x, col, a, p) => { rr(x, PY, PW, PH, 18); ctx.fillStyle = rgba(col, 0.045 * a * p); ctx.fill(); dash(3600, p); stroke(col, 0.85 * a, 3); };
+
+  M.onFrame((t) => {
+    bg(ctx, t, { grid: 0.04 * eO(seg(t, 0.2, 1.0)) });
+    const emL = 1 - 0.45 * eA(seg(t, 7.3, 8.3));        // la columna ámbar cede el foco
+    const emR = 1;
+
+    // ---- titular (se reemplaza) y sello
+    const h1 = eO(seg(t, 0.5, 1.1)) * (1 - eI(seg(t, 7.0, 7.3)));
+    const h2 = eO(seg(t, 7.45, 8.05)) * (1 - eI(seg(t, 17.1, 17.4)));
+    text(ctx, 'LO QUE TOCARON', 120, 150 + 18 * (1 - eO(seg(t, 0.5, 1.1))), F_H, PAL.AMBER, h1, { glow: 14 });
+    text(ctx, 'LO QUE NO TOCARON', 120, 150 + 18 * (1 - eO(seg(t, 7.45, 8.05))), F_H, PAL.GREEN, h2, { glow: 14 });
+    text(ctx, '9–13 JUL · UTC', 1800, 150, F_S, PAL.INK, eO(seg(t, 0.8, 1.4)) * (1 - eI(seg(t, 17.1, 17.4))) * 0.75, { align: 'right', spacing: '3px', glow: 6 });
+
+    // ================= columna SÍ (ámbar)
+    const pl = eO(seg(t, 0.5, 1.3));
+    panel(LX, PAL.AMBER, emL, pl);
+    const sepA = (y, a) => { ctx.beginPath(); ctx.moveTo(LX + 36, y); ctx.lineTo(LX + PW - 36, y); stroke(PAL.AMBER, 0.2 * a, 1.5); };
+    sepA(PY + 235, pl * emL); sepA(PY + 430, pl * emL);
+    // A · 5 datasets
+    const nDocs = [1.5, 1.75, 2.0, 2.25, 2.5].map((a) => eO(seg(t, a, a + 0.55)));
+    const cnt = nDocs.filter((v) => v > 0.1).length;
+    text(ctx, String(cnt || ''), LX + 54, PY + 190, F_N, PAL.AMBER, emL * (cnt ? 1 : 0), { glow: 18 });
+    for (let i = 0; i < 5; i++) doc(LX + 250 + i * 100, PY + 52 + (1 - nDocs[i]) * 14, 70, 92, PAL.AMBER, emL * clamp(nDocs[i] * 1.4), nDocs[i]);
+    text(ctx, 'DATASETS', LX + 250, PY + 196, F_M, PAL.AMBER, emL * eO(seg(t, 1.6, 2.2)), { spacing: '4px', glow: 8 });
+    // B · metadatos de búsquedas
+    const pb = eO(seg(t, 3.0, 3.9));
+    mag(LX + 120, PY + 335, 44, PAL.AMBER, emL, pb);
+    for (let i = 0; i < 3; i++) { const q = eO(seg(t, 3.8 + i * 0.18, 4.4 + i * 0.18)); ctx.beginPath(); ctx.moveTo(LX + 250, PY + 305 + i * 24); ctx.lineTo(LX + 250 + [420, 330, 380][i] * q, PY + 305 + i * 24); stroke(PAL.AMBER, 0.35 * emL * q, 3); }
+    text(ctx, 'BÚSQUEDAS · METADATOS', LX + 250, PY + 410, F_M, PAL.AMBER, emL * eO(seg(t, 3.5, 4.1)), { spacing: '4px', glow: 8 });
+    // C · MongoDB interna, solo lectura
+    const pc = eO(seg(t, 4.8, 5.6));
+    cyl(LX + 120, PY + 530, 96, 120, PAL.AMBER, emL, pc);
+    eye(LX + 270, PY + 505, 90, PAL.AMBER, emL, eO(seg(t, 5.4, 6.1)));
+    text(ctx, 'MONGODB INTERNA', LX + 350, PY + 515, F_M, PAL.AMBER, emL * eO(seg(t, 5.2, 5.9)), { spacing: '4px', glow: 8 });
+    text(ctx, 'SOLO LECTURA', LX + 350, PY + 565, F_M, PAL.INK, emL * 0.9 * eO(seg(t, 5.5, 6.2)), { spacing: '4px', glow: 4 });
+
+    // ================= columna NO (verde)
+    const ghost = 0.16 * (1 - eO(seg(t, 7.4, 8.0)));
+    if (ghost > 0.002) { rr(RX, PY, PW, PH, 18); ctx.setLineDash([10, 12]); stroke(PAL.GREEN, ghost, 2.5); }
+    const pr = eO(seg(t, 7.4, 8.3));
+    panel(RX, PAL.GREEN, emR, pr);
+    const sepG = (y) => { ctx.beginPath(); ctx.moveTo(RX + 36, y); ctx.lineTo(RX + PW - 36, y); stroke(PAL.GREEN, 0.2 * pr, 1.5); };
+    sepG(PY + 235); sepG(PY + 430);
+    // A · base de producción: la puerta no cede
+    const GX = RX + 300;
+    const pg = eO(seg(t, 8.3, 8.9));
+    cyl(RX + 440, PY + 105, 100, 124, PAL.GREEN, 1, pg);
+    ctx.beginPath(); ctx.moveTo(GX, PY + 30); ctx.lineTo(GX, PY + 30 + 150 * pg); stroke(PAL.GREEN, 0.95, 5);
+    let flash = 0;
+    GA.forEach((a) => {
+      const ph = (t - a) / GP;
+      if (ph < 0 || ph > 1) return;
+      const x = lerp(RX + 50, GX - 12, eA(clamp(ph / 0.7)));
+      const al = ph < 0.7 ? 1 : 1 - (ph - 0.7) / 0.3;
+      if (ph < 0.7) { ctx.beginPath(); ctx.moveTo(x - 90, PY + 105); ctx.lineTo(x, PY + 105); stroke(PAL.CYAN, 0.4, 3); }
+      ctx.beginPath(); ctx.arc(x - (ph > 0.7 ? (ph - 0.7) * 120 : 0), PY + 105, 7, 0, TAU); ctx.fillStyle = rgba(PAL.CYAN, al); ctx.fill();
+      if (ph >= 0.7) flash = Math.max(flash, 1 - (ph - 0.7) / 0.3);
+    });
+    if (flash > 0) { ctx.beginPath(); ctx.moveTo(GX, PY + 30); ctx.lineTo(GX, PY + 180); stroke(PAL.GREEN, flash, 12); }
+    lock(GX, PY + 105, 40, PAL.GREEN, pg, 1);
+    text(ctx, 'PRODUCCIÓN DEL HUB', RX + 54, PY + 214, F_M, PAL.GREEN, eO(seg(t, 8.5, 9.1)), { spacing: '4px', glow: 8 });
+    // B · modelos, datasets, Spaces y paquetes
+    const ic = [modelIc, dataIc, spaceIc, pkgIc];
+    for (let i = 0; i < 4; i++) {
+      const a0 = 10.8 + i * 0.2, p = eO(seg(t, a0, a0 + 0.55)), cx = RX + 110 + i * 190, cy = PY + 335;
+      ic[i](cx, cy, 44, PAL.GREEN, 0.95 * emR, p);
+      check(cx + 52, cy - 52, 26, PAL.GREEN, emR, eO(seg(t, a0 + 0.35, a0 + 0.8)));
+    }
+    text(ctx, 'MODELOS · DATASETS · SPACES · PAQUETES', RX + 54, PY + 410, '500 26px "DM Mono"', PAL.GREEN, emR * eO(seg(t, 11.0, 11.7)), { spacing: '1px', glow: 8 });
+    // C · cadena de suministro
+    const pcg = eO(seg(t, 12.0, 12.9));
+    chain(RX + 655, PY + 535, PAL.GREEN, emR, pcg);
+    check(RX + 735, PY + 470, 30, PAL.GREEN, emR, eO(seg(t, 12.6, 13.1)));
+    text(ctx, 'CADENA DE SUMINISTRO', RX + 54, PY + 515, F_M, PAL.GREEN, emR * eO(seg(t, 12.2, 12.9)), { spacing: '4px', glow: 8 });
+    text(ctx, 'INTACTA', RX + 54, PY + 565, F_M, PAL.INK, emR * 0.9 * eO(seg(t, 12.5, 13.2)), { spacing: '4px', glow: 4 });
+    // escudo final (foco único del beat 2)
+    const ps = eO(seg(t, 13.0, 14.4));
+    if (ps > 0.001) {
+      shield(RX + 645, PY + 105, 170, PAL.GREEN, 1, ps, 0.12 + 0.05 * Math.sin(t * 2) * ps);
+      check(RX + 645, PY + 112, 50, PAL.GREEN, 1, eO(seg(t, 13.9, 14.6)));
+    }
+
+    // ---- leyenda
+    const lg = (l1, l2, a0, a1, b0, b1) => {
+      const a = eO(seg(t, a0, a1)) * (1 - eI(seg(t, b0, b1)));
+      text(ctx, l1, 120, 925, F_L, PAL.INK, 0.94 * a, { glow: 2 });
+      text(ctx, l2, 120, 975, F_L, PAL.INK, 0.94 * a, { glow: 2 });
+    };
+    lg('Tocaron cinco datasets de soluciones, metadatos de búsquedas', 'y una base interna, solo lectura.', 0.8, 1.2, 7.1, 7.35);
+    lg('No llegaron a la base de producción del Hub.', 'Modelos, datasets, Spaces y paquetes: sin afectar.', 7.6, 8.0, 17.1, 17.4);
+
+    bloom(ctx, cv, { k: 0.62 });
+  });
+});
+</script>
+</body>
+</html>

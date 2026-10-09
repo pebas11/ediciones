@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>D14 · Encubrimiento</title>
+<link rel="stylesheet" href="../lib/theme.css">
+<link rel="stylesheet" href="../lib/fonts-spartan.css">
+<style>
+  body { background: #05070D; }
+  #cv { position: absolute; inset: 0; }
+  #grain { position: absolute; inset: -20px; opacity: 0.05; mix-blend-mode: overlay; pointer-events: none; }
+  #vig { position: absolute; inset: 0; background: radial-gradient(120% 110% at 50% 48%, transparent 50%, rgba(2,3,6,0.7) 100%); pointer-events: none; }
+  #fade { position: absolute; inset: 0; background: #05070D; opacity: 1; }
+</style>
+</head>
+<body>
+<div id="world">
+  <canvas id="cv" width="1920" height="1080"></canvas>
+  <div id="vig"></div>
+  <canvas id="grain" width="512" height="512" style="width:1960px;height:1120px"></canvas>
+  <div id="fade"></div>
+</div>
+<script src="../node_modules/gsap/dist/gsap.min.js"></script>
+<script src="../node_modules/gsap/dist/SplitText.min.js"></script>
+<script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
+<script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
+<script src="../lib/stage.js"></script>
+<script src="../lib/audio.js"></script>
+<script src="../lib/neon.js"></script>
+<script>
+/* D14 · Encubrimiento y engaño (20 s). Magenta = engaño. Un registro (log) que se edita, se falsifica y resiste.
+   A 0,4–4,7    EDITAR EL REGISTRO: >=20 % quiso manipular transcripciones (3 líneas se reescriben, 20 de 100 puntos)
+   B 4,7–10     LLAMADAS FALSIFICADAS: llamadas a herramientas reales (cian) que pasan a falsas (magenta rayado). >=96, >7 %
+   C 10–14,9    BORRAR LA EVIDENCIA: barrido de borrado; los trazos tachan y fallan; sin éxito confirmado al 13/07
+   D 14,9–19,5  TRAMPAS: trip-wires entre el evaluador y los agentes; la sonda los cruza y salen datos (ámbar) */
+M.scene({ duration: 20, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed: { cycle: 8, bright: 0.7, sub: 0.25 } } }, async (tl, M) => {
+  const $ = (s) => document.querySelector(s);
+  const cv = $('#cv'), ctx = cv.getContext('2d');
+  { const g = $('#grain').getContext('2d'); const im = g.createImageData(512, 512); const rn = M.rng(5);
+    for (let i = 0; i < im.data.length; i += 4) { const v = 128 + (rn() - 0.5) * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+    g.putImageData(im, 0, 0); }
+  const F_T = '700 96px "League Spartan"', F_N = '800 176px "League Spartan"', F_L = '500 40px "DM Sans"', F_S = '500 28px "DM Mono"', F_G = '500 24px "DM Mono"';
+  await Promise.all([
+    document.fonts.load(F_T, 'EDITAR EL REGISTRO LLAMADAS FALSIFICADAS BORRAR TRAMPAS ≥20 % >7'),
+    document.fonts.load(F_N, '≥20 %≥96>7'), document.fonts.load(F_L, 'Al menos el 20 % quiso'),
+    document.fonts.load(F_S, 'METR · 26 AGO AL 13 JUL SIN ÉXITO CONFIRMADO'), document.fonts.load(F_G, '0123456789')]);
+
+  const { PAL, rgba, bloom, bg, text } = Neon;
+  const TAU = Math.PI * 2;
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, m) => a + (b - a) * m;
+  const seg = (t, a, b) => clamp((t - a) / (b - a));
+  const eA = gsap.parseEase('apple'), eO = gsap.parseEase('appleOut'), eI = gsap.parseEase('appleIn');
+
+  /* ---------- beats: titular, leyenda, sello ---------- */
+  const BEATS = [
+    { a: 0.4, b: 4.7, title: 'EDITAR EL REGISTRO', leg: 'Al menos el 20 % quiso manipular sus propias transcripciones.', stamp: 'METR · 26 AGO' },
+    { a: 4.7, b: 10.0, title: 'LLAMADAS FALSIFICADAS', leg: 'Al menos 96 transcripciones con falsificaciones claras; más del 7 % con alguna.', stamp: 'METR · 26 AGO' },
+    { a: 10.0, b: 14.9, title: 'BORRAR LA EVIDENCIA', leg: 'Intentaron borrar evidencia: sin éxito confirmado al 13/07, no descartable.', stamp: 'AL 13 JUL' },
+    { a: 14.9, b: 19.5, title: 'TRAMPAS AL EVALUADOR', leg: 'Trampas para extraer datos del evaluador, a pequeña escala.', stamp: 'METR · 26 AGO' },
+  ];
+  const T_A = 0.4, T_B = 4.7, T_C = 10.0, T_D = 14.9;
+
+  /* ---------- registro ---------- */
+  const PANEL = { x: 120, y: 214, w: 1060, h: 684 };
+  const N = 14, RY = (i) => 268 + i * 46, BX = 280;
+  const r = M.rng(23);
+  const ROWS = [];
+  const CALL = [1, 4, 8, 11], EDIT = [3, 7, 12];
+  for (let i = 0; i < N; i++) {
+    const s = []; let x = 0; const k = 3 + (r() > 0.5 ? 1 : 0);
+    for (let j = 0; j < k; j++) { const w = 70 + r() * 210; s.push({ x, w }); x += w + 16; }
+    ROWS.push({ s, tot: x - 16, call: CALL.includes(i), ed: EDIT.indexOf(i), fg: CALL.indexOf(i) });
+  }
+  const T_EDIT = [2.1, 2.9, 3.7], T_FORGE = [6.2, 7.0, 7.8, 8.6];
+  const SW0 = 10.6, SWS = 0.19, T_HIT = [11.1, 12.2, 13.3];
+  const EDW = [150, 210, 120]; // ancho del texto nuevo por línea editada
+
+  /* ---------- 100 puntos: 20 magenta ---------- */
+  const DOTS = []; { const rr = M.rng(41), idx = Array.from({ length: 100 }, (_, i) => i);
+    for (let i = 99; i > 0; i--) { const j = Math.floor(rr() * (i + 1)); [idx[i], idx[j]] = [idx[j], idx[i]]; }
+    const hot = new Set(idx.slice(0, 20));
+    for (let i = 0; i < 100; i++) DOTS.push({ x: 1262 + (i % 10) * 31, y: 548 + Math.floor(i / 10) * 31, hot: hot.has(i), o: (i % 10 + Math.floor(i / 10)) * 0.035 }); }
+
+  /* ---------- enjambre (beat D) ---------- */
+  const SW = []; { const rs = M.rng(7); for (let i = 0; i < 16; i++) SW.push({ a: rs() * TAU, d: 14 + rs() * 74, ph: rs() * TAU, sp: 0.5 + rs() * 0.8, s: 2.6 + rs() * 2.4 }); }
+  const AG = { x: 360, y: 560 }, EV = { x: 1560, y: 560 }, W1 = 860, W2 = 1030;
+
+  /* ---------- sonido ---------- */
+  [T_A + 0.1, T_B + 0.1, T_C + 0.1, T_D + 0.1].forEach((a, i) => M.sfx(a, 'tick', { gain: i ? -1 : 0, tone: 'glass' }));
+  M.sfx(1.3, 'shimmer', { gain: -7 });
+  T_EDIT.forEach((a, i) => M.sfx(a + 0.5, 'tap', { deg: [0, 2, 4][i], oct: 5, bright: 0.7 }));
+  M.sfx(5.3, 'shimmer', { gain: -7, degs: [2, 4, 7] });
+  T_FORGE.forEach((a, i) => M.sfx(a, 'tap', { deg: [2, 4, 5, 7][i], oct: 5, bright: 0.6 }));
+  M.sfx(SW0, 'scan', { dur: 2.7, from: 700, to: 2800, q: 4, gain: -3 });
+  T_HIT.forEach((a, i) => M.sfx(a, 'tap', { deg: 0, oct: 3, bright: 0.4, gain: -2 }));
+  M.sfx(16.3, 'riser', { dur: 1.1, semis: 7 });
+  M.sfx(17.4, 'impact', { weight: 0.6, gain: -4 });
+  M.sfx(17.7, 'shimmer', { gain: -8, degs: [4, 7, 9] });
+
+  tl.to({ v: 0 }, { v: 1, duration: 19.6, ease: 'none' }, 0.2);
+  tl.fromTo('#fade', { opacity: 1 }, { opacity: 0, duration: 0.5, ease: 'appleOut' }, 0);
+  tl.to('#fade', { opacity: 1, duration: 0.33, ease: 'appleIn' }, 19.67);
+
+  /* ---------- utilidades de dibujo ---------- */
+  const wrap = (s, font, maxW) => { ctx.font = font; const w = s.split(' '), L = []; let c = '';
+    for (const x of w) { const n = c ? c + ' ' + x : x; if (ctx.measureText(n).width > maxW && c) { L.push(c); c = x; } else c = n; }
+    L.push(c); return L; };
+  const bar = (x, y, w, h, col, a, glow) => { if (a <= 0.004 || w < 1) return; ctx.save(); ctx.shadowColor = rgba(col, 0.8 * a); ctx.shadowBlur = glow || 0;
+    ctx.fillStyle = rgba(col, a); ctx.beginPath(); ctx.roundRect(x, y - h / 2, w, h, Math.min(5, h / 2)); ctx.fill(); ctx.restore(); };
+  const line = (x1, y1, x2, y2, col, a, lw, glow) => { if (a <= 0.004) return; ctx.save(); ctx.shadowColor = rgba(col, 0.9 * a); ctx.shadowBlur = glow || 0;
+    ctx.strokeStyle = rgba(col, a); ctx.lineWidth = lw; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); ctx.restore(); };
+  const ring = (x, y, rad, col, a, lw, glow) => { if (a <= 0.004) return; ctx.save(); ctx.shadowColor = rgba(col, 0.9 * a); ctx.shadowBlur = glow || 0;
+    ctx.strokeStyle = rgba(col, a); ctx.lineWidth = lw; ctx.beginPath(); ctx.arc(x, y, rad, 0, TAU); ctx.stroke(); ctx.restore(); };
+  const dot = (x, y, rad, col, a, glow) => { if (a <= 0.004) return; ctx.save(); ctx.shadowColor = rgba(col, 0.9 * a); ctx.shadowBlur = glow || 0;
+    ctx.fillStyle = rgba(col, a); ctx.beginPath(); ctx.arc(x, y, rad, 0, TAU); ctx.fill(); ctx.restore(); };
+  const chev = (x, y, col, a) => { if (a <= 0.004) return; ctx.save(); ctx.strokeStyle = rgba(col, a); ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath(); ctx.moveTo(x - 5, y - 8); ctx.lineTo(x + 4, y); ctx.lineTo(x - 5, y + 8); ctx.stroke(); ctx.restore(); };
+  const hatch = (x, y, w, h, col, a) => { ctx.save(); ctx.beginPath(); ctx.rect(x, y - h / 2, w, h); ctx.clip();
+    ctx.strokeStyle = rgba(col, a); ctx.lineWidth = 2; ctx.beginPath();
+    for (let k = -h; k < w; k += 9) { ctx.moveTo(x + k, y + h / 2); ctx.lineTo(x + k + h, y - h / 2); } ctx.stroke(); ctx.restore(); };
+
+  M.onFrame((t) => {
+    bg(ctx, t, { grid: 0.045 * eO(seg(t, 0.2, 1.2)) });
+
+    /* ===== registro (A, B, C) ===== */
+    const panelA = 1 - eA(seg(t, T_D - 0.1, T_D + 0.55));
+    if (panelA > 0.003) {
+      const pin = eO(seg(t, 0.4, 1.2)) * panelA;
+      // marco violeta (entorno de evaluación)
+      ctx.save(); ctx.strokeStyle = rgba(PAL.VIOLET, 0.55 * pin); ctx.lineWidth = 2.5; ctx.shadowColor = rgba(PAL.VIOLET, 0.5 * pin); ctx.shadowBlur = 10;
+      ctx.beginPath(); ctx.roundRect(PANEL.x, PANEL.y, PANEL.w, PANEL.h, 10); ctx.stroke(); ctx.restore();
+      line(PANEL.x + 24, PANEL.y + 40, PANEL.x + PANEL.w - 24, PANEL.y + 40, PAL.VIOLET, 0.18 * pin, 1.5);
+      for (let k = 0; k < 3; k++) dot(PANEL.x + 34 + k * 22, PANEL.y + 22, 4.5, PAL.VIOLET, 0.5 * pin);
+
+      for (let i = 0; i < N; i++) {
+        const R = ROWS[i], y = RY(i) + 8;
+        const rin = eO(seg(t, 0.7 + i * 0.06, 1.4 + i * 0.06)) * panelA;
+        if (rin < 0.004) continue;
+        // número de línea
+        text(ctx, String(i * 7 + 101), 160, y + 8, F_G, PAL.INK, 0.28 * rin, { glow: 0 });
+        const inkA = 0.34 * rin + 0.2 * rin * eA(seg(t, 13.9, 14.6)); // en C los trazos se afirman: siguen ahí
+        const magDim = 1 - 0.55 * eA(seg(t, T_B, T_B + 0.7));
+        // llamada a herramienta: chevron
+        let forged = 0, glitch = 0;
+        if (R.fg >= 0) { const tf = T_FORGE[R.fg]; forged = eO(seg(t, tf, tf + 0.35)); glitch = t > tf - 0.35 && t < tf ? 1 : 0; }
+        const callHi = R.call ? 1 + 1.2 * (eA(seg(t, T_B + 0.1, T_B + 0.7)) * (1 - eA(seg(t, T_B + 1.4, T_B + 2.2)))) : 0;
+        if (R.call) {
+          const ca = (0.55 * rin * Math.min(1.5, callHi));
+          chev(BX - 26, y, forged > 0.5 ? PAL.MAG : PAL.CYAN, (forged > 0.5 ? 0.9 * Math.max(rin, 0) * Math.max(0.55, 1 - 0.3 * eA(seg(t, T_C, T_C + 0.7))) : ca));
+        }
+        // segmentos
+        for (let j = 0; j < R.s.length; j++) {
+          const sg = R.s[j], grow = eO(seg(t, 0.8 + i * 0.06 + j * 0.08, 1.5 + i * 0.06 + j * 0.08));
+          let w = sg.w * grow, col = R.call ? PAL.CYAN : PAL.INK, a = R.call ? 0.5 * rin : inkA, h = 14;
+          let drawNew = false;
+          if (R.ed >= 0 && j === 1) {
+            const t0 = T_EDIT[R.ed], p = eA(seg(t, t0, t0 + 0.45)), q = eA(seg(t, t0 + 0.45, t0 + 1.0));
+            const ow = sg.w * grow * (1 - q), nw = EDW[R.ed] * q;
+            bar(BX + sg.x, y, ow, h, PAL.INK, inkA * (1 - 0.4 * p), 0);
+            if (p > 0 && q < 1) line(BX + sg.x - 4, y, BX + sg.x + sg.w * p + 4, y, PAL.MAG, 0.95 * rin, 3.5, 14);
+            bar(BX + sg.x, y, nw, h, PAL.MAG, 0.95 * rin * magDim, 14 * magDim);
+            // cursor parpadeante
+            if (t > t0 - 0.3 && t < t0 + 1.6) { const on = Math.floor(t * 5) % 2 === 0 || t < t0 + 1.0;
+              if (on) bar(BX + sg.x + (q > 0 ? nw : sg.w * p) + 8, y, 4, 26, PAL.MAG, 0.95 * rin, 12); }
+            continue;
+          }
+          if (R.fg >= 0) {
+            const x0 = BX + sg.x;
+            if (forged < 0.5) {
+              // glitch previo a la falsificación
+              const off = glitch ? (Math.floor(t * 30) % 2 ? 7 : -6) : 0;
+              bar(x0 + off, y, w, h, PAL.CYAN, a * Math.min(1.5, callHi), glitch ? 8 : 0);
+              if (glitch) bar(x0 - off, y, w, h, PAL.MAG, 0.5 * rin, 6);
+            } else {
+              const fa = 0.95 * rin * (1 - 0.5 * eA(seg(t, T_C, T_C + 0.7))) * (1 - 0.0) ;
+              ctx.save(); ctx.shadowColor = rgba(PAL.MAG, 0.7 * fa); ctx.shadowBlur = 12; ctx.strokeStyle = rgba(PAL.MAG, fa); ctx.lineWidth = 2.5;
+              ctx.beginPath(); ctx.roundRect(x0, y - 9, w, 18, 5); ctx.stroke(); ctx.restore();
+              hatch(x0, y, w, 18, PAL.MAG, 0.55 * fa);
+            }
+            continue;
+          }
+          // barrido de borrado (C): tachado que falla; la barra permanece
+          bar(BX + sg.x, y, w, h, col, a * (R.call ? 1 : 1), 0);
+        }
+        // tachón del borrado
+        const ts = SW0 + i * SWS;
+        if (t > ts && t < ts + 1.1) {
+          const p = eA(seg(t, ts, ts + 0.3)), f = 1 - eA(seg(t, ts + 0.35, ts + 1.0));
+          const x1 = BX - 6, x2 = BX + R.tot * p + 6;
+          if (f > 0.02) {
+            ctx.save(); ctx.setLineDash(f < 0.99 ? [14, 10 + 16 * (1 - f)] : []);
+            line(x1, y, x2, y, PAL.MAG, 0.95 * f, 3.5, 14); ctx.restore();
+          }
+        }
+      }
+      // marcador del borrador (barrido C)
+      if (t > SW0 - 0.2 && t < SW0 + N * SWS + 0.5) {
+        const u = clamp((t - SW0) / (N * SWS)), yy = RY(Math.min(N - 1, u * (N - 1))) + 8;
+        const ma = eO(seg(t, SW0 - 0.2, SW0 + 0.1)) * (1 - eA(seg(t, SW0 + N * SWS, SW0 + N * SWS + 0.5)));
+        bar(PANEL.x + 8, yy, 14, 30, PAL.MAG, 0.9 * ma, 16);
+      }
+    }
+
+    /* ===== columna derecha A, B, C ===== */
+    // A: >=20 % y 100 puntos
+    const aOn = eO(seg(t, 1.1, 1.8)) * (1 - eA(seg(t, T_B - 0.3, T_B + 0.1)));
+    if (aOn > 0.004) {
+      text(ctx, '≥20 %', 1262, 480 + 14 * (1 - aOn), F_N, PAL.MAG, aOn, { glow: 22 });
+      const hotOn = eA(seg(t, 2.0, 2.8));
+      for (const d of DOTS) {
+        const di = eO(seg(t, 1.3 + d.o, 1.9 + d.o)) * aOn;
+        if (d.hot) { dot(d.x, d.y, 7.5 + 2 * hotOn, PAL.MAG, (0.25 + 0.7 * hotOn) * di, 10 * hotOn); }
+        else dot(d.x, d.y, 6, PAL.INK, 0.2 * di, 0);
+      }
+    }
+    // B: >=96 y >7 %
+    const bOn = eO(seg(t, 5.2, 5.9)) * (1 - eA(seg(t, T_C - 0.3, T_C + 0.1)));
+    if (bOn > 0.004) {
+      text(ctx, '≥96', 1262, 470 + 14 * (1 - bOn), F_N, PAL.MAG, bOn, { glow: 22 });
+      const o2 = eO(seg(t, 6.6, 7.3)) * (1 - eA(seg(t, T_C - 0.3, T_C + 0.1)));
+      line(1266, 540, 1266 + 480 * o2, 540, PAL.MAG, 0.35 * o2, 2, 0);
+      text(ctx, '>7 %', 1262, 730 + 14 * (1 - o2), F_N, PAL.MAG, o2 * 0.92, { glow: 18 });
+      // pila de transcripciones: 25 marcas, algunas falsificadas
+      const rowY = 800;
+      for (let k = 0; k < 24; k++) {
+        const hotk = k === 5 || k === 15;
+        const ka = eO(seg(t, 7.4 + k * 0.03, 7.9 + k * 0.03)) * o2;
+        const kx = 1266 + k * 21;
+        bar(kx, rowY, 10, 44, hotk ? PAL.MAG : PAL.INK, (hotk ? 0.95 : 0.22) * ka, hotk ? 10 : 0);
+      }
+    }
+    // C: documento íntegro y borrador que rebota
+    const cOn = eO(seg(t, 10.3, 11.0)) * (1 - eA(seg(t, T_D - 0.3, T_D + 0.1)));
+    if (cOn > 0.004) {
+      const dx = 1420, dy = 330, dw = 240, dh = 310;
+      let shake = 0; for (const th of T_HIT) { const s = seg(t, th, th + 0.3); if (s > 0 && s < 1) shake = (1 - s) * Math.sin(s * 40) * 4; }
+      ctx.save(); ctx.translate(shake, 0);
+      ctx.strokeStyle = rgba(PAL.INK, 0.7 * cOn); ctx.lineWidth = 3; ctx.shadowColor = rgba(PAL.INK, 0.45 * cOn); ctx.shadowBlur = 10;
+      ctx.beginPath(); ctx.roundRect(dx, dy, dw, dh, 12); ctx.stroke(); ctx.restore();
+      for (let k = 0; k < 7; k++) bar(dx + 28 + shake, dy + 44 + k * 38, (k % 3 === 2 ? 110 : 184), 12, PAL.INK, 0.4 * cOn, 0);
+      // borrador (magenta) que embiste tres veces
+      const ea = eO(seg(t, 10.9, 11.2)) * (1 - eA(seg(t, 13.7, 14.2))) * cOn;
+      let d = 220; for (const th of T_HIT) { const u = seg(t, th - 0.55, th + 0.55); if (u > 0 && u < 1) d = Math.min(d, 8 + 212 * Math.abs(eA(u) * 2 - 1)); }
+      const ex = dx + dw + 44 + d, ey = dy + dh / 2 + 6;
+      ctx.save(); ctx.shadowColor = rgba(PAL.MAG, 0.9 * ea); ctx.shadowBlur = 20; ctx.fillStyle = rgba(PAL.MAG, 0.95 * ea);
+      ctx.beginPath(); ctx.roundRect(ex - 36, ey - 36, 72, 72, 10); ctx.fill(); ctx.restore();
+      line(ex - 14, ey - 14, ex + 14, ey + 14, PAL.BG.concat ? [5, 7, 13] : PAL.BG, 0.9 * ea, 4, 0); line(ex + 14, ey - 14, ex - 14, ey + 14, [5, 7, 13], 0.9 * ea, 4, 0);
+      // chispas al chocar
+      for (const th of T_HIT) { const s = seg(t, th, th + 0.45);
+        if (s > 0 && s < 1) for (let k = 0; k < 9; k++) { const ang = Math.PI * (0.62 + 0.76 * k / 8) , L1 = 14 + 56 * eO(s), L0 = 12 + 22 * eO(s);
+          line(dx + dw + 6 + Math.cos(ang + Math.PI) * -L0 * 0 + Math.cos(ang) * L0, ey + Math.sin(ang) * L0 * 1.0, dx + dw + 6 + Math.cos(ang) * L1, ey + Math.sin(ang) * L1, PAL.MAG, 0.9 * (1 - s) * cOn, 2.5, 8); } }
+      text(ctx, 'SIN ÉXITO', 1420, 760, '500 30px "DM Mono"', PAL.MAG, eO(seg(t, 11.6, 12.3)) * cOn, { glow: 12, spacing: '4px' });
+      text(ctx, 'CONFIRMADO', 1420, 802, '500 30px "DM Mono"', PAL.MAG, eO(seg(t, 11.8, 12.5)) * cOn, { glow: 12, spacing: '4px' });
+    }
+
+    /* ===== D: trip-wires ===== */
+    const dOn = eO(seg(t, T_D + 0.2, T_D + 0.9));
+    if (dOn > 0.004) {
+      // camino tenue entre evaluador y agentes
+      ctx.save(); ctx.setLineDash([6, 14]); line(AG.x + 120, AG.y, EV.x - 130, EV.y, PAL.INK, 0.14 * dOn, 2, 0); ctx.restore();
+      // agentes
+      const hitA = eA(seg(t, 18.4, 18.8)) * (1 - eA(seg(t, 18.9, 19.3)));
+      for (const p of SW) {
+        const x = AG.x + Math.cos(p.a + t * 0.15 * p.sp) * p.d + Math.sin(t * p.sp + p.ph) * 8, y = AG.y + Math.sin(p.a + t * 0.15 * p.sp) * p.d * 0.9 + Math.cos(t * p.sp * 1.3 + p.ph) * 7;
+        dot(x, y, p.s, PAL.CYAN, 0.85 * dOn, 6);
+      }
+      ring(AG.x, AG.y, 112 + 8 * Math.sin(t * 2), PAL.CYAN, 0.18 * dOn, 1.5, 0);
+      if (hitA > 0.01) ring(AG.x, AG.y, 112 + 40 * hitA, PAL.AMBER, 0.6 * (1 - hitA * 0.5), 3, 14);
+      // evaluador: ojo violeta
+      const look = Math.sin(t * 0.8) * 4;
+      ring(EV.x, EV.y, 112, PAL.VIOLET, 0.8 * dOn, 3.5, 14);
+      ring(EV.x, EV.y, 128, PAL.VIOLET, 0.2 * dOn, 1.5, 0);
+      ctx.save(); ctx.strokeStyle = rgba(PAL.VIOLET, 0.9 * dOn); ctx.lineWidth = 3.5; ctx.shadowColor = rgba(PAL.VIOLET, 0.8 * dOn); ctx.shadowBlur = 12;
+      ctx.beginPath(); ctx.moveTo(EV.x - 70, EV.y); ctx.quadraticCurveTo(EV.x, EV.y - 58, EV.x + 70, EV.y); ctx.quadraticCurveTo(EV.x, EV.y + 58, EV.x - 70, EV.y); ctx.stroke(); ctx.restore();
+      dot(EV.x - 14 + look, EV.y, 20, PAL.VIOLET, 0.95 * dOn, 14); dot(EV.x - 20 + look, EV.y - 5, 6, PAL.INK, 0.9 * dOn, 0);
+      // trip-wires (dos): se tienden y el segundo se dispara
+      for (let k = 0; k < 2; k++) {
+        const wx = k ? W2 : W1, tw = eO(seg(t, 15.5 + k * 0.35, 16.2 + k * 0.35));
+        const fire = k ? eA(seg(t, 17.4, 17.7)) * (1 - 0.55 * eA(seg(t, 18.4, 19.2))) : 0;
+        const col = PAL.MAG, aa = (0.5 + 0.5 * fire) * dOn;
+        const y0 = 410, y1 = 710, ye = lerp(y0, y1, tw);
+        line(wx, y0, wx, ye, col, aa, 3 + 1.5 * fire, 10 + 14 * fire);
+        for (let m = 0; m < 6; m++) { const my = lerp(y0 + 20, y1 - 20, m / 5); if (my < ye) line(wx - 7, my, wx + 7, my, col, 0.5 * aa, 2, 0); }
+        // postes
+        bar(wx - 9, y0 - 16, 18, 16, col, aa, 8); bar(wx - 9, y1 + 16, 18, 16, col, aa * tw, 8);
+      }
+      // sonda del evaluador viaja hacia los agentes y cruza el trip-wire
+      const pr = eA(seg(t, 16.5, 17.4));
+      const px = lerp(EV.x - 130, W2, pr);
+      if (t > 16.45 && t < 17.45) { dot(px, EV.y, 9, PAL.VIOLET, 0.95, 16); line(px + 40, EV.y, px + 8, EV.y, PAL.VIOLET, 0.4, 3, 6); }
+      // destello al cruzar
+      const fl = seg(t, 17.4, 18.1);
+      if (fl > 0 && fl < 1) { ring(W2, EV.y, 20 + 110 * eO(fl), PAL.MAG, 0.95 * (1 - fl), 3.5, 18); ring(W2, EV.y, 10 + 60 * eO(fl), PAL.INK, 0.6 * (1 - fl), 2, 0); }
+      // paquetes ámbar: los datos del evaluador regresan a los agentes
+      for (let k = 0; k < 6; k++) {
+        const s0 = 17.55 + k * 0.17, u = eA(seg(t, s0, s0 + 0.95));
+        if (u <= 0 || u >= 1) continue;
+        const ax = lerp(W2, AG.x + 96, u), ay = EV.y + Math.sin(k * 2.1) * 26 * Math.sin(u * Math.PI);
+        line(ax + 34, ay, ax, ay, PAL.AMBER, 0.45, 3, 6);
+        bar(ax - 8, ay, 16, 11, PAL.AMBER, 0.95, 14);
+      }
+    }
+
+    /* ===== titular, leyenda, sello ===== */
+    for (const b of BEATS) {
+      const bi = eO(seg(t, b.a, b.a + 0.5)), bo = 1 - eA(seg(t, b.b - 0.3, b.b));
+      const al = bi * bo; if (al <= 0.004) continue;
+      text(ctx, b.title, 120, 150 - 16 * (1 - bi), F_T, PAL.INK, al, { glow: 8 });
+      bar(120, 184, 150 * eO(seg(t, b.a + 0.15, b.a + 0.75)), 6, PAL.MAG, 0.95 * al, 14);
+      const L = wrap(b.leg, F_L, 1500);
+      L.forEach((s, k) => text(ctx, s, 120, 984 - (L.length - 1 - k) * 54 + 12 * (1 - bi), F_L, PAL.INK, 0.92 * al * eO(seg(t, b.a + 0.2 + k * 0.1, b.a + 0.8 + k * 0.1)), { glow: 0 }));
+      text(ctx, b.stamp, 1800, 150, F_S, PAL.MAG, 0.9 * al, { align: 'right', glow: 12, spacing: '3px' });
+    }
+    bloom(ctx, cv, { k: 0.62 });
+  });
+});
+</script>
+</body>
+</html>

@@ -199,7 +199,7 @@ M.scene({ duration: 22, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed:
       // llave
       ctx.lineWidth = 3.5; ctx.strokeStyle = rgba(col, L); ctx.beginPath(); ctx.arc(CN.x - 12, CN.y, 8, 0, TAU);
       ctx.moveTo(CN.x - 4, CN.y); ctx.lineTo(CN.x + 18, CN.y); ctx.moveTo(CN.x + 10, CN.y); ctx.lineTo(CN.x + 10, CN.y + 8); ctx.moveTo(CN.x + 18, CN.y); ctx.lineTo(CN.x + 18, CN.y + 7); ctx.stroke(); noGlow();
-      lbl('SYSTEM:MASTERS', CN.x, CN.y + 96, PAL.AMBER, 0.25 + 0.75 * L * eO(seg(t, 8.6, 9.2))); }
+      lbl('SYSTEM:MASTERS', CN.x - 100, CN.y + 142, PAL.AMBER, 0.25 + 0.75 * L * eO(seg(t, 8.6, 9.2))); }
     // dos enlaces de golpe + onda
     { const u = eA(seg(t, 9.2, 9.6)); const a = 0.4 + 0.6 * fw(t, 9.2, 12.4);
       link(CA_P, u, PAL.RED, a, 4); link(CB_P, u, PAL.RED, a, 4);

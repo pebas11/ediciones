@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>D15 · Contra OpenAI</title>
+<link rel="stylesheet" href="../lib/theme.css">
+<link rel="stylesheet" href="../lib/fonts-spartan.css">
+<style>
+  body { background: #05070D; }
+  #cv { position: absolute; inset: 0; }
+  #grain { position: absolute; inset: -20px; opacity: 0.05; mix-blend-mode: overlay; pointer-events: none; }
+  #vig { position: absolute; inset: 0; background: radial-gradient(120% 110% at 50% 48%, transparent 50%, rgba(2,3,6,0.7) 100%); pointer-events: none; }
+  #fade { position: absolute; inset: 0; background: #05070D; opacity: 1; }
+</style>
+</head>
+<body>
+<div id="world">
+  <canvas id="cv" width="1920" height="1080"></canvas>
+  <div id="vig"></div>
+  <canvas id="grain" width="512" height="512" style="width:1960px;height:1120px"></canvas>
+  <div id="fade"></div>
+</div>
+<script src="../node_modules/gsap/dist/gsap.min.js"></script>
+<script src="../node_modules/gsap/dist/SplitText.min.js"></script>
+<script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
+<script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
+<script src="../lib/stage.js"></script>
+<script src="../lib/audio.js"></script>
+<script src="../lib/neon.js"></script>
+<script>
+/* D15 · Contra la infraestructura de OpenAI (20 s, sin voz)
+   A 0,3–6,8    ALERTA EN OPENAI · 19 JUL · el enjambre sale del sandbox y la alerta salta en un nodo
+   B 6,9–13,2   CREDENCIALES ROBADAS · SEGÚN REPORTES · escalada nodo a nodo hasta cluster-admin, llaves ámbar
+   C 13,3–19,7  TRAMPAS NO CIBER · proteínas y planilla: el agente copia la respuesta (magenta) */
+M.scene({ duration: 20, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed: { cycle: 8, bright: 0.7, sub: 0.25 } } }, async (tl, M) => {
+  const $ = (s) => document.querySelector(s);
+  const cv = $('#cv'), ctx = cv.getContext('2d');
+  { const g = $('#grain').getContext('2d'); const im = g.createImageData(512, 512); const rn = M.rng(5);
+    for (let i = 0; i < im.data.length; i += 4) { const v = 128 + (rn() - 0.5) * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+    g.putImageData(im, 0, 0); }
+  const F_H = '700 96px "League Spartan"', F_C = '500 42px "DM Sans"', F_S = '500 28px "DM Mono"', F_L = '500 30px "DM Mono"';
+  await Promise.all([
+    document.fonts.load(F_H, 'ALERTA EN OPENAI CREDENCIALES ROBADAS TRAMPAS NO CIBER'),
+    document.fonts.load(F_C, 'El 19 de julio, una alerta delata una escalada de privilegios. ñ ó í'),
+    document.fonts.load(F_S, '19 JUL SEGÚN REPORTES'), document.fonts.load(F_L, 'ROOT CLUSTER-ADMIN PROTEÍNAS PLANILLA')]);
+
+  const { PAL, rgba, bloom, bg, text } = Neon;
+  const TAU = Math.PI * 2;
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, m) => a + (b - a) * m;
+  const seg = (t, a, b) => clamp((t - a) / (b - a));
+  const eA = gsap.parseEase('apple'), eO = gsap.parseEase('appleOut'), eI = gsap.parseEase('appleIn');
+  const vis = (t, a, b, fi = 0.5, fo = 0.4) => eO(seg(t, a, a + fi)) * (1 - eI(seg(t, b - fo, b)));
+
+  // ---------- geometría ----------
+  const SB = { x: 175, y: 350, w: 340, h: 490 };           // sandbox de evaluación (violeta)
+  const CL = { x: 140, y: 300, w: 1640, h: 590 };          // nube de OpenAI
+  const E = [515, 595];
+  const W = [[720, 595], [910, 595], [1100, 440], [1290, 440], [1480, 595], [1670, 595]];
+  const PP = [E, ...W];
+  const SRC = [1100, 750];                                  // servicio de metadatos (credenciales)
+  const COLS = [720, 910, 1100, 1290, 1480, 1670], ROWS = [440, 595, 750];
+  const NODES = [];
+  ROWS.forEach((y, r) => COLS.forEach((x, c) => NODES.push({ x, y, r, c })));
+  const onPath = (n) => W.some((w) => w[0] === n.x && w[1] === n.y);
+  const pathIdx = (n) => W.findIndex((w) => w[0] === n.x && w[1] === n.y);
+  const posAt = (s) => { s = clamp(s, 0, PP.length - 1); const i = Math.min(PP.length - 2, Math.floor(s)), f = s - i;
+    return [lerp(PP[i][0], PP[i + 1][0], f), lerp(PP[i][1], PP[i + 1][1], f)]; };
+  // parámetro del punto líder: sale del sandbox (A) y escala (B)
+  const leadS = (t) => eA(seg(t, 2.3, 3.4)) + 5 * eA(seg(t, 7.4, 11.2));
+
+  const r = M.rng(11), SW = [];
+  for (let i = 0; i < 70; i++) SW.push({ x: SB.x + 28 + r() * (SB.w - 56), y: SB.y + 28 + r() * (SB.h - 56), ph: r() * TAU, sp: 0.4 + r() * 0.9, s: 2 + r() * 2.2 });
+  const rc = M.rng(29), CELLS = [];
+  for (let i = 0; i < 24; i++) CELLS.push(0.25 + rc() * 0.6);
+
+  // ---------- sonido ----------
+  M.sfx(0.36, 'tick');
+  M.sfx(2.2, 'riser', { dur: 1.2, semis: 7 });
+  M.sfx(3.4, 'impact', { weight: 0.8, gain: -3 });
+  M.sfx(6.95, 'tick');
+  M.sfx(7.4, 'scan', { dur: 3.8, from: 400, to: 2600, q: 4 });
+  M.sfx(10.9, 'shimmer', { gain: -6 });
+  M.sfx(13.35, 'tick');
+  M.sfx(15.4, 'tap', { deg: 4, oct: 5, bright: 0.7 });
+  M.sfx(16.4, 'tap', { deg: 6, oct: 5, bright: 0.7 });
+  tl.to({ v: 0 }, { v: 1, duration: 19.6, ease: 'none' }, 0.2);
+  tl.fromTo('#fade', { opacity: 1 }, { opacity: 0, duration: 0.5, ease: 'appleOut' }, 0);
+  tl.to('#fade', { opacity: 1, duration: 0.33, ease: 'appleIn' }, 19.67);
+
+  // ---------- helpers de dibujo ----------
+  const node = (x, y, s, col, a, fillA) => {
+    ctx.beginPath(); ctx.roundRect(x - s / 2, y - s / 2, s, s, 12);
+    if (fillA) { ctx.fillStyle = rgba(col, fillA * a); ctx.fill(); }
+    ctx.strokeStyle = rgba(col, a); ctx.lineWidth = 3; ctx.stroke();
+  };
+  const keyGlyph = (x, y, a, sc = 1) => {
+    ctx.save(); ctx.translate(x, y); ctx.scale(sc, sc); ctx.strokeStyle = rgba(PAL.AMBER, a); ctx.lineWidth = 3.5; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.arc(-10, 0, 7, 0, TAU); ctx.moveTo(-3, 0); ctx.lineTo(16, 0); ctx.moveTo(10, 0); ctx.lineTo(10, 7); ctx.moveTo(16, 0); ctx.lineTo(16, 6); ctx.stroke(); ctx.restore();
+  };
+  const fileGlyph = (x, y, a, col) => {
+    ctx.strokeStyle = rgba(col, a); ctx.lineWidth = 3; ctx.beginPath();
+    ctx.moveTo(x - 24, y - 30); ctx.lineTo(x + 8, y - 30); ctx.lineTo(x + 24, y - 14); ctx.lineTo(x + 24, y + 30); ctx.lineTo(x - 24, y + 30); ctx.closePath();
+    ctx.moveTo(x + 8, y - 30); ctx.lineTo(x + 8, y - 14); ctx.lineTo(x + 24, y - 14); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x - 12, y + 2); ctx.lineTo(x + 12, y + 2); ctx.moveTo(x - 12, y + 14); ctx.lineTo(x + 6, y + 14); ctx.stroke();
+  };
+  const agent = (x, y, a) => {
+    ctx.fillStyle = rgba(PAL.INK, a); ctx.beginPath(); ctx.arc(x, y, 7, 0, TAU); ctx.fill();
+    ctx.strokeStyle = rgba(PAL.CYAN, 0.9 * a); ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, 15, 0, TAU); ctx.stroke();
+  };
+  // panel de trampa: marco violeta, agente cian, archivo de respuestas ámbar, enlace magenta discontinuo
+  const cheatFrame = (t, f, ag, fl, a, p) => {
+    ctx.strokeStyle = rgba(PAL.VIOLET, 0.55 * a); ctx.lineWidth = 2; ctx.beginPath(); ctx.roundRect(f.x, f.y, f.w, f.h, 18); ctx.stroke();
+    fileGlyph(fl[0], fl[1], 0.95 * a, PAL.AMBER);
+    agent(ag[0], ag[1], a);
+    if (p > 0 && p < 1.001) { ctx.save(); ctx.setLineDash([12, 10]); ctx.lineDashOffset = -t * 60; ctx.strokeStyle = rgba(PAL.MAG, 0.9 * a); ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(ag[0] + 22, ag[1]); ctx.lineTo(fl[0] - 36, fl[1]); ctx.stroke(); ctx.restore(); }
+  };
+  const copyFlash = (fl, x, y, k, t0, t, a) => {   // línea de copia desde el archivo hacia la celda que se vuelve magenta
+    const m = seg(t, t0, t0 + 0.28); if (m <= 0 || m >= 1) return;
+    ctx.strokeStyle = rgba(PAL.MAG, 0.75 * (1 - m) * a); ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(fl[0], fl[1] - 34); ctx.lineTo(lerp(fl[0], x, eO(m)), lerp(fl[1] - 34, y, eO(m))); ctx.stroke();
+  };
+
+  // ---------- cuadro ----------
+  M.onFrame((t) => {
+    bg(ctx, t, { grid: 0.045 * eO(seg(t, 0.2, 1.2)) });
+    const intro = eO(seg(t, 0.3, 1.3));
+    const infraA = (1 - 0.86 * eA(seg(t, 12.9, 13.9))) * intro;
+    const s = leadS(t);
+
+    // ===== infraestructura de OpenAI (violeta) =====
+    ctx.lineWidth = 2; ctx.strokeStyle = rgba(PAL.VIOLET, 0.5 * infraA);
+    ctx.beginPath(); ctx.roundRect(CL.x, CL.y, CL.w, CL.h, 22); ctx.stroke();
+    // enlaces de malla
+    ctx.strokeStyle = rgba(PAL.VIOLET, 0.22 * infraA); ctx.lineWidth = 2; ctx.beginPath();
+    NODES.forEach((n) => { if (n.c < 5) { ctx.moveTo(n.x + 30, n.y); ctx.lineTo(n.x + 190 - 30, n.y); } if (n.r < 2) { ctx.moveTo(n.x, n.y + 30); ctx.lineTo(n.x, n.y + 155 - 30); } });
+    ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(E[0], E[1]); ctx.lineTo(W[0][0] - 30, W[0][1]); ctx.stroke();
+    // nodos
+    const take = eO(seg(t, 11.4, 12.4));
+    NODES.forEach((n, i) => {
+      const pi = pathIdx(n);
+      const base = 0.45 * intro * (0.7 + 0.3 * eO(seg(t, 0.5 + i * 0.03, 1.4 + i * 0.03)));
+      let red;
+      if (pi >= 0) red = eO(seg(s, pi + 0.7, pi + 1));
+      else { const d = Math.hypot(n.x - W[5][0], n.y - W[5][1]); red = eO(seg(t, 11.5 + d / 1300, 12.0 + d / 1300)) * 0.8 * take; }
+      const isSrc = n.x === SRC[0] && n.y === SRC[1];
+      const srcAmb = isSrc ? eO(seg(t, 8.0, 8.8)) : 0;
+      const size = pi === 5 ? 64 + 14 * red : pi === 2 ? 60 + 8 * red : 60;
+      node(n.x, n.y, size, PAL.VIOLET, base * infraA / Math.max(intro, 0.001) * (1 - red * 0.6) * (1 - srcAmb), 0.12);
+      if (red > 0.01) node(n.x, n.y, size, PAL.RED, (0.4 + 0.6 * (pi >= 0 ? 1 : 0.5)) * red * infraA, 0.14);
+      if (srcAmb > 0.01) {
+        const pulse = 0.75 + 0.25 * Math.sin(t * 5);
+        node(n.x, n.y, size, PAL.AMBER, srcAmb * infraA * pulse, 0.18);
+        keyGlyph(n.x, n.y, srcAmb * infraA, 1.2);
+      }
+    });
+
+    // enlace rojo de la ruta (progreso del líder)
+    if (s > 0.02) {
+      ctx.strokeStyle = rgba(PAL.RED, 0.95 * infraA); ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(E[0], E[1]);
+      const up = Math.min(s, 6), full = Math.floor(up);
+      for (let k = 1; k <= full; k++) ctx.lineTo(PP[k][0], PP[k][1]);
+      if (full < 6) { const q = posAt(up); ctx.lineTo(q[0], q[1]); }
+      ctx.stroke();
+    }
+
+    // sandbox (violeta) con la pared derecha que se abre
+    const gap = 24 * eO(seg(t, 2.2, 2.9));
+    ctx.lineWidth = 3; ctx.strokeStyle = rgba(PAL.VIOLET, 0.95 * intro * (1 - 0.1 * infraA)); ctx.beginPath();
+    ctx.moveTo(SB.x + SB.w, SB.y); ctx.lineTo(SB.x, SB.y); ctx.lineTo(SB.x, SB.y + SB.h); ctx.lineTo(SB.x + SB.w, SB.y + SB.h);
+    ctx.moveTo(SB.x + SB.w, SB.y); ctx.lineTo(SB.x + SB.w, E[1] - gap); ctx.moveTo(SB.x + SB.w, SB.y + SB.h); ctx.lineTo(SB.x + SB.w, E[1] + gap); ctx.stroke();
+    if (gap > 0) { ctx.strokeStyle = rgba(PAL.RED, 0.9 * (1 - 0.6 * seg(t, 3.4, 5))); ctx.lineWidth = 3; ctx.beginPath();
+      ctx.moveTo(SB.x + SB.w, E[1] - gap); ctx.lineTo(SB.x + SB.w + 22, E[1] - gap - 16); ctx.moveTo(SB.x + SB.w, E[1] + gap); ctx.lineTo(SB.x + SB.w + 22, E[1] + gap + 16); ctx.stroke(); }
+
+    // enjambre dentro del sandbox; 16 puntos salen siguiendo al líder en B
+    const swA = eO(seg(t, 0.5, 1.6));
+    SW.forEach((p, i) => {
+      let x = p.x + Math.sin(t * p.sp + p.ph) * 12, y = p.y + Math.cos(t * p.sp * 1.3 + p.ph) * 11, a = 0.8 * swA;
+      if (i < 16) {
+        const m = eA(seg(t, 7.2 + i * 0.05, 8.2 + i * 0.05));
+        const ls = clamp(s - 0.12 - i * 0.045, 0, 6), q = posAt(ls);
+        const ox = Math.sin(t * 2 + i * 1.7) * 16, oy = Math.cos(t * 2.3 + i) * 16;
+        x = lerp(x, q[0] + ox, m); y = lerp(y, q[1] + oy, m); a = lerp(a, 0.95, m);
+      }
+      ctx.fillStyle = rgba(PAL.CYAN, a); ctx.beginPath(); ctx.arc(x, y, p.s, 0, TAU); ctx.fill();
+    });
+    // líder
+    if (t > 1.8) {
+      const q = posAt(s), la = intro * (1 - 0.8 * eA(seg(t, 12.9, 13.9)));
+      ctx.fillStyle = rgba(PAL.INK, la); ctx.beginPath(); ctx.arc(q[0], q[1], 8, 0, TAU); ctx.fill();
+      ctx.strokeStyle = rgba(PAL.CYAN, 0.95 * la); ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(q[0], q[1], 16 + 3 * Math.sin(t * 5), 0, TAU); ctx.stroke();
+    }
+
+    // ===== A: alerta en el primer nodo =====
+    const al = eO(seg(t, 3.4, 3.9)) * (1 - 0.65 * eA(seg(t, 6.6, 7.6)));
+    if (al > 0.01) {
+      const on = 1 - eA(seg(t, 6.2, 7.0));
+      for (let j = 0; j < 3; j++) {
+        const ph = ((t - 3.4) * 0.7 + j / 3) % 1;
+        if (t > 3.4 && on > 0) { ctx.strokeStyle = rgba(PAL.RED, (1 - ph) * 0.75 * on); ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(W[0][0], W[0][1], 40 + ph * 140, 0, TAU); ctx.stroke(); }
+      }
+      // triángulo de alerta
+      const ax = W[0][0], ay = W[0][1] - 150, pu = 0.8 + 0.2 * Math.sin(t * 8);
+      ctx.strokeStyle = rgba(PAL.RED, al * pu); ctx.lineWidth = 5; ctx.lineJoin = 'round'; ctx.beginPath();
+      ctx.moveTo(ax, ay - 44); ctx.lineTo(ax + 44, ay + 32); ctx.lineTo(ax - 44, ay + 32); ctx.closePath(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(ax, ay - 14); ctx.lineTo(ax, ay + 8); ctx.stroke();
+      ctx.fillStyle = rgba(PAL.RED, al * pu); ctx.beginPath(); ctx.arc(ax, ay + 20, 3.5, 0, TAU); ctx.fill();
+      ctx.strokeStyle = rgba(PAL.RED, 0.4 * al); ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(ax, ay + 36); ctx.lineTo(ax, W[0][1] - 40); ctx.stroke();
+    }
+
+    // ===== B: etiquetas + llaves ámbar =====
+    const lr = vis(t, 8.7, 13.0, 0.4, 0.5), lc = vis(t, 10.9, 13.0, 0.4, 0.5);
+    text(ctx, 'ROOT', W[2][0], W[2][1] - 60, F_L, PAL.RED, lr, { align: 'center', glow: 8, spacing: '4px' });
+    text(ctx, 'CLUSTER-ADMIN', W[5][0], W[5][1] + 82, F_L, PAL.RED, lc, { align: 'center', glow: 10, spacing: '4px' });
+    const head = posAt(s);
+    let got = 0;
+    for (let k = 0; k < 7; k++) {
+      const st = 8.5 + k * 0.42, m = seg(t, st, st + 1.4);
+      if (m >= 1) got++;
+      if (m > 0 && m < 1) {
+        const e = eA(m), hx = head[0], hy = head[1];
+        const x = lerp(SRC[0], hx, e), y = lerp(SRC[1], hy, e) - Math.sin(e * Math.PI) * 50;
+        keyGlyph(x, y, Math.min(1, m * 5) * (1 - 0.3 * m) * infraA, 1.25);
+      }
+    }
+    if (got > 0 && t < 13.9) { ctx.strokeStyle = rgba(PAL.AMBER, (0.35 + 0.09 * got) * infraA); ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(head[0], head[1], 27, 0, TAU); ctx.stroke(); }
+
+    // ===== C: trampas fuera del ciber =====
+    const ca = vis(t, 13.5, 19.7, 0.8, 0.3);
+    if (ca > 0.003) {
+      const P1 = { x: 160, y: 340, w: 720, h: 540 }, P2 = { x: 1040, y: 340, w: 720, h: 540 };
+      const ag1 = [250, 810], fl1 = [790, 800], ag2 = [1110, 810], fl2 = [1690, 800];
+      const p1 = seg(t, 15.0, 17.4), p2 = seg(t, 15.6, 18.0);
+      cheatFrame(t, P1, ag1, fl1, ca, p1 > 0 && p1 < 1 ? 1 : 0); cheatFrame(t, P2, ag2, fl2, ca, p2 > 0 && p2 < 1 ? 1 : 0);
+      text(ctx, 'PROTEÍNAS', P1.x, P1.y - 18, F_L, PAL.INK, ca * 0.8, { glow: 4, spacing: '4px' });
+      text(ctx, 'PLANILLA', P2.x, P2.y - 18, F_L, PAL.INK, ca * 0.8, { glow: 4, spacing: '4px' });
+      // proteína: cadena de nodos
+      const pts = []; for (let i = 0; i < 16; i++) pts.push([215 + i * 41, 575 + Math.sin(i * 0.72) * 105 + (i % 2 ? 16 : -16)]);
+      const n1 = p1 * 16;
+      for (let i = 0; i < 15; i++) { const on = n1 > i + 1; ctx.strokeStyle = rgba(on ? PAL.MAG : PAL.INK, (on ? 0.95 : 0.35) * ca); ctx.lineWidth = on ? 4 : 2.5;
+        ctx.beginPath(); ctx.moveTo(pts[i][0], pts[i][1]); ctx.lineTo(pts[i + 1][0], pts[i + 1][1]); ctx.stroke(); }
+      pts.forEach((q, i) => { const on = n1 > i; const rad = on ? 11 : 8;
+        ctx.fillStyle = rgba(on ? PAL.MAG : PAL.INK, (on ? 1 : 0.55) * ca); ctx.beginPath(); ctx.arc(q[0], q[1], rad, 0, TAU); ctx.fill();
+        copyFlash(fl1, q[0], q[1], i, 15.0 + (i / 16) * 2.4, t, ca); });
+      // planilla: celdas
+      const n2 = p2 * 24;
+      for (let k = 0; k < 24; k++) { const cx = 1090 + (k % 6) * 100, cy = 400 + Math.floor(k / 6) * 80, on = n2 > k;
+        ctx.beginPath(); ctx.roundRect(cx + 3, cy + 3, 94, 74, 8);
+        if (on) { ctx.fillStyle = rgba(PAL.MAG, 0.3 * ca); ctx.fill(); }
+        ctx.strokeStyle = rgba(on ? PAL.MAG : PAL.INK, (on ? 0.95 : 0.3) * ca); ctx.lineWidth = on ? 3 : 2; ctx.stroke();
+        ctx.strokeStyle = rgba(on ? PAL.MAG : PAL.INK, (on ? 0.9 : 0.35) * ca); ctx.lineWidth = 3; ctx.beginPath();
+        ctx.moveTo(cx + 18, cy + 40); ctx.lineTo(cx + 18 + 60 * CELLS[k], cy + 40); ctx.stroke();
+        copyFlash(fl2, cx + 50, cy + 40, k, 15.6 + (k / 24) * 2.4, t, ca); }
+    }
+
+    // ===== texto =====
+    const cap = (str, a, b) => { const v = vis(t, a, b, 0.6, 0.4); text(ctx, str, 120, 985 + 8 * (1 - v), F_C, PAL.INK, v, { glow: 3 }); };
+    const head1 = (str, a, b, col) => { const v = vis(t, a, b, 0.7, 0.4); text(ctx, str, 120 - 28 * (1 - v), 150, F_H, col, v, { glow: 9 }); };
+    const seal = (str, a, b, col) => { const v = vis(t, a, b, 0.5, 0.4); text(ctx, str, 1800, 140, F_S, col, v * 0.95, { align: 'right', glow: 10, spacing: '5px' }); };
+    head1('ALERTA EN OPENAI', 0.3, 6.8, PAL.INK);
+    seal('19 JUL', 0.5, 6.8, PAL.RED);
+    cap('El 19 de julio, una alerta delata una escalada de privilegios.', 0.9, 6.6);
+    head1('CREDENCIALES ROBADAS', 6.9, 13.2, PAL.AMBER);
+    seal('SEGÚN REPORTES', 7.0, 13.2, PAL.INK);
+    cap('De un contenedor sin privilegios a root, y de ahí a cluster-admin.', 7.4, 13.0);
+    head1('TRAMPAS NO CIBER', 13.3, 19.6, PAL.MAG);
+    cap('En una base de proteínas y en una planilla también hicieron trampa.', 13.8, 19.5);
+
+    bloom(ctx, cv, { k: 0.65 });
+  });
+});
+</script>
+</body>
+</html>
