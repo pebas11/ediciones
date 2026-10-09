@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>C05 · Elegir la próxima palabra</title>
+<link rel="stylesheet" href="../lib/theme.css">
+<link rel="stylesheet" href="../lib/fonts-spartan.css">
+<style>
+  body { background: #15171A; }
+  #cv { position: absolute; inset: 0; }
+  #grain { position: absolute; inset: -20px; opacity: 0.05; mix-blend-mode: overlay; pointer-events: none; }
+  #vig { position: absolute; inset: 0; background: radial-gradient(120% 110% at 50% 48%, transparent 55%, rgba(8,9,10,0.55) 100%); pointer-events: none; }
+  #fade { position: absolute; inset: 0; background: #15171A; opacity: 1; }
+</style>
+</head>
+<body>
+<div id="world">
+  <canvas id="cv" width="1920" height="1080"></canvas>
+  <div id="vig"></div>
+  <canvas id="grain" width="512" height="512" style="width:1960px;height:1120px"></canvas>
+  <div id="fade"></div>
+</div>
+<script src="../node_modules/gsap/dist/gsap.min.js"></script>
+<script src="../node_modules/gsap/dist/SplitText.min.js"></script>
+<script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
+<script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
+<script src="../lib/stage.js"></script>
+<script src="../lib/audio.js"></script>
+<script>
+/* Escena 5 de la serie LLM (16 s, sin voz). Elegir la próxima palabra.
+   1  0.3–1.0   frase "El gato se sentó en la" en fichas (tokens); hueco punteado con cursor
+   2  0.9–2.8   el último token se vuelve un vector (16 barras con signo, pizarra) y se abre en 12 filas
+   3  2.2–4.3   12 candidatos con su puntaje bruto (barras pizarra)
+   4  4.3–7.0   SOFTMAX: las barras se normalizan, aparecen los % y una barra apilada que siempre suma 100 %
+   5  7.0–11.4  TEMPERATURA: 1,0 → 0,3 (una domina) → 3,0 (todo plano) → 1,0
+   6  11.4–13.2 MUESTREO: cae una bola, un marcador recorre la barra apilada y frena en un intervalo; "alfombra" ámbar entra a la frase
+   7  13.2–15.1 bucle autoregresivo acelerado: la frase se escribe sola
+   Color: pizarra = puntajes / capas, hueso = tokens y probabilidades, ámbar = elegido / recién generado. */
+M.scene({ duration: 16, push: 0, audio: { key: 'D', mode: 'lydian', gain: 3, bed: { cycle: 8, bright: 0.8, sub: 0.15 } } }, async (tl, M) => {
+  const $ = (s) => document.querySelector(s);
+  const ctx = $('#cv').getContext('2d');
+  { const g = $('#grain').getContext('2d'); const im = g.createImageData(512, 512); const rn = M.rng(5);
+    for (let i = 0; i < im.data.length; i += 4) { const v = 128 + (rn() - 0.5) * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+    g.putImageData(im, 0, 0); }
+
+  /* ---------- fuentes: se cargan a mano (canvas no dispara la carga) ---------- */
+  const F_CHIP = '600 56px "League Spartan"', F_WORD = '500 34px "League Spartan"', F_NUM = '700 132px "League Spartan"', F_MONO = '400 26px "DM Mono"', F_PCT = '500 28px "DM Mono"';
+  await Promise.all([F_CHIP, F_WORD, F_NUM, F_MONO, F_PCT].map((f) => document.fonts.load(f, 'Aáéíóú0123456789 %,')));
+  [F_CHIP, F_WORD, F_NUM, F_MONO, F_PCT].forEach((f) => { if (!document.fonts.check(f)) console.error('FUENTE NO CARGADA: ' + f); });
+
+  /* ---------- paleta y utilidades (idénticas a b03) ---------- */
+  const BG = [21, 23, 26], BONE = [233, 230, 223], AMB = [201, 154, 75], SLATE = [122, 146, 178];
+  const TAU = Math.PI * 2;
+  const rgba = (c, a) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${Math.max(0, Math.min(1, a)).toFixed(3)})`;
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, m) => a + (b - a) * m;
+  const mixc = (A, B, m) => [lerp(A[0], B[0], m), lerp(A[1], B[1], m), lerp(A[2], B[2], m)];
+  const seg = (t, a, b) => clamp((t - a) / (b - a));
+  const eA = gsap.parseEase('apple'), eO = gsap.parseEase('appleOut'), eI = gsap.parseEase('appleIn');
+  const gauss = (r) => { const u = Math.max(1e-6, r()), v = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(TAU * v); };
+  const pct = (n) => n + ' %';                                    // es-ES: "41 %"
+  const tfmt = (T) => T.toFixed(1).replace('.', ',');
+
+  function line(ax, ay, bx, by, c, a, w, e = 1) {
+    if (a <= 0.004 || e <= 0 || w <= 0.05) return;
+    ctx.strokeStyle = rgba(c, a); ctx.lineWidth = w; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(ax + (bx - ax) * e, ay + (by - ay) * e); ctx.stroke();
+  }
+  function dot(x, y, r, c, a) { if (a <= 0.004 || r <= 0.1) return; ctx.fillStyle = rgba(c, a); ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill(); }
+  function rbar(x, y, w, h, c, a, r = 4) {
+    if (a <= 0.004 || w <= 0.4 || h <= 0.4) return;
+    ctx.beginPath(); ctx.roundRect(x, y, w, h, Math.min(r, h / 2, w / 2)); ctx.fillStyle = rgba(c, a); ctx.fill();
+  }
+  function text(s, x, y, font, c, a, align = 'left') {
+    if (a <= 0.004) return; ctx.font = font; ctx.textAlign = align; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = rgba(c, a); ctx.fillText(s, x, y);
+  }
+  const qpt = (p0, c, p1, k) => [lerp(lerp(p0[0], c[0], k), lerp(c[0], p1[0], k), k), lerp(lerp(p0[1], c[1], k), lerp(c[1], p1[1], k), k)];
+  function qcurve(p0, c, p1, col, a, w, e = 1) {
+    if (a <= 0.004 || e <= 0) return; ctx.strokeStyle = rgba(col, a); ctx.lineWidth = w; ctx.lineCap = 'round'; ctx.beginPath();
+    let p = p0; ctx.moveTo(p[0], p[1]);
+    for (let i = 1; i <= 36; i++) { p = qpt(p0, c, p1, e * i / 36); ctx.lineTo(p[0], p[1]); } ctx.stroke();
+  }
+
+  /* ---------- softmax y reparto en porcentajes enteros que siempre suman 100 ---------- */
+  const WORDS12 = ['alfombra', 'silla', 'cama', 'mesa', 'sofá', 'cocina', 'casa', 'ventana', 'manta', 'puerta', 'bañera', 'pared'];
+  const P1 = [41, 17, 12, 8, 6, 4, 3, 3, 2, 2, 1, 1];                    // T = 1 (suma 100)
+  const Z = P1.map((p) => Math.log(p / 100));                             // puntajes (logits) coherentes con esas probabilidades
+  const ZMIN = Math.min(...Z), ZMAX = Math.max(...Z);
+  function softmax(z, T) { const m = Math.max(...z), e = z.map((v) => Math.exp((v - m) / T)), s = e.reduce((a, b) => a + b, 0); return e.map((v) => v / s); }
+  function ints(p) {                                                       // método del resto mayor
+    const raw = p.map((v) => v * 100), fl = raw.map(Math.floor); let rest = 100 - fl.reduce((a, b) => a + b, 0);
+    raw.map((v, i) => [v - fl[i], i]).sort((a, b) => b[0] - a[0]).forEach(([, i]) => { if (rest > 0) { fl[i]++; rest--; } });
+    return fl;
+  }
+  const T_KEYS = [[7.4, 1.0], [8.1, 0.3], [9.1, 0.3], [9.9, 3.0], [10.9, 3.0], [11.4, 1.0]];
+  const Tat = (t) => {
+    let T = 1;
+    for (let k = 1; k < T_KEYS.length; k++) {
+      const [ta, va] = T_KEYS[k - 1], [tb, vb] = T_KEYS[k];
+      if (t >= tb) T = vb; else if (t > ta) { T = Math.exp(lerp(Math.log(va), Math.log(vb), eA(seg(t, ta, tb)))); break; } else break;
+    }
+    return T;
+  };
+
+  /* ---------- fichas (tokens) y maquetación ---------- */
+  const WORDS = ['El', 'gato', 'se', 'sent', 'ó', 'en', 'la', 'alfombra', 'y', 'se', 'durmió', 'ahí', '.'];
+  const NT = WORDS.length, NP0 = 7, HH = 40, PADX = 22, X0 = 160, XMAX = 1760, LS = 128, SENT_Y = 140, MID_Y = 470;
+  ctx.font = F_CHIP;
+  const TWD = WORDS.map((w) => Math.max(64, Math.round(ctx.measureText(w).width) + 2 * PADX));
+  const POS = []; { let x = X0, ln = 0; TWD.forEach((w, i) => { const gap = (i === 4 || i === 12) ? 8 : 16; if (i > 0 && x + w > XMAX) { x = X0; ln++; } POS.push({ x, w, ln }); x += w + gap; }); }
+  const WRAP = POS.findIndex((p) => p.ln === 1);
+
+  /* ---------- guion de tiempos ---------- */
+  const SAMP = { ball: [11.4, 11.75], sweep: [11.75, 12.4], lit: 12.4, morph: [12.55, 13.15], out: [12.6, 13.1], born: 13.15, shift: [12.7, 13.5] };
+  const CYD = [0.6, 0.45, 0.35, 0.28, 0.24];
+  const rl = M.rng(83), CY = [];
+  { let t = 13.2;
+    CYD.forEach((D, n) => {
+      const z = Array.from({ length: 12 }, () => gauss(rl) * 1.5), p = softmax(z, 1), u = rl();
+      let acc = 0, win = 11; for (let i = 0; i < 12; i++) { acc += p[i]; if (u < acc) { win = i; break; } }
+      CY.push({ hs: t, hg: 0.4 * D, hst: 0.012 * D, ds: t + 0.55 * D, born: t + D, p, win, pmax: Math.max(...p), H: 120 - n * 6 }); t += D;
+    });
+  }
+  const born = (i) => (i < NP0 ? 0.3 + i * 0.09 : i === NP0 ? SAMP.born : CY[i - NP0 - 1].born);
+  const SHIFT = WRAP > 0 ? [born(WRAP) - 0.45, born(WRAP) + 0.1] : [99, 100];
+  const baseY = (t) => lerp(SENT_Y, MID_Y, eA(seg(t, SAMP.shift[0], SAMP.shift[1])));
+  const rowY = (ln, t) => baseY(t) - (LS / 2) * eA(seg(t, SHIFT[0], SHIFT[1])) + ln * LS;
+  const tokY = (i, t) => rowY(POS[i].ln, t);
+  const cx = (i) => POS[i].x + POS[i].w / 2;
+
+  /* ---------- geometría de la gráfica de candidatos ---------- */
+  const BX = 420, BW = 700, RY0 = 393, RH = 42, SBY = 944;
+  const ry = (i) => RY0 + i * RH;
+  const VEC = Array.from({ length: 16 }, () => Array.from({ length: 1 }, () => 0)).map(() => 0);
+  { const rv = M.rng(19); for (let n = 0; n < 16; n++) VEC[n] = (rv() < 0.5 ? -1 : 1) * (0.25 + 0.75 * rv()); }
+  const VX = cx(6) - 144, VYC = 262;
+
+  /* ---------- sonido ---------- */
+  for (let i = 0; i < NP0; i++) M.sfx(born(i), 'tick', { gain: -9, pan: -0.5 + i * 0.1 });
+  M.sfx(0.95, 'whoosh', { dur: 0.7, peak: 0.45, gain: -13, dir: 1 });
+  M.sfx(1.95, 'scan', { dur: 0.8, from: 500, to: 2200, q: 5, gain: -9, dir: -1 });
+  M.sfx(2.45, 'grow', { dur: 1.1, density: 90, gain: -9 });
+  M.sfx(4.3, 'shimmer', { degs: [2, 4, 7], oct: 5, gain: -8 });
+  M.sfx(7.4, 'scan', { dur: 0.7, from: 2000, to: 500, q: 5, gain: -10, dir: -1 });
+  M.sfx(9.1, 'scan', { dur: 0.8, from: 500, to: 2400, q: 5, gain: -10, dir: 1 });
+  M.sfx(10.9, 'scan', { dur: 0.5, from: 1800, to: 900, q: 5, gain: -13, dir: -1 });
+  M.sfx(SAMP.ball[1] - 0.02, 'tick', { gain: -4, tone: 'glass' });
+  { // un tic por cada frontera de intervalo que cruza el marcador
+    const cum = []; let a = 0; P1.forEach((p) => { a += p / 100; cum.push(a); });
+    const U0 = 0.985, U1 = 0.23, ue = (t) => lerp(U0, U1, eO(seg(t, SAMP.sweep[0], SAMP.sweep[1])));
+    let prev = U0;
+    for (let t = SAMP.sweep[0]; t <= SAMP.sweep[1]; t += 0.004) {
+      const u = ue(t); cum.slice(0, -1).forEach((b, k) => { if (prev > b && u <= b) M.sfx(t, 'tick', { gain: -10 + (11 - k) * 0.2, pitch: (k - 5) * 0.8, tone: 'glass', pan: 0.1 }); }); prev = u;
+    }
+  }
+  M.sfx(SAMP.born - 0.9, 'swell', { dur: 0.9, degs: [0, 4, 7, 9], gain: -9 });
+  M.sfx(SAMP.born, 'impact', { weight: 0.85, gain: -4 });
+  CY.forEach((c, k) => M.sfx(c.born, 'tap', { deg: [4, 2, 4, 7, 9][k], oct: 5, bright: 0.7, gain: -4 - k * 0.5, pan: -0.3 + (k % 4) * 0.2 }));
+
+  /* ---------- tramos con movimiento (cues de qa) y fundidos ---------- */
+  [[0.3, 1.4], [0.95, 2.8], [2.0, 3.6], [4.3, 5.5], [7.0, 7.45], [7.4, 8.1], [9.1, 9.9], [10.9, 11.4], [11.4, 13.5], [13.2, 15.2]]
+    .forEach(([a, b]) => tl.to({ v: 0 }, { v: 1, duration: b - a, ease: 'none' }, a));
+  tl.fromTo('#fade', { opacity: 1 }, { opacity: 0, duration: 0.45, ease: 'appleOut' }, 0);
+  tl.to('#fade', { opacity: 1, duration: 0.33, ease: 'appleIn' }, 15.55);
+
+  /* ---------- ficha: contorno hueso, o relleno ámbar al nacer ---------- */
+  function chip(x, yc, w, hh, label, { fill = 0, tcol = BONE, stroke = BONE, sa = 0.5, a = 1, ta = 1, r = 18 } = {}) {
+    if (a <= 0.004 || w < 4 || hh < 2) return;
+    ctx.beginPath(); ctx.roundRect(x, yc - hh, w, 2 * hh, Math.min(r, hh, w / 2));
+    ctx.fillStyle = rgba(BG, a); ctx.fill();
+    if (fill > 0.004) { ctx.fillStyle = rgba(AMB, a * fill); ctx.fill(); }
+    ctx.fillStyle = rgba(BONE, 0.055 * a * (1 - fill)); ctx.fill();
+    ctx.strokeStyle = rgba(stroke, sa * a * (1 - 0.6 * fill)); ctx.lineWidth = 1.8; ctx.stroke();
+    if (label && ta > 0.004) text(label, x + w / 2, yc + 20, F_CHIP, tcol, ta * a, 'center');
+  }
+
+  const DOTS = []; for (let x = 120; x <= 1800; x += 60) for (let y = 60; y <= 1020; y += 60) DOTS.push([x, y]);
+  const settle = (b) => 1 - eA(seg(tNow, b + 0.5, b + 1.4));
+  let tNow = 0;
+
+  M.onFrame((t) => {
+    tNow = t;
+    ctx.fillStyle = rgba(BG, 1); ctx.fillRect(0, 0, 1920, 1080);
+    ctx.fillStyle = rgba(BONE, 0.045); for (const [x, y] of DOTS) ctx.fillRect(x - 1, y - 1, 2, 2);
+
+    const outA = 1 - eI(seg(t, SAMP.out[0], SAMP.out[1]));              // todo el tablero de candidatos sale
+    const T = Tat(t), P = softmax(Z, T), PI = ints(P);
+    const slot = POS[NP0], slotY = tokY(NP0, t);
+
+    /* --- vector del último token --- */
+    const vIn = (n) => eO(seg(t, 0.95 + n * 0.03, 1.45 + n * 0.03)), vOut = 1 - eA(seg(t, 2.3, 2.8));
+    if (t > 0.9 && t < 2.85) {
+      const thread = eO(seg(t, 0.9, 1.25));
+      line(cx(6), tokY(6, t) + HH + 4, cx(6), VYC - 44, SLATE, 0.5 * vOut, 1.6, thread);
+      for (let n = 0; n < 16; n++) {
+        const v = VEC[n] * vIn(n) * vOut, h = 38 * Math.abs(v), x = VX + n * 18;
+        if (h > 0.5) rbar(x, v < 0 ? VYC : VYC - h, 10, h, SLATE, 0.92, 3);
+      }
+    }
+
+    /* --- abanico: vector → 12 candidatos --- */
+    const fanA = eA(seg(t, 3.0, 3.6));
+    for (let i = 0; i < 12; i++) {
+      const e = eA(seg(t, 1.95 + i * 0.025, 2.5 + i * 0.025)), a = (1 - fanA) * 0.3 * (1 - eI(seg(t, SAMP.out[0], SAMP.out[1])));
+      if (a > 0.004 && e > 0) {
+        const p0 = [cx(6), VYC + 44], p1 = [BX - 14, ry(i)], c = [cx(6) - 60, lerp(p0[1], p1[1], 0.8)];
+        qcurve(p0, c, p1, SLATE, a, 1.4, e);
+      }
+    }
+
+    /* --- candidatos: puntaje → probabilidad --- */
+    const sm = eA(seg(t, 4.3, 5.4));                                     // 0 = puntajes crudos, 1 = softmax
+    const dim = 1 - 0.78 * eA(seg(t, SAMP.ball[0] - 0.3, SAMP.ball[0]));
+    const chosenAmb = eA(seg(t, SAMP.lit, SAMP.lit + 0.25));
+    if (t > 2.2 && outA > 0.004) {
+      for (let i = 0; i < 12; i++) {
+        const wIn = eO(seg(t, 2.25 + i * 0.04, 2.65 + i * 0.04)), bIn = eO(seg(t, 2.45 + i * 0.05, 2.95 + i * 0.05));
+        const y = ry(i), a = outA * (i === 0 ? lerp(dim, 1, 0.0) : dim);
+        text(WORDS12[i], X0, y + 12 - 8 * (1 - wIn), F_WORD, BONE, a * wIn * (i === 0 ? 0.95 : 0.8));
+        const zl = 0.05 + 0.95 * (Z[i] - ZMIN) / (ZMAX - ZMIN);
+        const w = lerp(zl * BW * 0.82, P[i] * BW, sm) * bIn;
+        let col = mixc(SLATE, BONE, sm), ba = lerp(0.85, i === 0 ? 0.92 : 0.45, sm);
+        if (i === 0 && chosenAmb > 0) { col = mixc(col, AMB, chosenAmb); ba = lerp(ba, 1, chosenAmb); }
+        rbar(BX, y - 12, w, 24, col, a * ba, 4);
+        const pa = eO(seg(t, 4.55 + i * 0.03, 5.1 + i * 0.03));
+        text(pct(PI[i]), BX + w + 16, y + 9, F_PCT, BONE, a * pa * (i === 0 ? 0.95 : 0.7));
+      }
+      text('PROBABILIDADES', X0, 322, F_MONO, BONE, outA * 0.62 * eO(seg(t, 4.3, 4.8)));
+    }
+
+    /* --- barra apilada: los intervalos suman 100 % --- */
+    const sbIn = eO(seg(t, 4.4, 5.3));
+    const cum = []; { let a = 0; P.forEach((p) => { cum.push(a); a += p; }); }
+    const morphing = t >= SAMP.morph[0];
+    if (sbIn > 0.004 && outA > 0.004) {
+      ctx.save(); ctx.beginPath(); ctx.rect(BX - 2, SBY - 20, BW * sbIn + 4, 40); ctx.clip();
+      for (let i = 0; i < 12; i++) {
+        if (i === 0 && morphing) continue;
+        const x = BX + cum[i] * BW, w = P[i] * BW - 3; if (w < 1) continue;
+        let col = BONE, a = i === 0 ? 0.88 : (i % 2 ? 0.34 : 0.5);
+        if (i === 0 && chosenAmb > 0) { col = mixc(BONE, AMB, chosenAmb); a = lerp(a, 1, chosenAmb); }
+        rbar(x, SBY - 14, w, 28, col, a * outA * (t > SAMP.ball[0] - 0.3 ? 1 : 1), 3);
+      }
+      ctx.restore();
+      text('100 %', BX + BW + 22, SBY + 9, F_PCT, BONE, outA * 0.62 * eO(seg(t, 4.9, 5.4)));
+    }
+
+    /* --- panel de temperatura --- */
+    const pIn = eO(seg(t, 7.0, 7.5)) * outA;
+    if (pIn > 0.004) {
+      const TX = 1420, TW2 = 360, TY = 640, lnA = Math.log(0.3), lnB = Math.log(3.0);
+      const pos = (v) => TX + TW2 * (Math.log(v) - lnA) / (lnB - lnA);
+      text('TEMPERATURA', TX, 380, F_MONO, BONE, 0.62 * pIn);
+      text(tfmt(T), TX - 4, 540, F_NUM, BONE, 0.95 * pIn);
+      line(TX, TY, TX + TW2, TY, BONE, 0.35 * pIn, 3, eO(seg(t, 7.0, 7.5)));
+      [0.3, 1.0, 3.0].forEach((v) => { line(pos(v), TY - 12, pos(v), TY + 12, BONE, 0.5 * pIn, 2); text(tfmt(v), pos(v), TY + 52, F_MONO, BONE, 0.55 * pIn, 'center'); });
+      const mx = pos(clamp(T, 0.3, 3.0));
+      line(TX, TY, mx, TY, BONE, 0.8 * pIn, 3);
+      dot(mx, TY, 15, BG, pIn); dot(mx, TY, 11, BONE, 0.95 * pIn);
+    }
+
+    /* --- muestreo: bola → marcador que recorre los intervalos --- */
+    if (t >= SAMP.ball[0] && t < SAMP.morph[0] + 0.05) {
+      const U0 = 0.985, U1 = 0.23, px0 = BX + U0 * BW;
+      const kb = seg(t, SAMP.ball[0], SAMP.ball[1]);
+      if (kb < 1) { const y = lerp(350, SBY - 34, eI(kb)); dot(px0, y, 12, AMB, 1); }
+      else {
+        const u = lerp(U0, U1, eO(seg(t, SAMP.sweep[0], SAMP.sweep[1]))), px = BX + u * BW;
+        const land = 1 - eO(seg(t, SAMP.ball[1], SAMP.ball[1] + 0.35));
+        if (land > 0.004) { ctx.strokeStyle = rgba(AMB, 0.6 * land); ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(px0, SBY - 14, 12 + 30 * (1 - land), 0, TAU); ctx.stroke(); }
+        const fadeP = 1 - eI(seg(t, SAMP.morph[0] - 0.1, SAMP.morph[0] + 0.05));
+        line(px, SBY - 42, px, SBY + 22, AMB, fadeP, 3);
+        ctx.fillStyle = rgba(AMB, fadeP); ctx.beginPath(); ctx.moveTo(px - 12, SBY - 62); ctx.lineTo(px + 12, SBY - 62); ctx.lineTo(px, SBY - 40); ctx.closePath(); ctx.fill();
+      }
+    }
+
+    /* --- frase --- */
+    let morph = null;
+    for (let i = 0; i < NT; i++) {
+      const b = born(i); if (t < b) continue;
+      const x = POS[i].x, w = POS[i].w, y = tokY(i, t);
+      if (i < NP0) { const g = eO(seg(t, b, b + 0.35)); chip(x, y + 10 * (1 - g), w, HH, WORDS[i], { a: g }); continue; }
+      const st = 1 - eA(seg(t, b + 0.5, b + 1.4));                       // ámbar → hueso
+      chip(x, y, w, HH, WORDS[i], { fill: st, tcol: mixc(BONE, BG, st), stroke: mixc(BONE, AMB, st), sa: 0.5 + 0.3 * st });
+    }
+    // hueco punteado + cursor mientras el modelo "piensa"
+    if (t >= 0.95 && t < SAMP.morph[0] + 0.1) {
+      const a = eO(seg(t, 0.95, 1.3)) * (1 - eI(seg(t, SAMP.morph[0] - 0.05, SAMP.morph[0] + 0.1)));
+      ctx.save(); ctx.setLineDash([9, 9]); ctx.strokeStyle = rgba(BONE, 0.3 * a); ctx.lineWidth = 1.8;
+      ctx.beginPath(); ctx.roundRect(slot.x, slotY - HH, slot.w, 2 * HH, 18); ctx.stroke(); ctx.restore();
+      if (Math.floor((t - 0.95) / 0.5) % 2 === 0 && t < SAMP.ball[0]) { ctx.fillStyle = rgba(BONE, 0.75 * a); ctx.fillRect(slot.x + 24, slotY - 26, 3, 52); }
+    }
+    // el intervalo elegido sube a la frase
+    if (t >= SAMP.morph[0] && t < SAMP.born) {
+      const m = eA(seg(t, SAMP.morph[0], SAMP.morph[1])), s0 = { x: BX, w: P[0] * BW - 3, yc: SBY };
+      const x = lerp(s0.x, slot.x, m), w = lerp(s0.w, slot.w, m), hh = lerp(14, HH, m);
+      const y = lerp(s0.yc, slotY, m) - Math.sin(Math.PI * m) * 70;
+      chip(x, y, w, hh, WORDS[NP0], { fill: 1, tcol: BG, stroke: AMB, sa: 0.8, ta: eO(seg(m, 0.55, 1)), r: lerp(3, 18, m) });
+    }
+    // ciclos acelerados
+    CY.forEach((c, k) => {
+      const s = NP0 + 1 + k; if (t < c.hs || t >= c.born + 0.02) return;
+      const sx = POS[s].x, yb = tokY(s, t) + HH, BWd = 12, BP = 20;
+      const shrink = 1 - eI(seg(t, c.ds, lerp(c.ds, c.born, 0.55)));
+      line(sx - 6, yb + 10, sx + 12 * BP, yb + 10, BONE, 0.28 * eO(seg(t, c.hs, c.hs + c.hg)) * shrink, 1.2);
+      for (let i = 0; i < 12; i++) {
+        const g = eO(seg(t, c.hs + i * c.hst, c.hs + i * c.hst + c.hg)), h = c.H * (c.p[i] / c.pmax) * g, x = sx + i * BP;
+        if (i === c.win) {
+          const m = eA(seg(t, c.ds, c.born)), amb = eA(seg(t, c.ds - 0.12 * CYD[k], c.ds + 0.06 * CYD[k]));
+          if (m <= 0) { rbar(x, yb - h, BWd, h, mixc(BONE, AMB, amb), lerp(0.42, 1, amb), 3); }
+          else morph = { k, s, x: lerp(x, sx, m), y: lerp(yb - h / 2, tokY(s, t), m) - Math.sin(Math.PI * m) * 12, w: lerp(BWd, POS[s].w, m), hh: lerp(h / 2, HH, m), r: lerp(3, 18, m), m };
+        } else if (h * shrink > 0.5) rbar(x, yb - h * shrink, BWd, h * shrink, BONE, 0.42, 3);
+      }
+    });
+    if (morph) chip(morph.x, morph.y, morph.w, morph.hh, WORDS[morph.s], { fill: 1, tcol: BG, stroke: AMB, sa: 0.8, ta: eO(seg(morph.m, 0.6, 1)), r: morph.r });
+  });
+});
+</script>
+</body>
+</html>

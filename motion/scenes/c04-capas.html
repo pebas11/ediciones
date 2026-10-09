@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>C04 · Capas</title>
+<link rel="stylesheet" href="../lib/theme.css">
+<link rel="stylesheet" href="../lib/fonts-spartan.css">
+<style>
+  /* Serie 6, escena 4. Misma lámina que b03: grafito, trazo hueso, colores funcionales apagados. */
+  body { background: #15171A; }
+  #cv { position: absolute; inset: 0; }
+  #grain { position: absolute; inset: -20px; opacity: 0.05; mix-blend-mode: overlay; pointer-events: none; }
+  #vig { position: absolute; inset: 0; background: radial-gradient(120% 110% at 50% 48%, transparent 55%, rgba(8,9,10,0.55) 100%); pointer-events: none; }
+  #fade { position: absolute; inset: 0; background: #15171A; opacity: 1; }
+</style>
+</head>
+<body>
+<div id="world">
+  <canvas id="cv" width="1920" height="1080"></canvas>
+  <div id="vig"></div>
+  <canvas id="grain" width="512" height="512" style="width:1960px;height:1120px"></canvas>
+  <div id="fade"></div>
+</div>
+<script src="../node_modules/gsap/dist/gsap.min.js"></script>
+<script src="../node_modules/gsap/dist/SplitText.min.js"></script>
+<script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
+<script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
+<script src="../lib/stage.js"></script>
+<script src="../lib/audio.js"></script>
+<script>
+/* Storyboard (16 s). Sin voz: la imagen explica sola.
+   1  0,3–2,9    la pila de 12 placas pizarra (atención = mitad trasera, red densa = mitad delantera) se arma de abajo hacia arriba;
+                 el token " la" entra por la izquierda y se vuelve un vector de 8 barras con signo
+   2  2,9–9,1    el vector sube placa por placa; en cada una las barras cambian; un hilo hueso a la izquierda (residual) suma
+                 la salida de cada placa y se va engrosando; contador CAPA 1…12
+   3  9,1–10,6   hold
+   4  10,6–13,0  zoom out: la pila se multiplica hasta 96 placas finas, el contador sube a × 96
+   5  13,0–15,5  del tope sale una distribución (barras; una ámbar domina). Hold y fundido.
+   Color = significado: pizarra = capas, lila = atención (mitad trasera), hueso = vector / residual, ámbar = predicción. */
+M.scene({ duration: 16, push: 0, audio: { key: 'D', mode: 'lydian', gain: 3, bed: { cycle: 8, bright: 0.8, sub: 0.15 } } }, (tl, M) => {
+  const $ = (s) => document.querySelector(s);
+  const ctx = $('#cv').getContext('2d');
+  // fuentes del canvas: se piden ya, el render espera document.fonts.ready
+  ['600 44px "League Spartan"', '700 190px "League Spartan"', '500 28px "DM Mono"'].forEach((f) => { try { document.fonts.load(f, 'CAPAS × 0123456789 la'); } catch (e) {} });
+  { const g = $('#grain').getContext('2d'); const im = g.createImageData(512, 512); const rn = M.rng(3);
+    for (let i = 0; i < im.data.length; i += 4) { const v = 128 + (rn() - 0.5) * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+    g.putImageData(im, 0, 0); }
+
+  /* ---------- paleta y utilidades (idénticas a b03) ---------- */
+  const BG = [21, 23, 26], BONE = [233, 230, 223], AMB = [201, 154, 75], SLATE = [122, 146, 178], LILAC = [162, 148, 190];
+  const TAU = Math.PI * 2;
+  const rgba = (c, a) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${Math.max(0, Math.min(1, a)).toFixed(3)})`;
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, m) => a + (b - a) * m;
+  const mixc = (A, B, m) => [lerp(A[0], B[0], m), lerp(A[1], B[1], m), lerp(A[2], B[2], m)];
+  const seg = (t, a, b) => clamp((t - a) / (b - a));
+  const eA = gsap.parseEase('apple'), eO = gsap.parseEase('appleOut'), eI = gsap.parseEase('appleIn');
+  const gauss = (r) => { const u = Math.max(1e-6, r()), v = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(TAU * v); };
+
+  function line(ax, ay, bx, by, c, a, w, e = 1) {
+    if (a <= 0.004 || e <= 0 || w <= 0.05) return;
+    ctx.strokeStyle = rgba(c, a); ctx.lineWidth = w; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(ax + (bx - ax) * e, ay + (by - ay) * e); ctx.stroke();
+  }
+  function dot(x, y, r, c, a) { if (a <= 0.004 || r <= 0.1) return; ctx.fillStyle = rgba(c, a); ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill(); }
+  function ring(x, y, r, c, a, w = 2) { if (a <= 0.004 || r <= 0.1) return; ctx.strokeStyle = rgba(c, a); ctx.lineWidth = w; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.stroke(); }
+  function qarc(p0, c, p1, col, a, w) {
+    if (a <= 0.004) return; ctx.strokeStyle = rgba(col, a); ctx.lineWidth = w; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(p0[0], p0[1]); ctx.quadraticCurveTo(c[0], c[1], p1[0], p1[1]); ctx.stroke();
+  }
+  function block(x, yc, w, hh, col, a, r = 14) {
+    if (a <= 0.004 || w <= 0.5 || hh <= 0.3) return;
+    ctx.beginPath(); ctx.roundRect(x, yc - hh, w, 2 * hh, Math.min(r, hh, w / 2));
+    ctx.fillStyle = rgba(BG, 1); ctx.fill();
+    ctx.fillStyle = rgba(col, a); ctx.fill();
+  }
+
+  /* ---------- geometría del mundo y tiempos ---------- */
+  const NL = 96, NS = 12;                              // capas totales / capas del primer tramo
+  const CXW = 1060, YW0 = 900, SP = 62;                // eje de la pila, y de la placa 0, separación
+  const LH = 250, DH = 30, TH = 10;                    // medio ancho, media profundidad, grosor de la placa
+  const XT = CXW - LH - 130;                           // hilo residual
+  const YV = 22;                                       // el vector flota sobre la placa
+  const Yw = (f) => YW0 - SP * f;
+
+  const C = [2.9]; { const D = [0.8, 0.8, 0.8, 0.55, 0.55, 0.55, 0.36, 0.36, 0.36, 0.36, 0.36]; D.forEach((d) => C.push(C[C.length - 1] + d)); }
+  const dK = (k) => (k < NS - 1 ? C[k + 1] - C[k] : 0.5);
+  const CL0 = 10.6, CL1 = 13.0;                        // zoom out y subida del vector por las 96 capas
+  const climbF = (t) => 11 + (NL - 1 - 11) * eA(seg(t, CL0 + 0.1, CL1));
+  const CT = []; { let k = 12; for (let i = 0; i <= 600 && k < NL; i++) { const t = CL0 + 0.1 + (CL1 - CL0 - 0.1) * (i / 600); while (k < NL && climbF(t) >= k) { CT[k] = t; k++; } } for (; k < NL; k++) CT[k] = CL1; }
+  const tPass = (k) => (k < NS ? C[k] : CT[k]);
+  const morphK = (k, t) => eA(seg(t, C[k], C[k] + 0.45 * dK(k)));
+  function fAt(t) {
+    if (t >= CL0 + 0.1) return climbF(t);
+    let k = 0; while (k < NS - 1 && t >= C[k + 1]) k++;
+    if (k >= NS - 1) return NS - 1;
+    return k + eA(seg(t, C[k] + 0.4 * dK(k), C[k + 1]));
+  }
+  function uAt(t) {                                      // capas ya aplicadas al vector
+    if (t >= CL0 + 0.1) return fAt(t) + 1;
+    let u = 0; for (let k = 0; k < NS; k++) u += morphK(k, t); return u;
+  }
+
+  /* ---------- vector: 8 barras con signo que cambian en cada capa ---------- */
+  const rv = M.rng(23), VEC = [Array.from({ length: 8 }, () => (rv() < 0.5 ? -1 : 1) * (0.25 + 0.7 * rv()))];
+  for (let k = 0; k < NL; k++) {
+    const p = VEC[k], sc = 1.15 / (1 + k * 0.03);
+    VEC.push(p.map((v) => Math.tanh(1.15 * (v + gauss(rv) * 0.62 * sc))));
+  }
+  // distribución final: 12 candidatos, uno domina
+  const HV = [0.34, 0.12, 0.52, 0.2, 1, 0.3, 0.62, 0.16, 0.26, 0.08, 0.4, 0.14], HWIN = 4;
+  const HS = 13.0;
+
+  /* ---------- transformada de cámara (zoom out) ---------- */
+  const SF = 0.115;
+  function cam(t) {
+    const Z = eA(seg(t, CL0, CL1));
+    const s = Math.exp(Math.log(SF) * Z);
+    return { Z, s, cx: lerp(CXW, 700, Z), yb: lerp(YW0, 940, Z) };
+  }
+
+  /* ---------- sonido ---------- */
+  M.sfx(0.35, 'grow', { dur: 1.7, density: 70, gain: -9 });
+  M.sfx(1.5, 'tick', { gain: -7, pan: -0.4 });
+  for (let k = 0; k < NS; k++) M.sfx(C[k] + 0.04, 'tap', { deg: k % 7, oct: 4 + Math.floor(k / 7), bright: 0.7, gain: -10, pan: -0.15 + (k % 4) * 0.1 });
+  M.sfx(CL0, 'whoosh', { dur: 1.7, peak: 0.45, gain: -11, dir: 1 });
+  M.sfx(CL0 + 0.1, 'scan', { dur: 2.3, from: 400, to: 2400, q: 5, gain: -11 });
+  M.sfx(HS, 'swell', { dur: 1.7, gain: -7 }).sfx(HS, 'impact', { weight: 0.8, gain: -6 });
+  M.sfx(HS + 0.75, 'tap', { deg: 4, oct: 5, bright: 0.7, gain: -4 });
+
+  /* ---------- tramos con movimiento (cues de qa) y fundidos ---------- */
+  [[0.3, 2.2], [1.5, 3.0], [C[0], C[NS - 1] + 0.5], [CL0, 13.9]].forEach(([a, b]) => tl.to({ v: 0 }, { v: 1, duration: b - a, ease: 'none' }, a));
+  tl.fromTo('#fade', { opacity: 1 }, { opacity: 0, duration: 0.45, ease: 'appleOut' }, 0);
+  tl.to('#fade', { opacity: 1, duration: 0.33, ease: 'appleIn' }, 15.55);
+
+  /* ---------- placas ---------- */
+  const flash = (t, a, up, down) => eO(seg(t, a, a + up)) * (1 - eA(seg(t, a + up, a + up + down)));
+  function plate(k, t, cm) {
+    const s = cm.s, sx = cm.cx + 0 * s, tp = tPass(k);
+    let e, dy = 0;
+    if (k < NS) { e = eO(seg(t, 0.3 + k * 0.1, 0.9 + k * 0.1)); dy = (1 - e) * 60; }
+    else { e = eO(seg(t, tp - 0.32, tp + 0.03)); dy = -(1 - e) * 44; }
+    if (e <= 0.004) return;
+    const x = sx, y = cm.yb + (Yw(k) - YW0) * s + dy * s;
+    if (y < -60) return;
+    const L = LH * s, d = DH * s, th = Math.max(1.2, TH * s);
+    const w = k < NS ? clamp(dK(k) / 0.5, 0.35, 1) : 0.3;
+    const lb = flash(t, tp - 0.04, 0.12 * w + 0.05, 0.5 * w + 0.18), lf = flash(t, tp + 0.16 * w, 0.12 * w + 0.05, 0.5 * w + 0.18);
+    const vis = eA(seg(t, tp + 0.3, tp + 0.9));
+    const base = mixc(BG, SLATE, 0.13 + 0.05 * vis);
+    const cBack = mixc(base, LILAC, 0.5 * lb), cFront = mixc(base, SLATE, 0.55 * lf), cSide = mixc(BG, SLATE, 0.075 + 0.05 * vis);
+    ctx.globalAlpha = e;
+    const P = { l: [x - L, y], b: [x, y - d], r: [x + L, y], f: [x, y + d] };
+    // cantos (grosor)
+    ctx.fillStyle = rgba(cSide, 1);
+    ctx.beginPath(); ctx.moveTo(P.l[0], P.l[1]); ctx.lineTo(P.f[0], P.f[1]); ctx.lineTo(P.r[0], P.r[1]); ctx.lineTo(P.r[0], P.r[1] + th); ctx.lineTo(P.f[0], P.f[1] + th); ctx.lineTo(P.l[0], P.l[1] + th); ctx.closePath(); ctx.fill();
+    // cara superior en dos mitades
+    ctx.fillStyle = rgba(cBack, 1); ctx.beginPath(); ctx.moveTo(P.l[0], P.l[1]); ctx.lineTo(P.b[0], P.b[1]); ctx.lineTo(P.r[0], P.r[1]); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = rgba(cFront, 1); ctx.beginPath(); ctx.moveTo(P.l[0], P.l[1]); ctx.lineTo(P.f[0], P.f[1]); ctx.lineTo(P.r[0], P.r[1]); ctx.closePath(); ctx.fill();
+    const sw = Math.max(0.9, 1.7 * s), ea = 0.5 + 0.35 * Math.max(lb, lf) + 0.1 * vis;
+    ctx.strokeStyle = rgba(SLATE, ea); ctx.lineWidth = sw; ctx.lineJoin = 'round';
+    ctx.beginPath(); ctx.moveTo(P.l[0], P.l[1]); ctx.lineTo(P.b[0], P.b[1]); ctx.lineTo(P.r[0], P.r[1]); ctx.lineTo(P.f[0], P.f[1]); ctx.closePath(); ctx.stroke();
+    ctx.strokeStyle = rgba(SLATE, ea * 0.55); ctx.lineWidth = sw * 0.8;
+    ctx.beginPath(); ctx.moveTo(P.l[0], P.l[1] + th); ctx.lineTo(P.f[0], P.f[1] + th); ctx.lineTo(P.r[0], P.r[1] + th);
+    ctx.moveTo(P.l[0], P.l[1]); ctx.lineTo(P.l[0], P.l[1] + th); ctx.moveTo(P.f[0], P.f[1]); ctx.lineTo(P.f[0], P.f[1] + th); ctx.moveTo(P.r[0], P.r[1]); ctx.lineTo(P.r[0], P.r[1] + th); ctx.stroke();
+    ctx.strokeStyle = rgba(SLATE, 0.3 + 0.2 * Math.max(lb, lf)); ctx.lineWidth = sw * 0.7;
+    ctx.beginPath(); ctx.moveTo(P.l[0], P.l[1]); ctx.lineTo(P.r[0], P.r[1]); ctx.stroke();
+    if (s > 0.42) {
+      // mitad delantera: red densa (líneas paralelas) · mitad trasera: atención (arcos)
+      ctx.strokeStyle = rgba(SLATE, 0.22 + 0.35 * lf); ctx.lineWidth = Math.max(0.8, 1.1 * s); ctx.beginPath();
+      for (let i = 1; i <= 3; i++) { const q = i / 4; ctx.moveTo(x - L + q * 2 * L, y); ctx.lineTo(x + q * L, y + d - q * d); }
+      ctx.stroke();
+      const aw = 0.28 + 0.5 * lb, lw = Math.max(0.8, 1.3 * s);
+      qarc([x - 0.55 * L, y - 0.08 * d], [x - 0.2 * L, y - 1.0 * d], [x + 0.15 * L, y - 0.08 * d], LILAC, aw, lw);
+      qarc([x - 0.1 * L, y - 0.08 * d], [x + 0.22 * L, y - 0.9 * d], [x + 0.55 * L, y - 0.08 * d], LILAC, aw, lw);
+      qarc([x - 0.35 * L, y - 0.08 * d], [x, y - 1.6 * d], [x + 0.35 * L, y - 0.08 * d], LILAC, aw * 0.8, lw);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  /* ---------- texto del contador ---------- */
+  function fmtN(n) { return String(n); }
+  function setLS(v) { try { ctx.letterSpacing = v; } catch (e) {} }
+
+  const DOTS = []; for (let x = 120; x <= 1800; x += 60) for (let y = 60; y <= 1020; y += 60) DOTS.push([x, y]);
+
+  M.onFrame((t) => {
+    ctx.fillStyle = rgba(BG, 1); ctx.fillRect(0, 0, 1920, 1080);
+    ctx.fillStyle = rgba(BONE, 0.045); for (const [x, y] of DOTS) ctx.fillRect(x - 1, y - 1, 2, 2);
+
+    const cm = cam(t), s = cm.s;
+    const SX = (wx) => cm.cx + (wx - CXW) * s, SY = (wy) => cm.yb + (wy - YW0) * s;
+    const f = fAt(t), u = uAt(t);
+
+    /* --- placas, de abajo hacia arriba (las de arriba tapan a las de abajo) --- */
+    for (let k = 0; k < NL; k++) plate(k, t, cm);
+
+    /* --- hilo residual a la izquierda: suma la salida de cada placa --- */
+    if (t >= C[0] - 0.05) {
+      const xt = SX(XT);
+      const top = Math.min(f, NL - 1);
+      for (let j = 0; j < NL - 1 && j < top; j++) {
+        const ya = SY(Yw(j)), yb2 = SY(Yw(Math.min(j + 1, top)));
+        const lk = eO(seg(t, tPass(j) + 0.08, tPass(j) + 0.38));
+        const wPrev = 2 + 0.55 * j, wNew = 2 + 0.55 * (j + 1);
+        line(xt, ya, xt, yb2, BONE, 0.82, Math.max(1, lerp(wPrev, wNew, lk) * s));
+      }
+      // enlaces placa → hilo con un punto que viaja y un nodo "+"
+      for (let k = 0; k < NL; k++) {
+        const tp = tPass(k); if (k > top + 0.2 || t < tp) continue;
+        const quick = k >= NS, dur = quick ? 0.16 : 0.3, ek = eO(seg(t, tp + 0.04, tp + 0.04 + dur));
+        const y = SY(Yw(k)), x0 = SX(CXW - LH);
+        if (s > 0.3 || k % 4 === 0) {
+          line(x0, y, xt, y, SLATE, quick ? 0.4 : 0.6, Math.max(1, 1.5 * s), ek);
+          if (ek > 0 && ek < 1 && !quick) dot(lerp(x0, xt, ek), y, 5, BONE, 0.95);
+          const nk = seg(t, tp + 0.04 + dur * 0.9, tp + 0.04 + dur * 0.9 + 0.3);
+          if (nk > 0 && s > 0.5) {
+            const r = 11 * (1 - Math.pow(1 - nk, 3)) * s;
+            ctx.fillStyle = rgba(BG, 1); ctx.beginPath(); ctx.arc(xt, y, r, 0, TAU); ctx.fill();
+            ring(xt, y, r, BONE, 0.9, Math.max(1, 2 * s));
+            line(xt - r * 0.5, y, xt + r * 0.5, y, BONE, 0.9, Math.max(1, 1.8 * s)); line(xt, y - r * 0.5, xt, y + r * 0.5, BONE, 0.9, Math.max(1, 1.8 * s));
+          } else if (nk > 0) dot(xt, y, Math.max(1.2, 6 * s * nk), BONE, 0.9);
+        }
+      }
+    }
+
+    /* --- rastro del vector en el eje --- */
+    if (t >= C[0]) line(SX(CXW), SY(Yw(0) - YV), SX(CXW), SY(Yw(f) - YV), BONE, 0.16, Math.max(1, 1.5 * s));
+
+    /* --- token → vector --- */
+    const vcx = SX(CXW), vcy = SY(Yw(f) - YV), sv = Math.max(s, 0.34);
+    if (t > 1.5) {
+      const slide = eA(seg(t, 1.5, 2.45)), tx = lerp(330, CXW, slide), ty = Yw(0) - YV;
+      const flat = eA(seg(t, 2.35, 2.75)), bars = eO(seg(t, 2.55, 2.95));
+      const TWd = 150, VW = 8 * 14, fw = lerp(TWd, VW, flat), appear = eO(seg(t, 1.5, 1.8));
+      if (flat < 1) {
+        block(tx - fw / 2, ty, fw * appear, Math.max(1.2, 34 * (1 - flat)), BONE, 0.94 * (1 - 0.5 * flat), 14);
+        if (flat < 0.6) { ctx.font = '600 44px "League Spartan"'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = rgba(BG, appear * (1 - flat / 0.6)); ctx.fillText('la', tx, ty + 2); }
+      }
+      if (t < 2.95 && bars > 0) drawBars(tx, ty, VEC[0], bars, 1, 0.92, BONE);
+    }
+    function drawBars(cx0, cy0, V, g, sc, a, col) {
+      const bw = Math.max(3, 8 * sc), step = Math.max(5, 14 * sc), amp = 32 * sc;
+      for (let n = 0; n < 8; n++) {
+        const v = V[n] * g, h = amp * Math.abs(v), bx = cx0 + (n - 3.5) * step - bw / 2; if (h < 0.4) continue;
+        ctx.fillStyle = rgba(col, a); ctx.beginPath(); ctx.roundRect(bx, v < 0 ? cy0 : cy0 - h, bw, h, Math.min(2.5, bw / 2)); ctx.fill();
+      }
+    }
+    if (t >= 2.95) {
+      const j = Math.min(NL - 1, Math.floor(u)), m = u - j, fade = 1 - eI(seg(t, HS - 0.1, HS + 0.25));
+      const V = VEC[j].map((v, n) => lerp(v, VEC[j + 1][n], m));
+      if (fade > 0.004) {
+        const ox = vcx, oy = vcy;
+        // pequeño pedestal para que las barras lean sobre las placas
+        if (s > 0.5) { ctx.fillStyle = rgba(BG, 0.55 * fade); ctx.beginPath(); ctx.roundRect(ox - 66 * sv, oy - 40 * sv, 132 * sv, 80 * sv, 12 * sv); ctx.fill(); }
+        line(ox - 62 * sv, oy, ox + 62 * sv, oy, BONE, 0.3 * fade, Math.max(1, 1.2 * sv));
+        drawBars(ox, oy, V, 1, sv, 0.95 * fade, BONE);
+      }
+    }
+
+    /* --- distribución que sale del tope --- */
+    if (t >= HS) {
+      const bx0 = cm.cx - (12 * 22 + 11 * 10) / 2, yb = SY(Yw(NL - 1)) - 40, BW = 22, BP = 32, HM = 120;
+      line(bx0 - 10, yb + 8, bx0 + 12 * BP, yb + 8, BONE, 0.3 * eO(seg(t, HS, HS + 0.4)), 1.4);
+      HV.forEach((v, i) => {
+        const g = eO(seg(t, HS + 0.1 + i * 0.03, HS + 0.1 + i * 0.03 + 0.7)), h = HM * v * g; if (h < 0.5) return;
+        const c = i === HWIN ? AMB : BONE, a = i === HWIN ? 1 : 0.42;
+        ctx.fillStyle = rgba(c, a); ctx.beginPath(); ctx.roundRect(bx0 + i * BP, yb - h, BW, h, 3); ctx.fill();
+      });
+    }
+
+    /* --- contador de capas (derecha) --- */
+    if (t >= C[0] - 0.05 && t < 15.9) {
+      const n = Math.max(1, Math.min(NL, Math.floor(f + 0.3) + 1));
+      const tn = n - 1 < NS ? C[n - 1] - 0.12 : 0;
+      const ph = n <= NS ? eO(seg(t, tn, tn + 0.3)) : 1, a = n <= NS ? ph : 1;
+      const xr = 1800, yb = 600;
+      ctx.textAlign = 'right'; ctx.textBaseline = 'alphabetic';
+      ctx.font = '700 190px "League Spartan"'; setLS('0px');
+      const str = fmtN(n), wN = ctx.measureText(str).width;
+      ctx.fillStyle = rgba(BONE, 0.95 * a); ctx.fillText(str, xr, yb + (1 - ph) * 26);
+      const xk = eO(seg(t, HS - 0.15, HS + 0.35));
+      if (xk > 0.004) { ctx.font = '500 120px "League Spartan"'; ctx.fillStyle = rgba(BONE, 0.55 * xk); ctx.fillText('×', xr - wN - 22, yb - 12 + (1 - xk) * 10); }
+      ctx.font = '500 28px "DM Mono"'; setLS('5px');
+      ctx.fillStyle = rgba(SLATE, 0.95); ctx.fillText(n === 1 ? 'CAPA' : 'CAPAS', xr, yb + 54);
+      setLS('0px');
+    }
+  });
+});
+</script>
+</body>
+</html>

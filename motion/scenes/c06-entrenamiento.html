@@ -1,0 +1,467 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>C06 · Cómo aprendió el modelo</title>
+<link rel="stylesheet" href="../lib/theme.css">
+<link rel="stylesheet" href="../lib/fonts-spartan.css">
+<style>
+  /* Serie LLM, escena 6. Misma lámina que b03: grafito, trazo hueso, colores funcionales apagados. */
+  body { background: #15171A; }
+  #cv { position: absolute; inset: 0; }
+  #grain { position: absolute; inset: -20px; opacity: 0.05; mix-blend-mode: overlay; pointer-events: none; }
+  #vig { position: absolute; inset: 0; background: radial-gradient(120% 110% at 50% 48%, transparent 55%, rgba(8,9,10,0.55) 100%); pointer-events: none; }
+  #fade { position: absolute; inset: 0; background: #15171A; opacity: 1; }
+</style>
+</head>
+<body>
+<div id="world">
+  <canvas id="cv" width="1920" height="1080"></canvas>
+  <div id="vig"></div>
+  <canvas id="grain" width="512" height="512" style="width:1960px;height:1120px"></canvas>
+  <div id="fade"></div>
+</div>
+<script src="../node_modules/gsap/dist/gsap.min.js"></script>
+<script src="../node_modules/gsap/dist/SplitText.min.js"></script>
+<script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
+<script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
+<script src="../lib/stage.js"></script>
+<script src="../lib/audio.js"></script>
+<script>
+/* Storyboard (16 s, sin voz).
+   1  0,15–2    lluvia fina de bloques de texto (cientos de fragmentos)
+   2  2–3,5     un fragmento se aísla (esquinas), crece y se vuelve la frase "El gato se sentó en la ___"
+   3  3,3–4,3   la última palabra se ve y se oculta (queda el hueco punteado); se arma la red
+   4  4,7–7,1   PREDECIR: la frase entra a la red y sale una predicción (ámbar, "mesa" 62 %)
+               COMPARAR: la verdad (alfombra, objetivo punteado) contra lo predicho; la diferencia en terracota
+   5  7,1–8,3   AJUSTAR: el error retropropaga (terracota) y los pesos cambian de grosor
+   6  8,5–11,6  tres ciclos cada vez más rápidos; la barra de "alfombra" sube y se vuelve salvia
+   7  12–14,1   zoom out: la red es un punto en una nube enorme de conexiones; contador es-ES hasta quedar quieto
+   8  15,55–16  fundido a grafito */
+M.scene({ duration: 16, push: 0, audio: { key: 'D', mode: 'lydian', gain: 3, bed: { cycle: 8, bright: 0.8, sub: 0.15 } } }, async (tl, M) => {
+  const $ = (s) => document.querySelector(s);
+  const ctx = $('#cv').getContext('2d');
+  { const g = $('#grain').getContext('2d'); const im = g.createImageData(512, 512); const rn = M.rng(3);
+    for (let i = 0; i < im.data.length; i += 4) { const v = 128 + (rn() - 0.5) * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+    g.putImageData(im, 0, 0); }
+
+  /* fuentes: se piden explícitamente (canvas no las dispara solo) */
+  const F_TOK = '600 52px "League Spartan"', F_LAB = '600 38px "League Spartan"', F_NUM = '700 150px "League Spartan"', F_MONO = '500 28px "DM Mono"', F_PCT = '400 30px "DM Mono"';
+  await Promise.all([F_TOK, F_LAB, F_NUM, F_MONO, F_PCT, '500 40px "League Spartan"'].map((f) => document.fonts.load(f, 'El gato sentó alfombra 0123456789 PREDECIR')));
+  window.__fontOK = ['600 52px "League Spartan"', '500 28px "DM Mono"', '700 150px "League Spartan"'].every((f) => document.fonts.check(f));
+
+  /* ---------- paleta y utilidades (idénticas a b03) ---------- */
+  const BG = [21, 23, 26], BONE = [233, 230, 223], AMB = [201, 154, 75], SAGE = [143, 169, 138],
+        TERRA = [196, 110, 82], SLATE = [122, 146, 178];
+  const TAU = Math.PI * 2;
+  const rgba = (c, a) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${Math.max(0, Math.min(1, a)).toFixed(3)})`;
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, m) => a + (b - a) * m;
+  const mixc = (A, B, m) => [lerp(A[0], B[0], m), lerp(A[1], B[1], m), lerp(A[2], B[2], m)];
+  const seg = (t, a, b) => clamp((t - a) / (b - a));
+  const eA = gsap.parseEase('apple'), eO = gsap.parseEase('appleOut'), eI = gsap.parseEase('appleIn'), eSp = M.spring(0.15);
+  const pop = (lt, d, dur = 0.5) => (lt <= d ? 0 : eSp(clamp((lt - d) / dur)));
+  const NF = new Intl.NumberFormat('es-ES');
+  const NBSP = ' ';
+
+  function line(ax, ay, bx, by, c, a, w, e = 1) {
+    if (a <= 0.004 || e <= 0 || w <= 0.05) return;
+    ctx.strokeStyle = rgba(c, a); ctx.lineWidth = w; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(ax + (bx - ax) * e, ay + (by - ay) * e); ctx.stroke();
+  }
+  function dot(x, y, r, c, a) { if (a <= 0.004 || r <= 0.1) return; ctx.fillStyle = rgba(c, a); ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill(); }
+  function ring(x, y, r, c, a, w = 2) { if (a <= 0.004 || r <= 0.1) return; ctx.strokeStyle = rgba(c, a); ctx.lineWidth = w; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.stroke(); }
+  const qpt = (p0, c, p1, k) => [lerp(lerp(p0[0], c[0], k), lerp(c[0], p1[0], k), k), lerp(lerp(p0[1], c[1], k), lerp(c[1], p1[1], k), k)];
+  function qcurve(p0, c, p1, col, a, w, e = 1, e0 = 0) {
+    if (a <= 0.004 || e <= e0) return; ctx.strokeStyle = rgba(col, a); ctx.lineWidth = w; ctx.lineCap = 'round'; ctx.beginPath();
+    const n = 30; let p = qpt(p0, c, p1, e0); ctx.moveTo(p[0], p[1]);
+    for (let i = 1; i <= n; i++) { p = qpt(p0, c, p1, lerp(e0, e, i / n)); ctx.lineTo(p[0], p[1]); } ctx.stroke();
+  }
+  function drawNode(n) {
+    if (n.w < 0.35 || n.h < 0.35) return;
+    const m = Math.min(n.w, n.h), rad = m * (1 - n.q) + m * n.q * 0.14;
+    ctx.beginPath(); ctx.roundRect(n.x - n.w, n.y - n.h, n.w * 2, n.h * 2, rad);
+    if (n.sa > 0.02) { ctx.fillStyle = rgba(BG, 1); ctx.fill(); }
+    if (n.fa > 0.004) { ctx.fillStyle = rgba(n.fc, n.fa); ctx.fill(); }
+    if (n.sa > 0.004 && n.sw > 0.05) { ctx.strokeStyle = rgba(n.sc, n.sa); ctx.lineWidth = n.sw; ctx.stroke(); }
+  }
+  const nd = (x, y, o = {}) => ({ x, y, w: o.w ?? 15, h: o.h ?? o.w ?? 15, q: o.q ?? 0, fc: o.fc ?? BONE, fa: o.fa ?? 0, sc: o.sc ?? BONE, sa: o.sa ?? 1, sw: o.sw ?? 2 });
+  function text(str, x, y, font, col, a, align = 'left', ls = 0) {
+    if (a <= 0.004) return;
+    ctx.font = font; ctx.letterSpacing = ls + 'px'; ctx.textAlign = align; ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = rgba(col, a); ctx.fillText(str, x, y);
+  }
+  // alto de x-height aproximado para centrar verticalmente (League Spartan 52 px)
+  const capMid = (px) => px * 0.36;
+
+  /* =====================================================================================
+     HORARIO: 4 ciclos + pasada final (misma lógica que b02).
+     f/fd = pasada hacia adelante, b/bd = retropropagación.
+     ===================================================================================== */
+  const CY = [
+    { f: 4.7,  fd: 1.0,  b: 7.1,  bd: 1.2 },
+    { f: 8.5,  fd: 0.42, b: 8.95, bd: 0.42 },
+    { f: 9.45, fd: 0.3,  b: 9.77, bd: 0.3 },
+    { f: 10.15, fd: 0.2, b: 10.37, bd: 0.2 },
+  ];
+  const FIN = { f: 10.8, fd: 0.7 };
+  const PASS = [...CY.map((c) => ({ f: c.f, fd: c.fd })), FIN];
+  const ARR = PASS.map((p) => p.f + p.fd);
+  const ERR = [1, 0.55, 0.28, 0.12, 0];
+  const DONE = ARR[4] + 0.08;
+  const ZS = 12.1, ZD = 1.9;                                // zoom out
+
+  /* ---------- frase y bloques ---------- */
+  const WORDS = ['El', 'gato', 'se', 'sentó', 'en', 'la'];
+  const HH = 36, GAPT = 20, X0 = 240, SY = 190;
+  ctx.font = F_TOK;
+  const TW = WORDS.map((w) => Math.round(ctx.measureText(w).width) + 60);
+  const TX = []; { let x = X0; TW.forEach((w) => { TX.push(x); x += w + GAPT; }); }
+  ctx.font = F_TOK;
+  const SLOT = { x: TX[5] + TW[5] + GAPT, w: Math.round(ctx.measureText('alfombra').width) + 60 };
+  const TOTW = SLOT.x + SLOT.w - X0;
+  const TB = (i) => 3.0 + i * 0.06;
+
+  /* ---------- red 6-5-5-3 ---------- */
+  const X = [240, 470, 700, 930], C = [6, 5, 5, 3], NY = 670, r = M.rng(17);
+  const GAPY = [84, 100, 100, 110];
+  const ny = (li, k) => NY + (k - (C[li] - 1) / 2) * GAPY[li];
+  const act = C.map((n, li) => Array.from({ length: n }, () => (li === 0 ? 0.35 + r() * 0.6 : 0.25 + r() * 0.75)));
+  const RK = [1, 0.5, 0.26, 0.1, 0];
+  const clampW = (v) => clamp(v, 0.06, 1);
+  const conns = [];
+  for (let li = 0; li < 3; li++) for (let i = 0; i < C[li]; i++) for (let j = 0; j < C[li + 1]; j++) {
+    const w0 = 0.08 + r() * 0.92, wf = clampW(1.05 - w0 + (r() - 0.5) * 0.35);
+    conns.push({ li, i, j, W: RK.map((rk) => lerp(wf, w0, rk)) });
+  }
+  const CAND = ['alfombra', 'mesa', 'silla'];
+  const TGT = [0.97, 0.02, 0.01], INIT = [0.12, 0.62, 0.26];
+  const outAt = (j, p) => lerp(TGT[j], INIT[j], ERR[p]);
+  const NET0 = 3.9;                                          // la red se arma
+
+  const bwin = (p, li) => { const c = CY[p], g = 2 - li; return [c.b + (g * c.bd) / 3, c.b + ((g + 1) * c.bd) / 3]; };
+  const fwin = (p, li) => { const c = PASS[p]; return [c.f + (li * c.fd) / 3, c.f + ((li + 1) * c.fd) / 3]; };
+  const weightOf = (cn, t) => {
+    let w = cn.W[0], hot = 0;
+    for (let p = 0; p < CY.length; p++) {
+      const [a, b] = bwin(p, cn.li), m = seg(t, a, b);
+      if (m > 0) { w = lerp(cn.W[p], cn.W[p + 1], eA(m)); if (m < 1) hot = Math.sin(Math.PI * m) * (0.55 + 0.45 * ERR[p]); }
+    }
+    return [w, hot];
+  };
+  const shown = (j, t) => {
+    let v = 0;
+    for (let p = 0; p < PASS.length; p++) {
+      const d = p === 0 ? 0.45 : p === 4 ? 0.5 : Math.min(0.3, PASS[p].fd * 0.8);
+      const m = seg(t, ARR[p], ARR[p] + d);
+      if (m > 0) v = lerp(p === 0 ? 0 : outAt(j, p - 1), outAt(j, p), (p === 0 ? eO : eA)(m));
+    }
+    return v;
+  };
+  const nodeLit = (li, t) => {
+    let fl = 0, base = 0;
+    for (let p = 0; p < PASS.length; p++) {
+      const arr = li === 0 ? PASS[p].f : fwin(p, li - 1)[1];
+      if (t >= arr - 0.12) { base = 0.2; const d = t - arr; fl = Math.max(fl, d < 0 ? 1 + d / 0.12 : Math.exp(-d / 0.45)); }
+    }
+    return clamp(base + 0.8 * clamp(fl));
+  };
+  const nodeHit = (li, t) => {
+    let h = 0;
+    for (let p = 0; p < CY.length; p++) {
+      const at = li === 3 ? CY[p].b : bwin(p, li)[1];
+      const d = t - at; if (d > -0.08 && d < 0.5) h = Math.max(h, (d < 0 ? 1 + d / 0.08 : Math.exp(-d / 0.18)) * (0.5 + 0.5 * ERR[p]));
+    }
+    return clamp(h);
+  };
+  const BX = 1250, BL = 380, BH = 16;
+
+  /* ---------- rótulos de pie ---------- */
+  const LABS = ['PREDECIR', 'COMPARAR', 'AJUSTAR'], LY = 960;
+  ctx.font = F_MONO; ctx.letterSpacing = '5px';
+  const LW = LABS.map((s) => ctx.measureText(s).width), SEPW = ctx.measureText('  ·  ').width;
+  const LTOT = LW.reduce((a, b) => a + b, 0) + SEPW * 2, LX0 = 960 - LTOT / 2;
+  const LPOS = []; { let x = LX0; LW.forEach((w) => { LPOS.push(x); x += w + SEPW; }); }
+  const phaseAt = (t) => {
+    for (let p = 0; p < PASS.length; p++) {
+      const c = PASS[p];
+      if (t >= c.f - 0.05 && t < ARR[p]) return 0;
+      if (p < 4 && t >= ARR[p] && t < CY[p].b) return 1;
+      if (p < 4 && t >= CY[p].b && t < CY[p].b + CY[p].bd + 0.05) return 2;
+    }
+    return -1;
+  };
+
+  /* ---------- lluvia: cientos de fragmentos ---------- */
+  const rr = M.rng(5), RAIN = [];
+  for (let i = 0; i < 340; i++) {
+    const d = 0.25 + 0.75 * rr() ** 0.8;
+    const lines = 1 + Math.floor(rr() * 3);
+    RAIN.push({ x: 50 + rr() * 1820, y0: rr() * 1300, d, w: (26 + rr() * 56) * (0.55 + 0.6 * d), h: (10 + lines * 7) * (0.6 + 0.5 * d), v: 330 + 650 * d, a: 0.14 + 0.5 * d,
+      ln: Array.from({ length: lines }, () => 0.35 + rr() * 0.6) });
+  }
+  const TWARP = (t) => (t < 1.9 ? t : 1.9 + 0.6 * (1 - Math.exp(-(t - 1.9) / 0.5)));
+  const HERO = { x: 880, t0: 0.5, y0: -60, t1: 2.0, y1: 400, w: 96, hh: 21 };
+  function fragment(x, yc, w, hh, a, lns, col = BONE, sa = 0.5) {
+    ctx.beginPath(); ctx.roundRect(x, yc - hh, w, 2 * hh, Math.min(5, hh));
+    ctx.fillStyle = rgba(BG, 1); ctx.fill();
+    ctx.strokeStyle = rgba(col, a * sa * 1.6); ctx.lineWidth = 1.1; ctx.stroke();
+    const n = lns.length, step = (2 * hh - 8) / (n + 0.2);
+    ctx.fillStyle = rgba(col, a * 0.75);
+    lns.forEach((f, k) => { const ly = yc - hh + 7 + k * step + step * 0.25; ctx.fillRect(x + 6, ly, (w - 12) * f, Math.max(1.5, hh * 0.14)); });
+  }
+
+  /* ---------- nube de conexiones (coordenadas finales de pantalla) ---------- */
+  const CSF = [960, 400], SF = 0.07, CW = [900, 670];
+  const rc = M.rng(41), LAY = [], NL = 44;
+  for (let l = 0; l < NL; l++) {
+    const env = Math.sin(Math.PI * (l + 0.5) / NL), n = Math.floor(48 + 70 * env), hh = 300 * Math.pow(env, 0.5), fx = 140 + l * (1640 / (NL - 1)), pts = [];
+    for (let k = 0; k < n; k++) {
+      const fy = CSF[1] + (rc() - 0.5) * 2 * hh;
+      if (Math.abs(fx - CSF[0]) < 80 && Math.abs(fy - CSF[1]) < 44) continue;
+      pts.push([fx + (rc() - 0.5) * 12, fy]);
+    }
+    pts.sort((a, b) => a[1] - b[1]); LAY.push(pts);
+  }
+  const LINES = [];                                         // [ax, ay, bx, by, banda de alfa]
+  for (let l = 0; l < NL - 1; l++) {
+    const A = LAY[l], B = LAY[l + 1];
+    A.forEach((p, i) => { for (let m = 0; m < 3; m++) { const j = clamp(Math.round(i * B.length / A.length + (rc() - 0.5) * 30), 0, B.length - 1); LINES.push([p[0], p[1], B[j][0], B[j][1], m]); } });
+  }
+  const ZP = (t) => seg(t, ZS, ZS + ZD);
+  const scaleAt = (t) => Math.exp(Math.log(SF) * eA(ZP(t)));
+  const pivAt = (t) => { const e = eA(ZP(t)); return [lerp(CW[0], CSF[0], e), lerp(CW[1], CSF[1], e)]; };
+
+  /* ---------- sonido ---------- */
+  M.sfx(0.3, 'grow', { dur: 1.8, density: 150, spread: 0.9, gain: -15 });
+  M.sfx(HERO.t1, 'tick', { tone: 'glass', gain: -3, pan: 0 });
+  M.sfx(2.2, 'whoosh', { dur: 0.9, peak: 0.35, gain: -12, dir: 1 });
+  WORDS.forEach((_, i) => M.sfx(TB(i) + 0.1, 'tick', { gain: -9, pan: -0.5 + i * 0.15 }));
+  M.sfx(3.95, 'scan', { dur: 0.35, from: 900, to: 2400, q: 5, gain: -12 });
+  PASS.forEach((p, i) => M.sfx(p.f, 'tap', { deg: i === 4 ? 4 : [0, 2, 2, 4][i], oct: 5, bright: 0.7, gain: i === 0 || i === 4 ? -4 : -7 - i, pan: 0.1 }));
+  CY.forEach((c, i) => M.sfx(c.b, 'whoosh', { dur: Math.max(0.35, c.bd), peak: 0.4, dir: -1, bright: 0.55, gain: i === 0 ? -8 : -11 - i }));
+  M.sfx(DONE, 'shimmer', { degs: [0, 4, 7], oct: 5, spread: 0.05, gain: -4 });
+  M.sfx(ZS, 'swell', { dur: 1.2, gain: -8 });
+  M.sfx(ZS, 'whoosh', { dur: 1.7, peak: 0.4, gain: -10, dir: -1, bright: 0.6 });
+  M.sfx(ZS + 1.0, 'impact', { weight: 0.8, gain: -3, deg: 0, oct: 2 });
+  M.sfx(13.0, 'shimmer', { degs: [2, 4, 7], oct: 5, spread: 0.06, gain: -9 });
+
+  /* ---------- tramos con movimiento (cues de qa) y fundidos ---------- */
+  tl.to({ v: 0 }, { v: 1, duration: 14.2 - 0.2, ease: 'none' }, 0.2);
+  tl.fromTo('#fade', { opacity: 1 }, { opacity: 0, duration: 0.45, ease: 'appleOut' }, 0);
+  tl.to('#fade', { opacity: 1, duration: 0.33, ease: 'appleIn' }, 15.55);
+
+  /* ---------- dibujo por cuadro ---------- */
+  const DOTS = []; for (let x = 120; x <= 1800; x += 60) for (let y = 60; y <= 1020; y += 60) DOTS.push([x, y]);
+  const heroPos = (t) => { const k = seg(t, HERO.t0, HERO.t1); return [HERO.x, lerp(HERO.y0, HERO.y1, k)]; };
+  const HL = [0.9, 0.6, 0.75];
+  const NUMTXT = NF.format(175000000000);
+
+  M.onFrame((t) => {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = rgba(BG, 1); ctx.fillRect(0, 0, 1920, 1080);
+    ctx.fillStyle = rgba(BONE, 0.045 * (1 - eO(ZP(t) * 1.6))); for (const [x, y] of DOTS) ctx.fillRect(x - 1, y - 1, 2, 2);
+
+    /* ===== 1 · lluvia ===== */
+    const rainA = eO(seg(t, 0.15, 0.9)) * (1 - eA(seg(t, 1.9, 3.0)));
+    if (rainA > 0.004) {
+      const tw = TWARP(t);
+      for (const b of RAIN) {
+        const y = ((b.y0 + b.v * tw) % 1300) - 110;
+        if (y < -40 || y > 1120) continue;
+        fragment(b.x, y, b.w, b.h / 2, b.a * rainA, b.ln);
+      }
+    }
+
+    /* ===== 2 · el fragmento aislado ===== */
+    const hv = eO(seg(t, HERO.t0, HERO.t0 + 0.4));
+    if (hv > 0.004 && t < TB(0) + 0.5) {
+      const [hx, hy] = heroPos(t), m = eA(seg(t, 2.0, 3.1));
+      const x = lerp(hx - HERO.w / 2, X0, m), w = lerp(HERO.w, TOTW, m), yc = lerp(hy, SY, m), hh = lerp(HERO.hh, HH, m);
+      const mixA = 1 - eA(seg(t, 3.0, 3.4));
+      fragment(x, yc, w, hh, hv * 1.25 * mixA, HL, BONE, 0.62);
+      // esquinas de selección
+      const ka = eO(seg(t, 1.6, 2.0)) * (1 - eA(seg(t, 2.6, 3.1))), pd = 14 + 10 * (1 - eO(seg(t, 1.6, 2.1)));
+      if (ka > 0.004) {
+        const L = 16;
+        [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(([sx, sy]) => {
+          const cx0 = sx < 0 ? x - pd : x + w + pd, cy0 = sy < 0 ? yc - hh - pd : yc + hh + pd;
+          line(cx0, cy0, cx0 - sx * L, cy0, BONE, 0.8 * ka, 2); line(cx0, cy0, cx0, cy0 - sy * L, BONE, 0.8 * ka, 2);
+        });
+      }
+    }
+
+    /* ===== 3 · la frase y el hueco ===== */
+    const sentA = 1 - eI(seg(t, ZS + 0.1, ZS + 0.9));
+    const ok = eA(seg(t, DONE, DONE + 0.5));
+    // zoom out: todo lo que sigue vive en coordenadas del mundo
+    const S = scaleAt(t), CP = pivAt(t);
+    const ZPv = ZP(t);
+    // nube (coordenadas de pantalla; se dibuja bajo el mundo)
+    if (ZPv > 0.02) {
+      const k = S / SF, ca = eO(seg(ZPv, 0.12, 0.7));
+      for (let band = 0; band < 3; band++) {
+        ctx.strokeStyle = rgba(SLATE, ca * (0.05 + 0.04 * band)); ctx.lineWidth = 0.7; ctx.beginPath();
+        for (const L of LINES) {
+          if (L[4] !== band) continue;
+          const ax = CP[0] + (L[0] - CSF[0]) * k, ay = CP[1] + (L[1] - CSF[1]) * k, bx = CP[0] + (L[2] - CSF[0]) * k, by = CP[1] + (L[3] - CSF[1]) * k;
+          if ((ax < -40 && bx < -40) || (ax > 1960 && bx > 1960) || (ay < -40 && by < -40) || (ay > 1120 && by > 1120)) continue;
+          ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
+        }
+        ctx.stroke();
+      }
+      ctx.fillStyle = rgba(BONE, ca * 0.6); ctx.beginPath();
+      for (const Lr of LAY) for (const p of Lr) {
+        const x = CP[0] + (p[0] - CSF[0]) * k, y = CP[1] + (p[1] - CSF[1]) * k;
+        if (x < -4 || x > 1924 || y < -4 || y > 1084) continue;
+        ctx.rect(x - 1.3, y - 1.3, 2.6, 2.6);
+      }
+      ctx.fill();
+    }
+    ctx.setTransform(S, 0, 0, S, CP[0] - CW[0] * S, CP[1] - CW[1] * S);
+
+    // tokens
+    for (let i = 0; i < 6; i++) {
+      const b = TB(i); if (t < b) continue;
+      const ba = eO(seg(t, b, b + 0.3)) * sentA, ta = eO(seg(t, b + 0.1, b + 0.5)) * sentA;
+      const pulse = (() => { let h = 0; PASS.forEach((p) => { const d = t - (p.f - 0.02); if (d > 0 && d < 0.5) h = Math.max(h, Math.exp(-d / 0.18)); }); return h; })();
+      ctx.beginPath(); ctx.roundRect(TX[i], SY - HH, TW[i], 2 * HH, 14);
+      ctx.fillStyle = rgba(BG, 1); ctx.fill(); ctx.fillStyle = rgba(mixc(BONE, AMB, pulse), 0.1 * ba + 0.14 * pulse * ba); ctx.fill();
+      ctx.strokeStyle = rgba(mixc(BONE, AMB, pulse), 0.55 * ba); ctx.lineWidth = 1.6; ctx.stroke();
+      text(WORDS[i], TX[i] + TW[i] / 2, SY + capMid(52), F_TOK, mixc(BONE, AMB, pulse * 0.6), ta, 'center');
+    }
+    // hueco con la última palabra
+    if (t >= TB(5) + 0.2) {
+      const sa = eO(seg(t, TB(5) + 0.2, TB(5) + 0.6)) * sentA, cx = SLOT.x + SLOT.w / 2;
+      const reveal = eO(seg(t, 3.3, 3.7)), wipe = eA(seg(t, 3.95, 4.3));
+      const trueA = reveal * (1 - 0) ;
+      ctx.save(); ctx.beginPath(); ctx.roundRect(SLOT.x, SY - HH, SLOT.w, 2 * HH, 14); ctx.clip();
+      ctx.fillStyle = rgba(BG, 1); ctx.fillRect(SLOT.x - 2, SY - HH - 2, SLOT.w + 4, 2 * HH + 4);
+      // la palabra verdadera (visible un momento) y la predicción
+      text(CAND[0], cx, SY + capMid(52), F_TOK, BONE, trueA * sa, 'center');
+      ctx.fillStyle = rgba(BG, 1); ctx.fillRect(SLOT.x - 2, SY - HH - 2, (SLOT.w + 4) * wipe, 2 * HH + 4);
+      // predicción vigente
+      let top = 0; for (let j = 1; j < 3; j++) if (shown(j, t) > shown(top, t)) top = j;
+      const pa = eO(seg(t, ARR[0], ARR[0] + 0.35)) * sa;
+      if (pa > 0.004) text(CAND[top], cx, SY + capMid(52), F_TOK, mixc(AMB, SAGE, ok), pa, 'center');
+      ctx.restore();
+      if (wipe > 0 && wipe < 1) line(SLOT.x + SLOT.w * wipe, SY - HH + 6, SLOT.x + SLOT.w * wipe, SY + HH - 6, BONE, 0.6 * sa, 2);
+      // contorno punteado (se vuelve sólido y salvia al acertar)
+      ctx.setLineDash(ok > 0.5 ? [] : [9, 8]);
+      ctx.strokeStyle = rgba(mixc(BONE, SAGE, ok), (0.5 + 0.35 * ok) * sa); ctx.lineWidth = 1.8;
+      ctx.beginPath(); ctx.roundRect(SLOT.x, SY - HH, SLOT.w, 2 * HH, 14); ctx.stroke(); ctx.setLineDash([]);
+      // cursor mientras el hueco espera
+      if (wipe > 0.9 && t < ARR[0]) { if (Math.floor((t - 4.3) / 0.5) % 2 === 0) { ctx.fillStyle = rgba(AMB, 0.85 * sa); ctx.fillRect(cx - 1.5, SY - HH + 10, 3, 2 * HH - 20); } }
+      // verdad contra predicción (solo en el primer ciclo)
+      const va = eO(seg(t, ARR[0] + 0.25, ARR[0] + 0.7)) * (1 - eI(seg(t, CY[0].b + CY[0].bd - 0.3, CY[0].b + CY[0].bd))) * sentA;
+      if (va > 0.004) {
+        line(cx, SY + HH + 8, cx, SY + HH + 44, TERRA, 0.9 * va, 2.4);
+        text(CAND[0], cx, SY + HH + 100, '500 44px "League Spartan"', BONE, 0.9 * va, 'center');
+        ctx.setLineDash([3, 6]); ctx.strokeStyle = rgba(BONE, 0.55 * va); ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(cx - 90, SY + HH + 116); ctx.lineTo(cx + 90, SY + HH + 116); ctx.stroke(); ctx.setLineDash([]);
+      }
+    }
+
+    /* ===== 4 · la red ===== */
+    const netA = 1;
+    for (const cn of conns) {
+      const A = [X[cn.li], ny(cn.li, cn.i)], Bn = [X[cn.li + 1], ny(cn.li + 1, cn.j)];
+      const e = eO(seg(t, NET0 + cn.li * 0.16, NET0 + 0.65 + cn.li * 0.16));
+      if (e <= 0) continue;
+      const [w, hot] = weightOf(cn, t);
+      line(A[0], A[1], Bn[0], Bn[1], BONE, (0.1 + 0.34 * w) * netA, 0.4 + 5.6 * w, e);
+      if (hot > 0.01) line(A[0], A[1], Bn[0], Bn[1], TERRA, 0.75 * hot, 0.4 + 5.6 * w + 1.2 * hot);
+      for (let p = 0; p < PASS.length; p++) {
+        const [a, b] = fwin(p, cn.li), k = seg(t, a, b);
+        if (k > 0 && k < 1) { const kk = eA(k); dot(lerp(A[0], Bn[0], kk), lerp(A[1], Bn[1], kk), 2.2 + 2 * w, AMB, act[cn.li][cn.i] * (0.35 + 0.65 * w)); }
+      }
+      for (let p = 0; p < CY.length; p++) {
+        const [a, b] = bwin(p, cn.li), k = seg(t, a, b);
+        if (k > 0 && k < 1) { const kk = eA(k); dot(lerp(Bn[0], A[0], kk), lerp(Bn[1], A[1], kk), (2 + 2.6 * w) * (0.5 + 0.5 * Math.sqrt(ERR[p])), TERRA, 0.95); }
+      }
+    }
+    C.forEach((n, li) => { for (let k = 0; k < n; k++) {
+      const s = pop(t, NET0 - 0.2 + li * 0.14 + k * 0.03, 0.5), hit = nodeHit(li, t);
+      if (li < 3) drawNode(nd(X[li], ny(li, k), { w: 15 * s, fc: AMB, fa: act[li][k] * nodeLit(li, t), sc: mixc(BONE, TERRA, hit), sw: 2 + 1.5 * hit }));
+      else {
+        const v = shown(k, t), fc = k === 0 ? mixc(AMB, SAGE, ok) : AMB;
+        drawNode(nd(X[li], ny(li, k), { w: 18 * s, fc, fa: 0.15 + 0.85 * v, sc: mixc(mixc(BONE, TERRA, hit), k === 0 ? SAGE : BONE, ok), sw: 2 + 1.5 * hit }));
+      }
+    } });
+
+    // la frase entra a la red: un punto ámbar por token
+    PASS.forEach((p, pi) => {
+      const dur = Math.min(0.42, p.fd * 0.5), a = p.f - dur;
+      for (let i = 0; i < 6; i++) {
+        const k = seg(t, a + i * 0.025, a + i * 0.025 + dur); if (k <= 0 || k >= 1) continue;
+        const p0 = [TX[i] + TW[i] / 2, SY + HH + 8], p1 = [X[0], ny(0, i)], c = [p0[0], p1[1] - 20], e = eA(k);
+        const pos = qpt(p0, c, p1, e);
+        qcurve(p0, c, p1, AMB, 0.4 * sentA, 1.4, e, Math.max(0, e - 0.35));
+        dot(pos[0], pos[1], 4, AMB, 0.95 * sentA);
+      }
+    });
+
+    /* ===== 5 · barras: probabilidad de cada palabra ===== */
+    const ba = eO(seg(t, ARR[0] - 0.3, ARR[0] + 0.15)) * sentA;
+    if (ba > 0.004) for (let j = 0; j < 3; j++) {
+      const y = ny(3, j), v = shown(j, t), tg = BX + BL * TGT[j], vx = BX + BL * v;
+      const lo = Math.min(vx, tg), hi = Math.max(vx, tg);
+      const barC = j === 0 ? mixc(AMB, SAGE, ok) : AMB;
+      const dim = j === 0 ? 1 : 1 - 0.55 * ok;
+      line(BX, y - 22, BX, y + 22, BONE, 0.55 * ba, 2);
+      ctx.fillStyle = rgba(barC, 0.92 * ba * dim); ctx.fillRect(BX + 2, y - BH / 2, Math.max(0, Math.min(vx, tg) - BX - 2), BH);
+      if (hi - lo > 0.5) {
+        const flash = CY.reduce((m, c) => Math.max(m, 1 - Math.abs(t - c.b) / 0.25), 0);
+        ctx.fillStyle = rgba(TERRA, 0.9 * ba * (1 - ok)); ctx.fillRect(lo, y - BH / 2, hi - lo, BH);
+        if (flash > 0) { ctx.strokeStyle = rgba(TERRA, 0.8 * flash * ba); ctx.lineWidth = 2; ctx.strokeRect(lo - 4, y - BH / 2 - 4, hi - lo + 8, BH + 8); }
+      }
+      // objetivo punteado (la verdad)
+      ctx.fillStyle = rgba(mixc(BONE, SAGE, j === 0 ? ok : 0), 0.9 * ba);
+      for (let yy = y - 26; yy <= y + 26; yy += 7) ctx.fillRect(tg - 1.25, yy - 1.75, 2.5, 3.5);
+      // palabra y porcentaje
+      text(CAND[j], BX - 30, y + capMid(38), F_LAB, mixc(BONE, SAGE, j === 0 ? ok : 0), 0.95 * ba * dim, 'right');
+      const pct = Math.round(v * 100);
+      text(pct + NBSP + '%', Math.max(vx, tg) + 26, y + 10, F_PCT, mixc(BONE, SAGE, j === 0 ? ok : 0), 0.75 * ba * dim, 'left');
+    }
+    // destello de acierto
+    { const k = seg(t, DONE, DONE + 0.9); if (k > 0 && k < 1) ring(X[3], ny(3, 0), 24 + 46 * eO(k), SAGE, (1 - k) * 0.6, 2); }
+
+    /* ===== 6 · rótulos de pie ===== */
+    const la = eO(seg(t, NET0, NET0 + 0.4)) * sentA * (1 - 0.65 * ok);
+    if (la > 0.004) {
+      const ph = phaseAt(t);
+      LABS.forEach((s, i) => {
+        const act_ = ph === i, cc = act_ ? [AMB, TERRA, TERRA][i] : BONE;
+        text(s, LPOS[i], LY, F_MONO, act_ ? BONE : BONE, (act_ ? 0.95 : 0.3) * la, 'left', 5);
+        if (act_) line(LPOS[i], LY + 14, LPOS[i] + LW[i] - 5, LY + 14, cc, 0.9, 3);
+        if (i < 2) text('·', LPOS[i] + LW[i] + SEPW / 2 - 8, LY, F_MONO, BONE, 0.3 * la, 'center', 0);
+      });
+    }
+
+    /* ===== 7 · contador sobre la nube ===== */
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    if (ZPv > 0) {
+      const ring_ = eO(seg(ZPv, 0.72, 1));
+      if (ring_ > 0.004) { ctx.setLineDash([4, 6]); ctx.strokeStyle = rgba(SAGE, 0.75 * ring_); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(CSF[0], CSF[1], 78, 40, 0, 0, TAU); ctx.stroke(); ctx.setLineDash([]); }
+      const pa = eO(seg(t, 12.45, 13.0)) * (1 - eI(seg(t, 15.2, 15.55)));
+      if (pa > 0.004) {
+        const PX = 330, PW = 1260, PY = 610, PH = 290;
+        ctx.beginPath(); ctx.roundRect(PX, PY, PW, PH, 22); ctx.fillStyle = rgba(BG, 0.9 * pa); ctx.fill();
+        ctx.strokeStyle = rgba(BONE, 0.22 * pa); ctx.lineWidth = 1.3; ctx.stroke();
+        text('PARÁMETROS', 960, PY + 62, F_MONO, BONE, 0.8 * pa, 'center', 6);
+        const cv = Math.round(175e9 * eO(seg(t, 12.5, 14.2)));
+        const str = NF.format(cv);
+        ctx.font = F_NUM; ctx.letterSpacing = '0px';
+        const dw = ctx.measureText('0').width, sw = ctx.measureText('.').width;
+        let fw = 0; for (const ch of NUMTXT) fw += ch === '.' ? sw : dw;
+        let x = 960 + fw / 2;
+        for (let i = str.length - 1; i >= 0; i--) {
+          const ch = str[i], adv = ch === '.' ? sw : dw;
+          x -= adv; text(ch, x + adv / 2, PY + 225, F_NUM, BONE, pa, 'center');
+        }
+      }
+    }
+  });
+});
+</script>
+</body>
+</html>
