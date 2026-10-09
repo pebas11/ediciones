@@ -141,7 +141,7 @@ M.scene({ duration: 15, push: 0, audio: { key: 'D', mode: 'lydian', gain: 3, bed
     const tx = lerp(pa[0], pb[0], e), ty = lerp(pa[1], pb[1], e);
     line(pa[0], pa[1], tx, ty, col, al, w);
     if (e > 0.12 && al > 0.01) {
-      const ang = Math.atan2(pb[1] - pa[1], pb[0] - pa[0]), L = 18;
+      const ang = Math.atan2(pb[1] - pa[1], pb[0] - pa[0]), L = 24;
       ctx.strokeStyle = rgba(col, al); ctx.lineWidth = w; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
       ctx.beginPath(); ctx.moveTo(tx - Math.cos(ang - 0.45) * L, ty - Math.sin(ang - 0.45) * L); ctx.lineTo(tx, ty);
       ctx.lineTo(tx - Math.cos(ang + 0.45) * L, ty - Math.sin(ang + 0.45) * L); ctx.stroke();
@@ -195,11 +195,11 @@ M.scene({ duration: 15, push: 0, audio: { key: 'D', mode: 'lydian', gain: 3, bed
       line(pl[0], pl[1], pr[0], pr[1], SLATE, 0.7 * sideA, 1.6, eO(seg(t, 12.85, 13.5)), [6, 8]);
       // flechas
       const a1 = eA(seg(t, 10.2, 10.8)), arA = sa * eO(seg(t, 10.2, 10.35));
-      if (a1 > 0) arrow(P.gato, P.gatos, t, AMB, arA * 0.95, 3, a1);
+      if (a1 > 0) arrow(P.gato, P.gatos, t, AMB, arA * 0.95, 4, a1);
       const sl = eA(seg(t, 12.0, 12.75));
       if (t >= 12.0) {
         const o = add(P.perro, P.gato, -1), A = add(P.gato, o, sl), B = add(P.gatos, o, sl);
-        arrow(A, B, t, AMB, sa * (sl < 1 ? 0.6 : 0.95), 3, 1);
+        arrow(A, B, t, AMB, sa * (sl < 1 ? 0.8 : 0.95), 4, 1);
         if (sl < 1) { const pa = proj(A, t), ph = proj(P.gato, t); line(ph[0], ph[1], pa[0], pa[1], AMB, 0.22 * sa, 1.2, 1, [2, 7]); }
       }
       // puntos
@@ -215,7 +215,7 @@ M.scene({ duration: 15, push: 0, audio: { key: 'D', mode: 'lydian', gain: 3, bed
         const kr = seg(t, at, at + 0.6); if (kr < 1 && imp) ring(p[0], p[1], 16 + 34 * eO(kr), col, (1 - kr) * 0.5 * sa, 1.4);
         labels.push([name, p[0] + dx, p[1] + dy, al, sa * eO(seg(t, at + 0.12, at + 0.5)) * (imp ? 1 : 0.75), imp]);
       });
-      labels.forEach(([n, x, y, al, a, imp]) => txt(n, x, y, imp ? SP : '500 36px "League Spartan"', BONE, a, al));
+      labels.forEach(([n, x, y, al, a, imp]) => txt(n, x, y, imp ? SP : '600 36px "League Spartan"', BONE, a, al));
     }
 
     /* --- título --- */
