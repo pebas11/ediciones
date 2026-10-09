@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>D20 · Cronología pública</title>
+<link rel="stylesheet" href="../lib/theme.css">
+<link rel="stylesheet" href="../lib/fonts-spartan.css">
+<style>
+  body { background: #05070D; }
+  #cv { position: absolute; inset: 0; }
+  #grain { position: absolute; inset: -20px; opacity: 0.05; mix-blend-mode: overlay; pointer-events: none; }
+  #vig { position: absolute; inset: 0; background: radial-gradient(120% 110% at 50% 48%, transparent 50%, rgba(2,3,6,0.7) 100%); pointer-events: none; }
+  #fade { position: absolute; inset: 0; background: #05070D; opacity: 1; }
+</style>
+</head>
+<body>
+<div id="world">
+  <canvas id="cv" width="1920" height="1080"></canvas>
+  <div id="vig"></div>
+  <canvas id="grain" width="512" height="512" style="width:1960px;height:1120px"></canvas>
+  <div id="fade"></div>
+</div>
+<script src="../node_modules/gsap/dist/gsap.min.js"></script>
+<script src="../node_modules/gsap/dist/SplitText.min.js"></script>
+<script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
+<script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
+<script src="../lib/stage.js"></script>
+<script src="../lib/audio.js"></script>
+<script src="../lib/neon.js"></script>
+<script>
+/* D20 · Cronología pública (24 s). Línea de tiempo horizontal; la cámara recorre seis marcadores.
+   1 0,8   16/07 aviso de HF (verde)        4 11,0  27/07 JFrog 9 CVE + cronograma (rojo)
+   2 4,7   19/07 alerta en OpenAI (violeta) 5 15,3  29/07 METR y Redwood (neutro)
+   3 8,0   21/07 declaración conjunta (cian) 6 18,7  26/08 informes + "700 agentes" (cian) */
+M.scene({ duration: 24, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed: { cycle: 8, bright: 0.7, sub: 0.25 } } }, async (tl, M) => {
+  const $ = (s) => document.querySelector(s);
+  const cv = $('#cv'), ctx = cv.getContext('2d');
+  { const g = $('#grain').getContext('2d'); const im = g.createImageData(512, 512); const rn = M.rng(5);
+    for (let i = 0; i < im.data.length; i += 4) { const v = 128 + (rn() - 0.5) * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+    g.putImageData(im, 0, 0); }
+  const F_T = '700 92px "League Spartan"', F_N = '800 210px "League Spartan"', F_L = '500 42px "DM Sans"', F_S = '500 28px "DM Mono"', F_D = '500 26px "DM Mono"';
+  const ALL = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzáéíóúñÁÉÍÓÚ0123456789/«»;:,.· ';
+  await Promise.all([F_T, F_N, F_L, F_S].map((f) => document.fonts.load(f, ALL)));
+
+  const { PAL, rgba, bloom, bg, text } = Neon;
+  const TAU = Math.PI * 2;
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, m) => a + (b - a) * m;
+  const seg = (t, a, b) => clamp((t - a) / (b - a));
+  const eA = gsap.parseEase('apple'), eO = gsap.parseEase('appleOut'), eI = gsap.parseEase('appleIn');
+
+  const Y = 560, CX = 1000, DAY = 230;
+  const B = [
+    { s: 0.8,  wx: 0,    col: PAL.GREEN,  date: '16/07', stamp: '16 JUL', title: 'Primer aviso',           leg: 'Hugging Face avisa, sin identificar al atacante.' },
+    { s: 4.7,  wx: 690,  col: PAL.VIOLET, date: '19/07', stamp: '19 JUL', title: 'Alerta en OpenAI',       leg: 'Detectan una escalada de privilegios.' },
+    { s: 8.0,  wx: 1150, col: PAL.CYAN,   date: '21/07', stamp: '21 JUL', title: 'Declaración conjunta',   leg: 'Eran modelos de OpenAI.' },
+    { s: 11.0, wx: 2530, col: PAL.RED,    date: '27/07', stamp: '27 JUL', title: 'Parche y cronograma',    leg: 'JFrog corrige 9 CVE; Hugging Face publica su cronograma.' },
+    { s: 15.3, wx: 2990, col: PAL.INK,    date: '29/07', stamp: '29 JUL', title: 'Revisión independiente', leg: 'Anuncian METR y Redwood Research.' },
+    { s: 18.7, wx: 3990, col: PAL.CYAN,   date: '26/08', stamp: '26 AGO', title: 'Los informes',           leg: 'OpenAI y METR publican informes; Reuters titula «700 agentes».' },
+  ];
+  const END = 23.3;
+  B.forEach((b, i) => { b.e = i < B.length - 1 ? B[i + 1].s : END; b.gap = i === 5 || i === 4 ? 1.5 : 1.1; });
+  // Cámara: se desplaza de marcador en marcador (ease apple); el último salto cruza el corte de escala.
+  const cam = (t) => { let c = -420; B.forEach((b, i) => { const a = i === 0 ? 0.2 : b.s - 0.3; const z = i === 0 ? 1.6 : b.s + (i === 5 ? 1.6 : 1.1);
+    c = lerp(c, b.wx, eA(seg(t, a, z))); }); return c; };
+
+  // dust cercano (parallax 1,5) y puntos lejanos (0,3)
+  const r = M.rng(7), DUST = [];
+  for (let i = 0; i < 46; i++) DUST.push({ x: r() * 2400, y: 200 + r() * 700, s: 1 + r() * 1.8, a: 0.1 + r() * 0.2, ph: r() * TAU });
+  const FAR = [];
+  for (let i = 0; i < 40; i++) FAR.push({ x: r() * 2400, y: 240 + r() * 600, a: 0.05 + r() * 0.07 });
+  const rc = M.rng(21), CL = [];
+  for (let i = 0; i < 30; i++) { const a = rc() * TAU, d = Math.sqrt(rc()) * 62; CL.push({ x: Math.cos(a) * d, y: Math.sin(a) * d * 0.7, ph: rc() * TAU, s: 2 + rc() * 2 }); }
+
+  // sonido: un tick por marcador, un whoosh en el salto grande, un shimmer en la cifra
+  B.forEach((b, i) => M.sfx(b.s + (i === 0 ? 0.9 : 0.75), 'tick', { gain: -1 }));
+  M.sfx(B[5].s - 0.2, 'whoosh', { dur: 1.4, peak: 0.35 });
+  M.sfx(B[3].s + 0.75, 'scan', { dur: 1.0, from: 700, to: 2600, gain: -4 });
+  M.sfx(B[5].s + 1.4, 'shimmer', { gain: -5 });
+  tl.to({ v: 0 }, { v: 1, duration: 23, ease: 'none' }, 0.3);
+  tl.fromTo('#fade', { opacity: 1 }, { opacity: 0, duration: 0.5, ease: 'appleOut' }, 0);
+  tl.to('#fade', { opacity: 1, duration: 0.33, ease: 'appleIn' }, 23.65);
+
+  // íconos mínimos por marcador (centro x,y; tamaño s)
+  function icon(i, x, y, s, col, a, t) {
+    ctx.save(); ctx.translate(x, y); ctx.strokeStyle = rgba(col, a); ctx.fillStyle = rgba(col, a); ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    const k = s / 70;
+    if (i === 0) { // aviso: ondas desde un punto
+      ctx.beginPath(); ctx.arc(-30 * k, 24 * k, 6 * k, 0, TAU); ctx.fill();
+      for (let n = 1; n <= 3; n++) { ctx.beginPath(); ctx.arc(-30 * k, 24 * k, (22 * n) * k, -Math.PI / 2 + 0.15, 0 - 0.15); ctx.stroke(); }
+    } else if (i === 1) { // alerta
+      ctx.beginPath(); ctx.moveTo(0, -42 * k); ctx.lineTo(42 * k, 30 * k); ctx.lineTo(-42 * k, 30 * k); ctx.closePath(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, -12 * k); ctx.lineTo(0, 8 * k); ctx.stroke(); ctx.beginPath(); ctx.arc(0, 20 * k, 2.5 * k, 0, TAU); ctx.fill();
+    } else if (i === 2) { // declaración conjunta: dos anillos que se enlazan
+      ctx.beginPath(); ctx.arc(-20 * k, 0, 32 * k, 0, TAU); ctx.stroke(); ctx.beginPath(); ctx.arc(20 * k, 0, 32 * k, 0, TAU); ctx.stroke();
+    } else if (i === 3) { // 9 CVE: cuadrícula 3x3
+      for (let gx = 0; gx < 3; gx++) for (let gy = 0; gy < 3; gy++) { ctx.fillRect((gx - 1) * 28 * k - 9 * k, (gy - 1) * 28 * k - 9 * k, 18 * k, 18 * k); }
+    } else if (i === 4) { // revisión: lupa
+      ctx.beginPath(); ctx.arc(-6 * k, -6 * k, 28 * k, 0, TAU); ctx.stroke(); ctx.beginPath(); ctx.moveTo(14 * k, 14 * k); ctx.lineTo(40 * k, 40 * k); ctx.stroke();
+    } else { // enjambre: nube de puntos
+      for (const p of CL) { ctx.beginPath(); ctx.arc((p.x + Math.sin(t * 0.8 + p.ph) * 4) * k, (p.y + Math.cos(t * 0.7 + p.ph) * 4) * k, p.s * k * 0.9, 0, TAU); ctx.fill(); }
+    }
+    ctx.restore();
+  }
+
+  M.onFrame((t) => {
+    bg(ctx, t, { grid: 0.04 * eO(seg(t, 0.2, 1.2)) });
+    const c = cam(t), appear = eO(seg(t, 0.2, 1.2));
+    const sx = (wx) => CX + (wx - c);
+
+    // capa lejana
+    for (const p of FAR) { const x = (((p.x - c * 0.3) % 2400) + 2400) % 2400 - 240; ctx.fillStyle = rgba(PAL.CYAN, p.a * appear); ctx.fillRect(x, p.y, 3, 3); }
+
+    // línea base tenue y tramo iluminado hasta la cámara
+    const x0 = sx(-900), x1 = sx(B[5].wx + 900);
+    ctx.lineWidth = 3; ctx.strokeStyle = rgba(PAL.INK, 0.28 * appear);
+    ctx.beginPath(); ctx.moveTo(Math.max(x0, -20), Y); ctx.lineTo(Math.min(sx(2990 + 40), 1960), Y); ctx.stroke();
+    ctx.setLineDash([10, 16]); ctx.beginPath(); ctx.moveTo(sx(3030), Y); ctx.lineTo(sx(3950), Y); ctx.stroke(); ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(sx(3990), Y); ctx.lineTo(Math.min(x1, 1960), Y); ctx.stroke();
+    const litEnd = sx(clamp(c, 0, 99999));
+    ctx.lineWidth = 4; ctx.strokeStyle = rgba(PAL.INK, 0.8 * appear);
+    if (c > 0) { // el tramo iluminado respeta la interrupción de escala
+      const aEnd = Math.min(c, 2990), bStart = 3030;
+      ctx.beginPath(); ctx.moveTo(sx(0), Y); ctx.lineTo(sx(aEnd), Y); ctx.stroke();
+      if (c > bStart) { ctx.setLineDash([10, 16]); ctx.beginPath(); ctx.moveTo(sx(bStart), Y); ctx.lineTo(sx(Math.min(c, 3950)), Y); ctx.stroke(); ctx.setLineDash([]);
+        if (c > 3990) { ctx.beginPath(); ctx.moveTo(sx(3990), Y); ctx.lineTo(sx(c), Y); ctx.stroke(); } }
+    }
+    // ticks diarios (16 → 29/07)
+    for (let d = 0; d <= 13; d++) { const x = sx(d * DAY); if (x < -20 || x > 1940) continue; const lit = (d * DAY) <= c + 1;
+      ctx.strokeStyle = rgba(PAL.INK, (lit ? 0.7 : 0.3) * appear); ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x, Y - 10); ctx.lineTo(x, Y + 10); ctx.stroke(); }
+    // corte de escala (//) entre el 29/07 y el 26/08
+    { const bx = sx(3490), a = 0.5 * appear; ctx.strokeStyle = rgba(PAL.INK, a); ctx.lineWidth = 3; ctx.beginPath();
+      ctx.moveTo(bx - 14, Y + 22); ctx.lineTo(bx + 2, Y - 22); ctx.moveTo(bx + 4, Y + 22); ctx.lineTo(bx + 20, Y - 22); ctx.stroke(); }
+
+    // marcadores
+    B.forEach((b, i) => {
+      const x = sx(b.wx); if (x < -160 || x > 2080) return;
+      const uIn = eO(seg(t, b.s + 0.45, b.s + 1.1)), uOut = i < 5 ? eA(seg(t, b.e + 0.3, b.e + 0.9)) : 0;
+      const on = uIn * (1 - 0.65 * uOut);                    // 1 foco, luego queda tenue
+      // fantasma (aún no llegó)
+      ctx.strokeStyle = rgba(b.col, 0.24 * appear * (1 - uIn)); ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(x, Y, 13, 0, TAU); ctx.stroke();
+      // fecha bajo el marcador
+      text(ctx, b.date, x, Y + 70, F_D, b.col, (0.35 * appear * (1 - uIn) + on * (0.45 + 0.55 * (1 - uOut))), { align: 'center', glow: 6 * uIn * (1 - uOut) });
+      if (uIn <= 0) return;
+      // tallo e ícono
+      const stem = 120 * uIn; ctx.strokeStyle = rgba(b.col, 0.85 * on); ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(x, Y - 18); ctx.lineTo(x, Y - 18 - stem); ctx.stroke();
+      if (i !== 5) icon(i, x, Y - 175 - 12 * (1 - uIn), 72, b.col, on * (0.35 + 0.65 * (1 - uOut)), t);
+      else icon(i, x, Y - 205, 120 * (0.6 + 0.4 * uIn), b.col, on * 0.55, t);
+      // núcleo
+      ctx.fillStyle = rgba(b.col, 1 * on); ctx.beginPath(); ctx.arc(x, Y, 8 + 6 * (1 - uOut), 0, TAU); ctx.fill();
+      ctx.strokeStyle = rgba(b.col, 0.95 * on); ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, Y, 17 + 5 * (1 - uOut), 0, TAU); ctx.stroke();
+      // pulso de llegada
+      const pu = seg(t, b.s + 0.9, b.s + 2.1);
+      if (pu > 0 && pu < 1) { ctx.strokeStyle = rgba(b.col, 0.7 * (1 - pu)); ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(x, Y, 18 + 80 * eO(pu), 0, TAU); ctx.stroke(); }
+    });
+
+    // cifra del último beat (protagonista)
+    { const b = B[5], u = eO(seg(t, b.s + 1.3, b.s + 2.2)), x = sx(b.wx);
+      text(ctx, '700', x, Y - 255 + 18 * (1 - u), F_N, PAL.CYAN, u, { align: 'center', glow: 16 });
+      text(ctx, 'AGENTES', x, Y - 215 + 18 * (1 - u) + 40, F_S, PAL.CYAN, u * 0.9, { align: 'center', spacing: '8px', glow: 8 }); }
+
+    // capa cercana (parallax 1,5)
+    for (const p of DUST) { const x = (((p.x - c * 1.5) % 2400) + 2400) % 2400 - 240, y = p.y + Math.sin(t * 0.6 + p.ph) * 6;
+      ctx.fillStyle = rgba(PAL.INK, p.a * appear); ctx.beginPath(); ctx.arc(x, y, p.s, 0, TAU); ctx.fill(); }
+
+    // titular, leyenda y sello por beat
+    B.forEach((b, i) => {
+      const ti = eO(seg(t, b.s + 0.15, b.s + 0.75)), to = 1 - eI(seg(t, b.e - 0.3, b.e)), a = ti * to;
+      const li = eO(seg(t, b.s + 0.25, b.s + 0.85)), lo = 1 - eI(seg(t, b.e - 0.25, b.e)), la = li * lo;
+      text(ctx, b.title.toUpperCase(), 120, 168 - 22 * (1 - ti), F_T, PAL.INK, a, { glow: 6 });
+      text(ctx, b.leg, 120, 985 - 14 * (1 - li), F_L, PAL.INK, la * 0.92, { glow: 0 });
+      text(ctx, b.stamp, 1800, 150, F_S, b.col, a, { align: 'right', spacing: '6px', glow: 10 });
+    });
+    bloom(ctx, cv, { k: 0.72 });
+  });
+});
+</script>
+</body>
+</html>

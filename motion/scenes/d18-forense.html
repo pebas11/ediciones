@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>D18 · Forense</title>
+<link rel="stylesheet" href="../lib/theme.css">
+<link rel="stylesheet" href="../lib/fonts-spartan.css">
+<style>
+  body { background: #05070D; }
+  #cv { position: absolute; inset: 0; }
+  #grain { position: absolute; inset: -20px; opacity: 0.05; mix-blend-mode: overlay; pointer-events: none; }
+  #vig { position: absolute; inset: 0; background: radial-gradient(120% 110% at 50% 48%, transparent 50%, rgba(2,3,6,0.7) 100%); pointer-events: none; }
+  #fade { position: absolute; inset: 0; background: #05070D; opacity: 1; }
+</style>
+</head>
+<body>
+<div id="world">
+  <canvas id="cv" width="1920" height="1080"></canvas>
+  <div id="vig"></div>
+  <canvas id="grain" width="512" height="512" style="width:1960px;height:1120px"></canvas>
+  <div id="fade"></div>
+</div>
+<script src="../node_modules/gsap/dist/gsap.min.js"></script>
+<script src="../node_modules/gsap/dist/SplitText.min.js"></script>
+<script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
+<script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
+<script src="../lib/stage.js"></script>
+<script src="../lib/audio.js"></script>
+<script src="../lib/neon.js"></script>
+<script>
+/* D18 · Forense (20 s, sin voz).
+   1 0,4–6,4   carga cifrada (ámbar) entra a los modelos comerciales: rechazo, "NO" rojo
+   2 6,5–12    la carga va al cluster propio de HF: GLM-5.2 de pesos abiertos la acepta
+   3 12–19,3   GLM recupera XOR + compresión, la carga se descifra; barras 1× (escaneo en bruto) vs 4× */
+M.scene({ duration: 20, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed: { cycle: 8, bright: 0.7, sub: 0.25 } } }, async (tl, M) => {
+  const $ = (s) => document.querySelector(s);
+  const cv = $('#cv'), ctx = cv.getContext('2d');
+  { const g = $('#grain').getContext('2d'); const im = g.createImageData(512, 512); const rn = M.rng(5);
+    for (let i = 0; i < im.data.length; i += 4) { const v = 128 + (rn() - 0.5) * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+    g.putImageData(im, 0, 0); }
+  const F_T = '700 100px "League Spartan"', F_N = '800 150px "League Spartan"', F_BIG = '800 180px "League Spartan"', F_M = '700 54px "League Spartan"';
+  const F_C = '500 40px "DM Sans"', F_L = '500 26px "DM Mono"';
+  await Promise.all([
+    document.fonts.load(F_T, 'SE NEGARON A AYUDAR 4× MÁS'), document.fonts.load(F_BIG, '1×4×NO'), document.fonts.load(F_M, 'GLM-5.2'),
+    document.fonts.load(F_C, 'Los modelos comerciales ñó'), document.fonts.load(F_L, 'XOR COMPRESIÓN ESCANEO EN BRUTO · JULIO'),
+  ]);
+
+  const { PAL, rgba, bloom, bg, text } = Neon;
+  const TAU = Math.PI * 2;
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, m) => a + (b - a) * m;
+  const seg = (t, a, b) => clamp((t - a) / (b - a));
+  const eA = gsap.parseEase('apple'), eO = gsap.parseEase('appleOut'), eI = gsap.parseEase('appleIn');
+
+  const rr = (x, y, w, h, r) => { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); };
+  const hex = (cx, cy, R) => { ctx.beginPath(); for (let i = 0; i < 6; i++) { const a = TAU / 6 * i + TAU / 12; const x = cx + Math.cos(a) * R, y = cy + Math.sin(a) * R; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); } ctx.closePath(); };
+  const glow = (col, a, b) => { ctx.shadowColor = rgba(col, a); ctx.shadowBlur = b; };
+  const noGlow = () => { ctx.shadowBlur = 0; ctx.shadowColor = 'transparent'; };
+
+  // ---- carga cifrada: cuadrícula de celdas 8×5
+  const rb = M.rng(7), CELL = []; for (let i = 0; i < 40; i++) CELL.push([rb(), rb()]);
+  function blob(cx, cy, s, col, a, mode, t) {
+    if (a <= 0.01 || s <= 0.02) return;
+    const step = 18 * s, c = 14 * s, w = 8 * step, h = 5 * step;
+    const ph = Math.floor(t * 14);
+    ctx.save(); glow(col, a * 0.8, 12 * s);
+    for (let i = 0; i < 40; i++) {
+      const gx = i % 8, gy = (i / 8) | 0;
+      let v;
+      if (mode === 'enc') v = ((CELL[i][0] * 7 + ph * 0.37 * (1 + CELL[i][1])) % 1);          // ruido que parpadea
+      else v = (gx + gy) % 3 === 0 ? 0.95 : 0.35 + 0.2 * CELL[i][0];                         // estructura legible
+      ctx.fillStyle = rgba(col, a * (0.2 + 0.8 * (mode === 'enc' ? (v > 0.5 ? 0.9 : 0.25) : v)));
+      ctx.fillRect(cx - w / 2 + gx * step, cy - h / 2 + gy * step, c, c);
+    }
+    ctx.restore();
+  }
+  const key = (cx, cy, a, col) => { if (a <= 0.01) return; ctx.save(); glow(col, a, 14); ctx.strokeStyle = rgba(col, a); ctx.lineWidth = 4; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.arc(cx - 20, cy, 15, 0, TAU); ctx.moveTo(cx - 5, cy); ctx.lineTo(cx + 34, cy); ctx.moveTo(cx + 20, cy); ctx.lineTo(cx + 20, cy + 14); ctx.moveTo(cx + 34, cy); ctx.lineTo(cx + 34, cy + 11); ctx.stroke(); ctx.restore(); };
+
+  // ---- geometría
+  const LB = { x: 330, y: 300, w: 600, h: 460 };                 // modelos comerciales
+  const HFC = { x: 1420, y: 540 };                                  // cluster de HF
+  const HR = 56, HEX = [];
+  for (let q = -2; q <= 2; q++) for (let r2 = -2; r2 <= 2; r2++) { if (Math.abs(q + r2) > 2) continue;
+    HEX.push({ x: HFC.x + HR * 1.732 * (q + r2 / 2) , y: HFC.y + HR * 1.5 * r2, d: Math.max(Math.abs(q), Math.abs(r2), Math.abs(q + r2)) }); }
+  const PIPE_Y = 430, GLM0 = { x: HFC.x, y: HFC.y }, GLM1 = { x: 290, y: PIPE_Y };
+  const XOR = { x: 760, w: 220, h: 124 }, CMP = { x: 1160, w: 300, h: 124 }, OUTK = 1600;
+  const Y_ROW1 = 640, Y_ROW2 = 770, BH = 70, BX = 420, UNIT = 300;
+
+  // ---- sonido (pocos, con motivo)
+  M.sfx(0.85, 'tick', { gain: 0 });
+  M.sfx(3.0, 'riser', { dur: 1.1, semis: 5 });
+  M.sfx(3.0, 'impact', { weight: 0.7, gain: -3 });
+  M.sfx(6.6, 'tick', { gain: -1 });
+  M.sfx(7.7, 'whoosh', { dur: 1.2, peak: 0.4 });
+  M.sfx(9.2, 'tap', { deg: 4, oct: 5, bright: 0.7 });
+  M.sfx(12.25, 'tick', { gain: -1 });
+  M.sfx(13.0, 'tap', { deg: 0, oct: 5 }); M.sfx(13.6, 'tap', { deg: 2, oct: 5 });
+  M.sfx(14.0, 'scan', { dur: 1.6, from: 600, to: 3000, q: 5 });
+  M.sfx(15.8, 'grow', { dur: 1.3, density: 90 });
+  M.sfx(17.0, 'shimmer', { gain: -5 });
+  [[0.3, 1.5], [6.4, 7.6], [12, 13.4], [15.8, 17.1]].forEach(([a, b]) => tl.to({ v: 0 }, { v: 1, duration: b - a, ease: 'none' }, a));
+  tl.fromTo('#fade', { opacity: 1 }, { opacity: 0, duration: 0.5, ease: 'appleOut' }, 0);
+  tl.to('#fade', { opacity: 1, duration: 0.33, ease: 'appleIn' }, 19.67);
+
+  const TIT = [
+    [0.7, 6.4, 'SE NEGARON A AYUDAR', PAL.RED],
+    [6.6, 12.0, 'PESOS ABIERTOS, EN CASA', PAL.GREEN],
+    [12.2, 19.3, '4× MÁS SECRETOS', PAL.AMBER],
+  ];
+  const CAP = [
+    [0.9, 6.3, ['Los modelos comerciales se negaron:', 'no distinguían respondedor de atacante.']],
+    [6.7, 12.0, ['Hugging Face usó GLM-5.2, de pesos abiertos,', 'en su propia infraestructura.']],
+    [12.4, 19.3, ['Recuperó el esquema XOR y compresión', 'de cada campaña.']],
+  ];
+  const win = (t, a, b) => eO(seg(t, a, a + 0.6)) * (1 - eI(seg(t, b - 0.4, b)));
+
+  M.onFrame((t) => {
+    bg(ctx, t, { grid: 0.045 * eO(seg(t, 0.2, 1.2)) });
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+
+    // ===== modelos comerciales (izquierda) =====
+    const Lin = eO(seg(t, 0.5, 1.4));
+    const L = Lin * (1 - 0.72 * eA(seg(t, 6.4, 7.2))) * (1 - eA(seg(t, 12.0, 12.8)));
+    const rej = eO(seg(t, 3.0, 3.5));                                  // rechazo
+    if (L > 0.01) {
+      const redK = rej * (1 - 0.35 * seg(t, 3.6, 5.0));
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = rgba(rej > 0.02 ? PAL.RED : PAL.INK, (rej > 0.02 ? 0.95 * redK : 0.55) * L); rr(LB.x, LB.y, LB.w, LB.h, 22); ctx.stroke();
+      text(ctx, 'MODELOS COMERCIALES', LB.x, LB.y - 26, F_L, PAL.INK, 0.75 * L, { spacing: '3px', glow: 6 });
+      // respondedor (hexágono) y atacante (triángulo): para el modelo son lo mismo
+      const gA = eO(seg(t, 1.5, 2.2)) * L;
+      ctx.lineWidth = 3.5; ctx.strokeStyle = rgba(PAL.INK, 0.85 * gA);
+      hex(LB.x + 190, LB.y + 100, 40); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(LB.x + 410, LB.y + 64); ctx.lineTo(LB.x + 452, LB.y + 136); ctx.lineTo(LB.x + 368, LB.y + 136); ctx.closePath(); ctx.stroke();
+      text(ctx, '=', LB.x + 300, LB.y + 118, '700 70px "League Spartan"', PAL.INK, 0.85 * gA, { align: 'center', glow: 6 });
+      // NO rojo
+      if (rej > 0.01) {
+        const sc = 0.82 + 0.18 * rej, cx = LB.x + 300, cy = LB.y + 300;
+        ctx.save(); ctx.translate(cx, cy); ctx.scale(sc, sc); glow(PAL.RED, 0.9 * rej * L, 26);
+        ctx.strokeStyle = rgba(PAL.RED, rej * L); ctx.lineWidth = 9; ctx.beginPath(); ctx.arc(0, 0, 112, 0, TAU * rej); ctx.stroke(); noGlow();
+        ctx.restore();
+        text(ctx, 'NO', cx, cy + 52 * sc, F_N, PAL.RED, rej * L, { align: 'center', glow: 24 });
+      }
+    }
+
+    // ===== cluster propio de HF (derecha) =====
+    const Hghost = 0.14 * eO(seg(t, 0.8, 1.8));
+    const Hlit = eA(seg(t, 6.5, 8.2));
+    const Hfade = 1 - 0.95 * eA(seg(t, 12.0, 13.0));
+    for (const h of HEX) {
+      if (h.d === 0) continue;
+      const lit = clamp((Hlit * 3.2 - (3 - h.d) * 0.7 - 0.0) , 0, 1);
+      const a = (Hghost + (0.6 - Hghost) * lit) * Hfade;
+      if (a < 0.01) continue;
+      ctx.lineWidth = 2.5; ctx.strokeStyle = rgba(PAL.GREEN, a); hex(h.x, h.y, HR - 5); ctx.stroke();
+      if (lit > 0.5) { ctx.fillStyle = rgba(PAL.GREEN, 0.07 * lit * Hfade); ctx.fill(); }
+    }
+    // red de enlaces que se enciende desde el centro
+    if (Hlit > 0.05 && Hfade > 0.02) { ctx.strokeStyle = rgba(PAL.GREEN, 0.22 * Hlit * Hfade); ctx.lineWidth = 2; ctx.beginPath();
+      for (const h of HEX) if (h.d === 1) { ctx.moveTo(HFC.x, HFC.y); ctx.lineTo(h.x, h.y); } ctx.stroke(); }
+
+    // ===== GLM-5.2 =====
+    const gIn = eO(seg(t, 6.9, 7.8));
+    const gm = eA(seg(t, 12.4, 13.4));
+    const gx = lerp(GLM0.x, GLM1.x, gm), gy = lerp(GLM0.y, GLM1.y, gm);
+    if (gIn > 0.01) {
+      const acc = Math.max(0, 1 - seg(t, 9.0, 10.2));
+      const w = 270, h = 108, sc = 0.9 + 0.1 * gIn;
+      ctx.save(); ctx.translate(gx, gy); ctx.scale(sc, sc);
+      ctx.fillStyle = rgba(PAL.BG, 0.96 * gIn); rr(-w / 2, -h / 2, w, h, 18); ctx.fill();
+      glow(PAL.GREEN, 0.85 * gIn, 22 + 20 * acc); ctx.strokeStyle = rgba(PAL.GREEN, gIn); ctx.lineWidth = 4; rr(-w / 2, -h / 2, w, h, 18); ctx.stroke(); noGlow();
+      ctx.restore();
+      text(ctx, 'GLM-5.2', gx, gy + 18, F_M, PAL.INK, gIn, { align: 'center', glow: 10 });
+      // pesos abiertos: matriz de puntos bajo el nombre
+      const wa = eO(seg(t, 7.6, 8.6)) * (1 - 0.5 * seg(t, 12.4, 13.2));
+      if (wa > 0.01) { for (let j = 0; j < 3; j++) for (let i = 0; i < 9; i++) { const on = (Math.sin(t * 2.2 + i * 0.9 + j * 1.7) > 0.2) ? 0.95 : 0.35;
+        ctx.fillStyle = rgba(PAL.GREEN, wa * on); ctx.beginPath(); ctx.arc(gx - 56 + i * 14, gy + h / 2 + 24 + j * 14, 3.2, 0, TAU); ctx.fill(); } }
+      if (acc > 0.01 && t > 9.0) { ctx.strokeStyle = rgba(PAL.GREEN, 0.8 * acc); ctx.lineWidth = 3; rr(-w / 2 + gx - 20 - 60 * (1 - acc) , gy - h / 2 - 20 - 20 * (1 - acc), w + 40 + 120 * (1 - acc), h + 40 + 40 * (1 - acc), 26); ctx.stroke(); }
+    }
+
+    // ===== carga cifrada (ámbar): rechazada, luego viaja a GLM =====
+    {
+      const bin = eO(seg(t, 0.9, 1.6));
+      let bx, by, bs = 1, ba = bin, mode = 'enc';
+      if (t < 2.0) { bx = 190; by = 590; }
+      else if (t < 3.1) { const u = eI(seg(t, 2.0, 3.0)); bx = lerp(190, LB.x - 6, u); by = 590; }
+      else if (t < 4.3) { const u = eA(seg(t, 3.1, 4.2)); bx = lerp(LB.x - 6, 190, u); by = lerp(590, 850, u); ba = bin * lerp(1, 0.6, u); }
+      else if (t < 7.6) { bx = 190; by = 850; ba = bin * 0.6; }
+      else if (t < 9.3) { const u = eA(seg(t, 7.6, 9.2)); const m = 1 - u;
+        bx = m * m * 190 + 2 * m * u * 1420 + u * u * 1420; by = m * m * 850 + 2 * m * u * 880 + u * u * 600; ba = bin * lerp(0.6, 1, seg(u, 0, 0.3)); bs = 1 - 0.65 * eI(seg(t, 8.9, 9.3)); }
+      else bs = 0;
+      if (t < 13.4 && bs > 0.02) {
+        if (t > 12.4) { ba *= 1 - seg(t, 12.4, 13.0); }
+        blob(bx, by, bs * 0.85, PAL.AMBER, ba, mode, t);
+      }
+      if (t > 9.2 && t < 10.2) { const u = seg(t, 9.2, 10.2); ctx.strokeStyle = rgba(PAL.GREEN, 0.7 * (1 - u)); ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(HFC.x, 600, 30 + 150 * eO(u), 0, TAU); ctx.stroke(); }
+    }
+
+    // ===== beat 3: tubería XOR → compresión → claves =====
+    const P_in = eO(seg(t, 12.6, 13.4));
+    if (P_in > 0.01) {
+      const xo = eO(seg(t, 13.0, 13.5)), co = eO(seg(t, 13.6, 14.1));
+      const blk = (cx, w, h, lab, on) => {
+        ctx.save(); ctx.fillStyle = rgba(PAL.BG, 0.9 * P_in); rr(cx - w / 2, PIPE_Y - h / 2, w, h, 16); ctx.fill();
+        glow(PAL.GREEN, on * 0.8, 18); ctx.lineWidth = 3.5; ctx.strokeStyle = rgba(PAL.GREEN, (0.28 + 0.72 * on) * P_in); rr(cx - w / 2, PIPE_Y - h / 2, w, h, 16); ctx.stroke(); ctx.restore();
+        text(ctx, lab, cx, PIPE_Y + 9, F_L, PAL.GREEN, (0.35 + 0.65 * on) * P_in, { align: 'center', spacing: '4px', glow: 8 });
+      };
+      // enlaces
+      const link = (x0, x1, a) => { ctx.strokeStyle = rgba(PAL.GREEN, a * P_in); ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(x0, PIPE_Y); ctx.lineTo(x1, PIPE_Y); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x1 - 14, PIPE_Y - 9); ctx.lineTo(x1, PIPE_Y); ctx.lineTo(x1 - 14, PIPE_Y + 9); ctx.stroke(); };
+      link(GLM1.x + 140, XOR.x - XOR.w / 2 - 8, 0.2 + 0.5 * xo);
+      link(XOR.x + XOR.w / 2 + 8, CMP.x - CMP.w / 2 - 8, 0.2 + 0.5 * co);
+      link(CMP.x + CMP.w / 2 + 8, OUTK - 130, 0.2 + 0.5 * co);
+      blk(XOR.x, XOR.w, XOR.h, 'XOR', xo);
+      blk(CMP.x, CMP.w, CMP.h, 'COMPRESIÓN', co);
+      // cargas que fluyen (dos, escalonadas)
+      for (let k = 0; k < 2; k++) {
+        const a0 = 13.9 + k * 0.55, u = seg(t, a0, a0 + 1.9);
+        if (u <= 0 || u >= 1) continue;
+        const x = lerp(520, OUTK - 110, eA(u));
+        const inCmp = seg(x, CMP.x - CMP.w / 2, CMP.x + CMP.w / 2);
+        const s = 0.55 + 0.45 * inCmp, plain = x > XOR.x + 40;
+        const al = Math.min(1, seg(u, 0, 0.08) * 1) * (1 - seg(u, 0.92, 1));
+        blob(x, PIPE_Y, s * 0.78, PAL.AMBER, al * (plain ? 1 : 0.7), plain ? 'plain' : 'enc', t);
+      }
+      // claves recuperadas
+      for (let i = 0; i < 4; i++) { const a = eO(seg(t, 15.7 + i * 0.22, 16.4 + i * 0.22));
+        key(OUTK - 30 + (i % 2) * 150, PIPE_Y - 40 + ((i / 2) | 0) * 84 + 20 * (1 - a), a, PAL.AMBER); }
+    }
+
+    // ===== barras 1× vs 4× =====
+    {
+      const r1 = eO(seg(t, 14.6, 15.3)), n1 = eO(seg(t, 14.4, 15.0));
+      const seg4 = [0, 1, 2, 3].map((i) => eA(seg(t, 15.8 + i * 0.28, 16.3 + i * 0.28)));
+      const n4 = eO(seg(t, 15.8, 16.6)), hold = 1 - eI(seg(t, 19.35, 19.65));
+      // fila 1: escaneo en bruto (tenue)
+      text(ctx, '1×', 120, Y_ROW1 + BH / 2 + 56, '800 160px "League Spartan"', PAL.INK, 0.55 * n1 * hold, { glow: 6 });
+      if (r1 > 0.01) { const w = UNIT * r1; ctx.fillStyle = rgba(PAL.AMBER, 0.28 * hold); rr(BX, Y_ROW1, w, BH, 10); ctx.fill();
+        ctx.strokeStyle = rgba(PAL.AMBER, 0.55 * hold); ctx.lineWidth = 2.5; rr(BX, Y_ROW1, w, BH, 10); ctx.stroke(); }
+      text(ctx, 'ESCANEO EN BRUTO', BX + UNIT + 26, Y_ROW1 + BH / 2 + 9, F_L, PAL.INK, 0.6 * r1 * hold, { spacing: '3px', glow: 6 });
+      // fila 2: GLM-5.2 (foco)
+      text(ctx, '4×', 120, Y_ROW2 + BH / 2 + 66, F_BIG, PAL.AMBER, n4 * hold, { glow: 22 });
+      for (let i = 0; i < 4; i++) { const sw = seg4[i]; if (sw <= 0.01) continue; const x0 = BX + i * UNIT, w = (UNIT - 8) * sw;
+        ctx.save(); glow(PAL.AMBER, 0.9 * hold, 20); ctx.fillStyle = rgba(PAL.AMBER, 0.88 * hold); rr(x0, Y_ROW2, w, BH, 10); ctx.fill(); ctx.restore(); }
+      text(ctx, 'GLM-5.2', BX + 4 * UNIT + 14, Y_ROW2 + BH / 2 + 9, F_L, PAL.GREEN, seg4[3] * hold, { spacing: '3px', glow: 10 });
+    }
+
+    // ===== titular, leyenda, sello =====
+    for (const [a, b, s, col] of TIT) { const w = win(t, a, b); if (w > 0.01) text(ctx, s, 120, 150 + 22 * (1 - eO(seg(t, a, a + 0.7))), F_T, col, w, { glow: 12 }); }
+    for (const [a, b, ls] of CAP) { const w = win(t, a, b); if (w > 0.01) ls.forEach((l, i) => text(ctx, l, 120, 962 + i * 52, F_C, PAL.INK, w * 0.95, { glow: 4 })); }
+    text(ctx, 'FORENSE · JULIO DE 2026', 1800, 110, F_L, PAL.GREEN, eO(seg(t, 0.9, 1.7)) * (1 - eI(seg(t, 19.3, 19.65))) * 0.9, { align: 'right', spacing: '5px', glow: 10 });
+
+    bloom(ctx, cv, { k: 0.62 });
+  });
+});
+</script>
+</body>
+</html>

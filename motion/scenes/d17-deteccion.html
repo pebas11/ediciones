@@ -67,10 +67,10 @@ M.scene({ duration: 20, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed:
   const CAPL = CAP.map((c) => wrap(c[2], 1500));
 
   // ---------- Geometría ----------
-  const LY = [290, 370, 450, 530];                 // carriles (capas)
+  const LY = [290, 395, 500, 605];                 // carriles (capas)
   const NX = [330, 520, 710, 900];                 // nodo sensor por capa
-  const COR = { x: 1230, y: 410, r: 66 };          // correlación por IA
-  const TLY = 800, TX0 = 160, TX1 = 1760;          // línea de tiempo
+  const COR = { x: 1230, y: 447, r: 80 };          // correlación por IA
+  const TLY = 820, TX0 = 160, TX1 = 1760;          // línea de tiempo
   const hexPath = (c, x, y, r, rot = -Math.PI / 2) => { c.beginPath(); for (let k = 0; k < 6; k++) { const a = rot + k * TAU / 6; c[k ? 'lineTo' : 'moveTo'](x + r * Math.cos(a), y + r * Math.sin(a)); } c.closePath(); };
   const bez = (p0, p1, p2, p3, u) => { const v = 1 - u; return { x: v*v*v*p0.x + 3*v*v*u*p1.x + 3*v*u*u*p2.x + u*u*u*p3.x, y: v*v*v*p0.y + 3*v*v*u*p1.y + 3*v*u*u*p2.y + u*u*u*p3.y }; };
   // carril i: recta hasta x=1020, luego curva hasta la correlación
@@ -92,10 +92,10 @@ M.scene({ duration: 20, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed:
   const rr = M.rng(41), TR = []; for (let i = 0; i < 14; i++) TR.push({ a: rr() * TAU, d: 20 + rr() * 60, sp: 0.5 + rr(), s: 1.4 + rr() * 1.6 });
 
   // beat 3: cluster verde de HF
-  const CL = { x: 1160, y: 440, R: 64 };
+  const CL = { x: 1200, y: 440, R: 86 };
   const CLN = [{ x: CL.x, y: CL.y }]; for (let k = 0; k < 6; k++) { const a = k * TAU / 6; CLN.push({ x: CL.x + 1.732 * CL.R * Math.cos(a), y: CL.y + 1.732 * CL.R * Math.sin(a) }); }
   const REN = CLN[4];                              // k=3 -> ángulo 180°: borde izquierdo
-  const WALL = 700;
+  const WALL = 640;
   const T_FLAG = 14.1, T_OFF = 15.0, T_CUT = 15.7;
   const rs = M.rng(7), ST = []; for (let i = 0; i < 26; i++) ST.push({ ph: rs(), sp: 0.12 + rs() * 0.1, dy: (rs() - 0.5) * 70, s: 2 + rs() * 2 });
 
@@ -175,7 +175,7 @@ M.scene({ duration: 20, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed:
         ang.forEach((a0, k) => { const a = a0 + 0.4; ctx.beginPath(); ctx.arc(COR.x + 18 * Math.cos(a), COR.y + 18 * Math.sin(a), 3.5, 0, TAU); ctx.fill(); });
       }
       // compuertas: criticidad y guardia, apagadas
-      const g1 = { x: 1580, y: 330 }, g2 = { x: 1580, y: 490 };
+      const g1 = { x: 1580, y: 345 }, g2 = { x: 1580, y: 560 };
       if (gate > 0.003) {
         // enlaces discontinuos que no llegan
         const stop = 0.62 * eO(seg(t, 8.8, 10.0));
@@ -183,7 +183,7 @@ M.scene({ duration: 20, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed:
         [g1, g2].forEach((g) => { ctx.beginPath(); ctx.moveTo(COR.x + COR.r, COR.y); const e = { x: lerp(COR.x + COR.r, g.x - 80, stop / 0.62), y: lerp(COR.y, g.y, stop) }; ctx.lineTo(e.x, e.y); ctx.stroke(); });
         ctx.setLineDash([]);
         const xm = eO(seg(t, 9.8, 10.4));
-        [[1500, 392], [1500, 428]].forEach(([x, y]) => drawX(x + 12, y, 11 * xm, PAL.RED, 0.9 * xm * upA, 4));
+        [[1500, 420], [1500, 480]].forEach(([x, y]) => drawX(x + 12, y, 11 * xm, PAL.RED, 0.9 * xm * upA, 4));
         // medidor de criticidad: un solo segmento tenue
         for (let k = 0; k < 5; k++) { const yy = g1.y + 40 - k * 20; ctx.lineWidth = 2.5; ctx.strokeStyle = rgba(PAL.GREEN, (k === 0 ? 0.55 : 0.22) * gate * upA);
           ctx.strokeRect(g1.x - 34, yy - 7, 68, 14); if (k === 0) { ctx.fillStyle = rgba(PAL.GREEN, 0.28 * gate * upA); ctx.fillRect(g1.x - 34, yy - 7, 68, 14); } }
@@ -213,7 +213,7 @@ M.scene({ duration: 20, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed:
         const mid = (X.corr + xe) / 2, ca = eO(seg(t, 11.3, 11.9)) * tlA;
         ctx.strokeStyle = rgba(PAL.RED, 0.55 * ca); ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(X.corr, TLY - 32); ctx.lineTo(X.corr, TLY - 44); ctx.lineTo(xe, TLY - 44); ctx.lineTo(xe, TLY - 32); ctx.stroke();
         // reloj
-        const cx = mid, cy = TLY - 112, cr = 44;
+        const cx = mid, cy = TLY - 102, cr = 44;
         ctx.lineWidth = 4; ctx.strokeStyle = rgba(PAL.RED, 0.95 * ca); ctx.beginPath(); ctx.arc(cx, cy, cr, 0, TAU); ctx.stroke();
         for (let k = 0; k < 12; k++) { const a = k * TAU / 12 - Math.PI / 2; ctx.lineWidth = 2; ctx.strokeStyle = rgba(PAL.RED, 0.5 * ca); ctx.beginPath(); ctx.moveTo(cx + (cr - 8) * Math.cos(a), cy + (cr - 8) * Math.sin(a)); ctx.lineTo(cx + (cr - 3) * Math.cos(a), cy + (cr - 3) * Math.sin(a)); ctx.stroke(); }
         const ha = -Math.PI / 2 + (t - 10.9) * 2.2, hb = ha / 12;
