@@ -150,7 +150,7 @@ M.scene({ duration: 24, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed:
     const redA = 0.95 * (1 - 0.55 * seg(t, 3.2, 5));
     if (boxA > 0.001) {
       drawBox(BOX, WX, EY, boxA, 16 + 16 * crack, crack, redA);
-      text(ctx, 'PROXY', WX + 26, EY - 46, F_M, PAL.INK, boxA * 0.55 * eO(seg(t, 1.0, 1.8)) * (1 - eI(seg(t, 5.4, 6.0))), { spacing: '4px', glow: 4 });
+      text(ctx, 'PROXY', WX + 44, EY - 88, F_M, PAL.INK, boxA * 0.55 * eO(seg(t, 1.0, 1.8)) * (1 - eI(seg(t, 5.4, 6.0))), { spacing: '4px', glow: 4 });
       // objetivo imposible (idea 2)
       const ta = eO(seg(t, 6.5, 7.4)) * (1 - eA(seg(t, 11.8, 12.4)));
       if (ta > 0.002) {
