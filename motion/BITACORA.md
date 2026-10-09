@@ -113,3 +113,10 @@ Son 5 animaciones útiles como B-roll para narración, **sin ningún texto en pa
 - Brief: `BRIEF-LLM.md`. Escenas c01-tokens, c02-embeddings, c03-atencion, c04-capas, c05-prediccion, c06-entrenamiento (≈93 s, estilo a03/b03, con sonido).
 - Renders FONDO+AUDIO por escena y unión `renders/llm_COMPLETO_ENTREGA.mp4` (15 MB, concat con ffmpeg).
 - Pulidos opcionales: c04 columna final de 96 capas muy fina (`SF`), holds cortos en c03/c05/c06.
+
+### Serie 7: El enjambre que escapó (OpenAI → Hugging Face), 09/10. CONSTRUIDA Y ENVIADA
+- Pedido: video riguroso de principio a fin, sin voz, estilo serie LLM pero con glow/neón (excepción explícita a la regla anti-glow).
+- Hechos: `FICHA-HF.md` (niveles A/B/C, fuentes primarias HF, METR, OpenAI). Brief: `BRIEF-HF.md`. Neón: `lib/neon.js` (bloom aditivo).
+- 23 escenas `scenes/d00..d22` (≈7 min 28 s). Renders `renders/dNN_FONDO.mp4`; entrega en 3 partes `hf_PARTE{1,2,3}_ENTREGA.mp4` (<30 MB) y `hf_COMPLETO_ENTREGA.mp4` (77 MB, solo en el repo).
+- Pulidos pendientes: muchos diagramas ocupan solo un tercio del cuadro (d03, d04, d05, d08, d17, d21), leyendas de 40–44 px se leen chicas, audio sin escuchar, d06 pesa 38 MB.
+- Lección: `render.mjs` no tiene `--help` ni `--frames`: cualquier flag desconocido lanza un render completo y pisa renders. Con 6 agentes en paralelo la carga sube a ~35.
