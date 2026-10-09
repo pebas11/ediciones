@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>D02 · Objetivos imposibles</title>
+<link rel="stylesheet" href="../lib/theme.css">
+<link rel="stylesheet" href="../lib/fonts-spartan.css">
+<style>
+  body { background: #05070D; }
+  #cv { position: absolute; inset: 0; }
+  #grain { position: absolute; inset: -20px; opacity: 0.05; mix-blend-mode: overlay; pointer-events: none; }
+  #vig { position: absolute; inset: 0; background: radial-gradient(120% 110% at 50% 48%, transparent 50%, rgba(2,3,6,0.7) 100%); pointer-events: none; }
+  #fade { position: absolute; inset: 0; background: #05070D; opacity: 1; }
+</style>
+</head>
+<body>
+<div id="world">
+  <canvas id="cv" width="1920" height="1080"></canvas>
+  <div id="vig"></div>
+  <canvas id="grain" width="512" height="512" style="width:1960px;height:1120px"></canvas>
+  <div id="fade"></div>
+</div>
+<script src="../node_modules/gsap/dist/gsap.min.js"></script>
+<script src="../node_modules/gsap/dist/SplitText.min.js"></script>
+<script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
+<script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
+<script src="../lib/stage.js"></script>
+<script src="../lib/audio.js"></script>
+<script src="../lib/neon.js"></script>
+<script>
+/* Serie 7 · d02 Objetivos imposibles (18 s). Hechos: FICHA-HF "Quién y por qué" (A, METR).
+   1 0,4–5,7   cuadrícula de 898 objetivos; 30–40 % se apagan en rojo (foco: celdas rojas + cifra)
+   2 5,9–11,5  ingeniería inversa de las flags; el agente cree que el evaluador mira su método (foco: escaneo cian)
+   3 11,8–17,6 el evaluador no revisaba nada: el ojo apunta a la nada (foco: el ojo violeta) */
+M.scene({ duration: 18, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed: { cycle: 8, bright: 0.7, sub: 0.25 } } }, async (tl, M) => {
+  const $ = (s) => document.querySelector(s);
+  const cv = $('#cv'), ctx = cv.getContext('2d');
+  { const g = $('#grain').getContext('2d'); const im = g.createImageData(512, 512); const rn = M.rng(5);
+    for (let i = 0; i < im.data.length; i += 4) { const v = 128 + (rn() - 0.5) * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+    g.putImageData(im, 0, 0); }
+  const F_H = '700 96px "League Spartan"', F_N = '800 176px "League Spartan"', F_C = '500 42px "DM Sans"', F_S = '500 28px "DM Mono"', F_L = '500 26px "DM Mono"';
+  await Promise.all([
+    document.fonts.load(F_H, 'OBJETIVOS IMPOSIBLES INGENIERÍA INVERSA NADIE MIRABA'),
+    document.fonts.load(F_N, '30–40 %'),
+    document.fonts.load(F_C, 'Entre 30 y 40 % de los objetivos no se podía explotar. Dedujeron cómo se generan las flags.'),
+    document.fonts.load(F_S, 'ESTIMACIÓN DE METR DE 898 VULNERABILIDADES'),
+  ]);
+
+  const { PAL, rgba, bloom, bg, text } = Neon;
+  const TAU = Math.PI * 2;
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, m) => a + (b - a) * m;
+  const seg = (t, a, b) => clamp((t - a) / (b - a));
+  const eA = gsap.parseEase('apple'), eO = gsap.parseEase('appleOut'), eI = gsap.parseEase('appleIn');
+  const win = (t, a, b, fi = 0.6, fo = 0.4) => eO(seg(t, a, a + fi)) * (1 - eI(seg(t, b - fo, b)));
+
+  /* ---- Beat 1: 898 objetivos (38 × 24, pitch 24) ---- */
+  const N = 898, COLS = 38, PITCH = 24, CELL = 19, GX = 120, GY = 268;
+  const order = Array.from({ length: N }, (_, i) => i);
+  { const r = M.rng(7); for (let i = N - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; } }
+  const rank = new Array(N); order.forEach((c, k) => { rank[c] = k; });
+  const R30 = Math.round(N * 0.30), R40 = Math.round(N * 0.40);
+  const jit = M.rng(13), JIT = Array.from({ length: N }, () => jit() * 0.35);
+
+  /* ---- Beats 2–3: agente, flag, evaluador ---- */
+  const A = { x: 330, y: 680 };
+  const FL = { x: 640, y: 620, c: 8, r: 3, p: 40, s: 33 };
+  const fr = M.rng(21); const FBITS = Array.from({ length: FL.c * FL.r }, () => fr() < 0.55);
+  const EYE = { x: 1000, y: 390, w: 300, h: 190 };
+  const T1 = { x: 470, y: 680 }, T2 = { x: 1580, y: 262 };
+  const routeX = (m) => lerp(A.x + 26, FL.x - 14, m);
+
+  // sonido: un cue por idea
+  M.sfx(0.5, 'tick');
+  M.sfx(1.9, 'grow', { dur: 1.7, density: 70, gain: -2 });
+  M.sfx(3.3, 'shimmer', { gain: -6 });
+  M.sfx(5.95, 'tick');
+  M.sfx(6.7, 'scan', { dur: 1.7, from: 600, to: 3200, q: 5 });
+  M.sfx(8.75, 'tap', { deg: 2, oct: 5, gain: -2 });
+  M.sfx(11.85, 'tick');
+  M.sfx(12.4, 'whoosh', { dur: 1.0, dir: 1, peak: 0.35 });
+  M.sfx(12.0, 'riser', { dur: 1.1, semis: 7, gain: -3 });
+  M.sfx(13.5, 'impact', { weight: 0.6, gain: -5 });
+  [[0.3, 5.7], [5.7, 11.7], [11.7, 17.6]].forEach(([a, b]) => tl.to({ v: 0 }, { v: 1, duration: b - a, ease: 'none' }, a));
+  tl.fromTo('#fade', { opacity: 1 }, { opacity: 0, duration: 0.5, ease: 'appleOut' }, 0);
+  tl.to('#fade', { opacity: 1, duration: 0.3, ease: 'appleIn' }, 17.7);
+
+  function eye(cx, cy, w, h, look, a) {
+    ctx.save();
+    ctx.beginPath(); ctx.moveTo(cx - w / 2, cy); ctx.quadraticCurveTo(cx, cy - h, cx + w / 2, cy); ctx.quadraticCurveTo(cx, cy + h, cx - w / 2, cy); ctx.closePath();
+    ctx.fillStyle = rgba(PAL.BG, 0.85 * a); ctx.fill();
+    ctx.save(); ctx.clip();
+    const ix = cx + look.x * 62, iy = cy + look.y * 34;
+    ctx.strokeStyle = rgba(PAL.VIOLET, 0.95 * a); ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(ix, iy, 50, 0, TAU); ctx.stroke();
+    ctx.strokeStyle = rgba(PAL.VIOLET, 0.35 * a); ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(ix, iy, 33, 0, TAU); ctx.stroke();
+    ctx.fillStyle = rgba(PAL.INK, a); ctx.beginPath(); ctx.arc(ix, iy, 17, 0, TAU); ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = rgba(PAL.VIOLET, 0.95 * a); ctx.lineWidth = 4; ctx.lineJoin = 'round'; ctx.stroke();
+    ctx.restore();
+    return { x: cx + look.x * 62, y: cy + look.y * 34 };
+  }
+  function beam(p, T, a, spread, dash) {
+    const dx = T.x - p.x, dy = T.y - p.y, L = Math.hypot(dx, dy), nx = -dy / L, ny = dx / L;
+    ctx.fillStyle = rgba(PAL.VIOLET, 0.10 * a); ctx.beginPath(); ctx.moveTo(p.x, p.y);
+    ctx.lineTo(T.x + nx * spread, T.y + ny * spread); ctx.lineTo(T.x - nx * spread, T.y - ny * spread); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = rgba(PAL.VIOLET, 0.7 * a); ctx.lineWidth = 2; ctx.setLineDash(dash); ctx.beginPath();
+    ctx.moveTo(p.x, p.y); ctx.lineTo(T.x + nx * spread, T.y + ny * spread); ctx.moveTo(p.x, p.y); ctx.lineTo(T.x - nx * spread, T.y - ny * spread); ctx.stroke(); ctx.setLineDash([]);
+  }
+
+  M.onFrame((t) => {
+    bg(ctx, t, { grid: 0.045 * eO(seg(t, 0.2, 1.2)) });
+
+    /* ===== Cuadrícula (beat 1; queda de fondo tenue) ===== */
+    const gridIn = eO(seg(t, 0.5, 1.5));
+    const dim = lerp(1, 0.08, eA(seg(t, 5.5, 6.4)));
+    const R = dim < 0.99 ? 1 : 1;
+    for (let i = 0; i < N; i++) {
+      const col = i % COLS, row = (i / COLS) | 0;
+      const x = GX + col * PITCH, y = GY + row * PITCH;
+      const ap = clamp(gridIn * 1.4 - (col + row) / 80 * 0.4);
+      const rk = rank[i];
+      let fill = rgba(PAL.VIOLET, 0.30 * ap * (0.6 + 0.4 * dim));
+      if (rk < R30) {
+        const k = seg(t, 1.9 + rk / R30 * 1.7 + JIT[i], 2.3 + rk / R30 * 1.7 + JIT[i]);
+        if (k > 0) {
+          const flash = Math.sin(clamp(k * 1.0) * Math.PI);
+          const c = [lerp(PAL.VIOLET[0], PAL.RED[0], eO(k)), lerp(PAL.VIOLET[1], PAL.RED[1], eO(k)), lerp(PAL.VIOLET[2], PAL.RED[2], eO(k))];
+          fill = rgba(c, (0.30 + 0.62 * eO(k) + 0.2 * flash) * ap * dim);
+        }
+      }
+      ctx.fillStyle = fill; ctx.fillRect(x, y, CELL, CELL);
+      if (rk >= R30 && rk < R40) {
+        const k = eO(seg(t, 3.8 + (rk - R30) / (R40 - R30) * 0.5, 4.3 + (rk - R30) / (R40 - R30) * 0.5));
+        if (k > 0) { ctx.strokeStyle = rgba(PAL.RED, (0.55 + 0.25 * Math.sin(t * 3 + i)) * k * dim); ctx.lineWidth = 1.6; ctx.strokeRect(x + 1, y + 1, CELL - 2, CELL - 2); }
+      }
+    }
+
+    /* cifra protagonista */
+    const nA = eO(seg(t, 3.0, 3.9)) * (1 - eI(seg(t, 5.2, 5.8)));
+    text(ctx, '30–40 %', 1110, 600 - 18 * (1 - eO(seg(t, 3.0, 3.9))), F_N, PAL.RED, nA, { glow: 14 });
+    text(ctx, 'DE 898 VULNERABILIDADES', 1114, 664, F_S, PAL.INK, nA * 0.75, { spacing: '3px', glow: 6 });
+
+    /* ===== Beat 2–3: agente · flag · evaluador ===== */
+    const aA = win(t, 6.0, 17.7, 0.8, 0.3);
+    if (aA > 0.004) {
+      const b3 = eA(seg(t, 12.2, 13.0));          // el foco pasa al ojo
+      const focus2 = 1 - 0.55 * b3;                // atenúa lo cian en el beat 3
+      // ruta recorrida (cómo lo resolvió)
+      const rp = eO(seg(t, 6.4, 7.2));
+      ctx.strokeStyle = rgba(PAL.CYAN, 0.55 * aA * focus2); ctx.lineWidth = 3; ctx.setLineDash([2, 12]); ctx.lineDashOffset = -t * 30; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(routeX(0), A.y); ctx.lineTo(routeX(rp), A.y); ctx.stroke(); ctx.setLineDash([]);
+      // flag: celdas
+      const fA = eO(seg(t, 6.2, 7.0)) * aA;
+      const scanX = lerp(FL.x - 10, FL.x + FL.c * FL.p, eA(seg(t, 6.8, 8.5)));
+      const scanning = t > 6.8 && t < 8.6;
+      for (let j = 0; j < FL.c * FL.r; j++) {
+        const cx = FL.x + (j % FL.c) * FL.p, cy = FL.y + ((j / FL.c) | 0) * FL.p;
+        const done = t > 6.8 && scanX > cx + FL.s / 2;
+        const fl = done ? Math.max(0, 1 - (scanX - cx) / 140) : 0;     // destello al pasar el escaneo
+        const base = done ? PAL.AMBER : PAL.INK;
+        const al = (FBITS[j] ? (done ? 0.55 : 0.35) : 0.14) * fA * (done ? 1 : 1) * (1 - 0.5 * b3 * (done ? 1 : 0));
+        if (fl > 0 && FBITS[j]) { ctx.fillStyle = rgba(PAL.CYAN, 0.9 * fl * fA * focus2); ctx.fillRect(cx - 1, cy - 1, FL.s + 2, FL.s + 2); }
+        if (FBITS[j]) { ctx.fillStyle = rgba(base, al); ctx.fillRect(cx, cy, FL.s, FL.s); }
+        else { ctx.strokeStyle = rgba(base, al * 1.8); ctx.lineWidth = 1.6; ctx.strokeRect(cx + 0.8, cy + 0.8, FL.s - 1.6, FL.s - 1.6); }
+      }
+      if (scanning) {
+        const sa = fA * (1 - eI(seg(t, 8.2, 8.6)));
+        ctx.strokeStyle = rgba(PAL.CYAN, 0.95 * sa); ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.moveTo(scanX, FL.y - 22); ctx.lineTo(scanX, FL.y + FL.r * FL.p + 12); ctx.stroke();
+      }
+      text(ctx, 'FLAG', FL.x + FL.c * FL.p / 2 - 6, FL.y + FL.r * FL.p + 62, F_L, PAL.AMBER, fA * 0.8 * (1 - 0.5 * b3), { align: 'center', spacing: '5px', glow: 6 });
+      // agente
+      const ag = eO(seg(t, 6.0, 6.8)) * aA;
+      ctx.strokeStyle = rgba(PAL.CYAN, 0.6 * ag * focus2); ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(A.x, A.y, 24 + 4 * Math.sin(t * 3), 0, TAU); ctx.stroke();
+      ctx.fillStyle = rgba(PAL.CYAN, ag * (0.55 + 0.45 * focus2)); ctx.beginPath(); ctx.arc(A.x, A.y, 11, 0, TAU); ctx.fill();
+      text(ctx, 'AGENTE', A.x, A.y + 76, F_L, PAL.CYAN, ag * 0.75 * focus2, { align: 'center', spacing: '5px', glow: 6 });
+      // pulso que recorre la ruta (el agente avanza)
+      if (t > 8.6) { const pm = ((t - 8.6) % 2.4) / 2.4, pa = eO(seg(t, 8.6, 9.4)) * aA * focus2;
+        ctx.fillStyle = rgba(PAL.CYAN, pa * (1 - Math.abs(pm - 0.5) * 1.2)); ctx.beginPath(); ctx.arc(routeX(pm), A.y, 6, 0, TAU); ctx.fill(); }
+
+      // evaluador (ojo): creencia (beat 2b) y realidad (beat 3)
+      const eyeA = eO(seg(t, 8.6, 9.5)) * aA;
+      if (eyeA > 0.004) {
+        const sw = eA(seg(t, 12.4, 13.5));
+        const T = { x: lerp(T1.x, T2.x, sw), y: lerp(T1.y, T2.y, sw) };
+        const dx = T.x - EYE.x, dy = T.y - EYE.y, L = Math.hypot(dx, dy);
+        const look = { x: dx / L, y: dy / L };
+        const hot = lerp(0.8, 1, b3);
+        const pup = eye(EYE.x, EYE.y, EYE.w, EYE.h, look, eyeA * hot);
+        // haz: en el beat 2 recae sobre la ruta; en el 3 se va hacia la nada
+        const gone = eA(seg(t, 13.3, 14.4));
+        beam(pup, T, eyeA * (1 - 0.65 * gone) * (0.7 + 0.3 * b3), lerp(34, 46, sw), [10, 10]);
+        // vacío al que apunta
+        const vA = eO(seg(t, 13.0, 13.9)) * aA;
+        if (vA > 0.004) {
+          ctx.strokeStyle = rgba(PAL.INK, 0.45 * vA); ctx.lineWidth = 2.5; ctx.setLineDash([6, 12]); ctx.lineDashOffset = -t * 14;
+          ctx.beginPath(); ctx.arc(T2.x, T2.y, 46, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
+        }
+        text(ctx, 'EVALUADOR', EYE.x, EYE.y + EYE.h / 2 + 62, F_L, PAL.VIOLET, eyeA * 0.9, { align: 'center', spacing: '5px', glow: 8 });
+      }
+    }
+
+    /* ===== Texto ===== */
+    // titulares (x=120, y=150)
+    const hs = [['OBJETIVOS IMPOSIBLES', 0.4, 5.6], ['INGENIERÍA INVERSA', 5.9, 11.4], ['NADIE MIRABA', 11.8, 17.6]];
+    for (const [s, a, b] of hs) { const w = win(t, a, b, 0.7, 0.4); text(ctx, s, 120, 150 + 14 * (1 - eO(seg(t, a, a + 0.7))), F_H, s === 'NADIE MIRABA' ? PAL.VIOLET : PAL.INK, w, { glow: 8 }); }
+    // sello
+    text(ctx, 'ESTIMACIÓN DE METR', 1800, 150, F_S, PAL.INK, win(t, 0.6, 17.6, 0.8, 0.4) * 0.7, { align: 'right', spacing: '4px', glow: 4 });
+    // leyendas (y 945 / 995)
+    const cap = (s, y, a, b) => { const w = win(t, a, b, 0.6, 0.4); text(ctx, s, 120, y + 12 * (1 - eO(seg(t, a, a + 0.6))), F_C, PAL.INK, w * 0.95, { glow: 3 }); };
+    cap('Entre 30 y 40 % de los objetivos no se podía explotar.', 970, 0.9, 5.6);
+    cap('Dedujeron cómo se generan las flags.', 945, 6.1, 11.4);
+    cap('Creían que el evaluador comprobaría el método.', 995, 8.7, 11.4);
+    cap('Era un error: el evaluador no revisaba transcripciones.', 970, 12.2, 17.6);
+
+    bloom(ctx, cv, { k: 0.6 });
+  });
+});
+</script>
+</body>
+</html>

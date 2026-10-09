@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>D01 · El experimento</title>
+<link rel="stylesheet" href="../lib/theme.css">
+<link rel="stylesheet" href="../lib/fonts-spartan.css">
+<style>
+  body { background: #05070D; }
+  #cv { position: absolute; inset: 0; }
+  #grain { position: absolute; inset: -20px; opacity: 0.05; mix-blend-mode: overlay; pointer-events: none; }
+  #vig { position: absolute; inset: 0; background: radial-gradient(120% 110% at 50% 48%, transparent 50%, rgba(2,3,6,0.7) 100%); pointer-events: none; }
+  #fade { position: absolute; inset: 0; background: #05070D; opacity: 1; }
+</style>
+</head>
+<body>
+<div id="world">
+  <canvas id="cv" width="1920" height="1080"></canvas>
+  <div id="vig"></div>
+  <canvas id="grain" width="512" height="512" style="width:1960px;height:1120px"></canvas>
+  <div id="fade"></div>
+</div>
+<script src="../node_modules/gsap/dist/gsap.min.js"></script>
+<script src="../node_modules/gsap/dist/SplitText.min.js"></script>
+<script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
+<script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
+<script src="../lib/stage.js"></script>
+<script src="../lib/audio.js"></script>
+<script src="../lib/neon.js"></script>
+<script>
+/* D01 · El experimento (18 s, sin voz). Capítulo 1.
+   1 0,3–5,6   ExploitGym: 898 celdas, tres familias (software de usuario, V8, kernel) · foco: pulso por familia
+   2 5,8–11,4  dos modelos: 95 % interno / 5 % GPT-5.6 Sol, barra de proporción · foco: barra cian
+   3 11,6–17,2 rechazos de ciberseguridad reducidos: un control baja · foco: perilla roja */
+M.scene({ duration: 18, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed: { cycle: 8, bright: 0.7, sub: 0.25 } } }, async (tl, M) => {
+  const $ = (s) => document.querySelector(s);
+  const cv = $('#cv'), ctx = cv.getContext('2d');
+  { const g = $('#grain').getContext('2d'); const im = g.createImageData(512, 512); const rn = M.rng(5);
+    for (let i = 0; i < im.data.length; i += 4) { const v = 128 + (rn() - 0.5) * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+    g.putImageData(im, 0, 0); }
+  const F_H = '700 96px "League Spartan"', F_N = '700 200px "League Spartan"', F_N2 = '700 168px "League Spartan"';
+  const F_L = '500 44px "DM Sans"', F_M = '500 26px "DM Mono"', F_M2 = '500 30px "DM Mono"';
+  await Promise.all([
+    document.fonts.load(F_H, 'EXPLOITGYM DOS MODELOS RECHAZOS REDUCIDOS'), document.fonts.load(F_N, '0123456789 %'),
+    document.fonts.load(F_L, 'Aaáéíóúñ'), document.fonts.load(F_M, 'SEGÚN REPORTES OPENAI VULNERABILIDADES'),
+  ]);
+
+  const { PAL, rgba, bloom, bg, text } = Neon;
+  const TAU = Math.PI * 2;
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, m) => a + (b - a) * m;
+  const seg = (t, a, b) => clamp((t - a) / (b - a));
+  const eA = gsap.parseEase('apple'), eO = gsap.parseEase('appleOut'), eI = gsap.parseEase('appleIn');
+  const ph = (t, a, b, d = 0.6) => eO(seg(t, a, a + d)) * (1 - eI(seg(t, b - 0.4, b)));   // entra, se mantiene, sale
+
+  // ---- cuadrícula de 898 celdas
+  const COLS = 41, PITCH = 22, GX = 120, GY = 300, N = 898;
+  const rg = M.rng(21), cells = [];
+  for (let i = 0; i < N; i++) {
+    const c = i % COLS, r = (i / COLS) | 0;
+    cells.push({ x: GX + c * PITCH + PITCH / 2, y: GY + r * PITCH + PITCH / 2, f: Math.floor(rg() * 3), d: 0.5 + (c + r) * 0.026 + rg() * 0.35 });
+  }
+  const bump = (t, a, b) => eO(seg(t, a, a + 0.25)) * (1 - eA(seg(t, b - 0.35, b)));
+  function shape(f, x, y, col, a) {
+    ctx.fillStyle = rgba(col, a); ctx.beginPath();
+    if (f === 0) ctx.rect(x - 6, y - 6, 12, 12);
+    else if (f === 1) ctx.arc(x, y, 6.8, 0, TAU);
+    else { ctx.moveTo(x, y - 7.5); ctx.lineTo(x + 7, y + 5.5); ctx.lineTo(x - 7, y + 5.5); ctx.closePath(); }
+    ctx.fill();
+  }
+  const CH = [{ x: 120, s: 'SOFTWARE DE USUARIO' }, { x: 520, s: 'V8' }, { x: 650, s: 'KERNEL DE LINUX' }];
+
+  // ---- sonido (un motivo por cue)
+  M.sfx(0.45, 'tick', { gain: -2 });
+  M.sfx(0.6, 'scan', { dur: 1.9, from: 400, to: 2600 });
+  M.sfx(3.0, 'tap', { deg: 0, oct: 5 }); M.sfx(3.8, 'tap', { deg: 2, oct: 5 }); M.sfx(4.6, 'tap', { deg: 4, oct: 5 });
+  M.sfx(5.95, 'tick', { gain: -2 });
+  M.sfx(6.6, 'grow', { dur: 1.4, gain: -4 });
+  M.sfx(7.7, 'shimmer', { gain: -6 });
+  M.sfx(11.75, 'tick', { gain: -2 });
+  M.sfx(12.4, 'whoosh', { dur: 1.5, peak: 0.35, gain: -3 });
+  M.sfx(14.0, 'swell', { dur: 1.3 });
+  M.sfx(14.0, 'impact', { weight: 0.7, gain: -4 });
+  [[0.3, 5.6], [5.8, 11.4], [11.6, 17.2]].forEach(([a, b]) => tl.to({ v: 0 }, { v: 1, duration: b - a, ease: 'none' }, a));
+  tl.fromTo('#fade', { opacity: 1 }, { opacity: 0, duration: 0.5, ease: 'appleOut' }, 0);
+  tl.to('#fade', { opacity: 1, duration: 0.33, ease: 'appleIn' }, 17.67);
+
+  const leyenda = (lines, a, y0 = 925) => lines.forEach((s, i) => text(ctx, s, 120, y0 + i * 56, F_L, PAL.INK, a * 0.95, { glow: 4 }));
+
+  M.onFrame((t) => {
+    bg(ctx, t, { grid: 0.04 * eO(seg(t, 0.2, 1.2)) });
+    const a1 = ph(t, 0.3, 5.6), a2 = ph(t, 5.8, 11.4), a3 = ph(t, 11.6, 17.2);
+    const gridOut = 1 - eI(seg(t, 16.8, 17.3));
+    const dim = lerp(1, 0.55, eA(seg(t, 5.8, 6.8)));
+
+    // ===== cuadrícula
+    const env = eO(seg(t, 2.9, 3.2)) * (1 - eO(seg(t, 5.1, 5.5)));
+    const w = [0, 1, 2].map((f) => bump(t, 3.0 + 0.8 * f, 3.0 + 0.8 * f + 0.9));
+    for (const c of cells) {
+      const rev = eO(seg(t, c.d, c.d + 0.55));
+      if (rev <= 0) continue;
+      const a = lerp(0.5, lerp(0.14, 1, w[c.f]), env) * rev * dim * gridOut;
+      shape(c.f, c.x, c.y, PAL.INK, a);
+    }
+    // marco tenue de la cuadrícula
+    ctx.strokeStyle = rgba(PAL.INK, 0.12 * eO(seg(t, 0.8, 1.6)) * dim * gridOut); ctx.lineWidth = 2;
+    ctx.strokeRect(GX - 14, GY - 14, COLS * PITCH + 28, 22 * PITCH + 28);
+    // familias (bloques de leyenda con su forma)
+    CH.forEach((c, f) => {
+      const ca = eO(seg(t, 2.6 + 0.12 * f, 3.4 + 0.12 * f)) * (1 - eA(seg(t, 5.7, 6.4))) * gridOut;
+      if (ca <= 0) return;
+      const hl = lerp(0.7, lerp(0.4, 1, w[f]), env);
+      shape(f, c.x + 11, 850, PAL.INK, ca * hl);
+      text(ctx, c.s, c.x + 34, 859, F_M, PAL.INK, ca * hl, { spacing: '2px', glow: w[f] * env * 10 });
+    });
+    // 898 (cifra protagonista)
+    const nA = eO(seg(t, 1.6, 2.4)) * (1 - eI(seg(t, 5.2, 5.7)));
+    if (nA > 0) {
+      const n = Math.round(N * eO(seg(t, 1.8, 3.2)));
+      text(ctx, String(n), 1100, 540, F_N, PAL.INK, nA, { glow: 14 });
+      text(ctx, 'VULNERABILIDADES', 1108, 596, F_M2, PAL.INK, nA * 0.75, { spacing: '4px', glow: 4 });
+    }
+
+    // ===== beat 2: 95 % / 5 %
+    if (a2 > 0.003) {
+      const n95 = eO(seg(t, 6.5, 7.5)), n5 = eO(seg(t, 7.9, 8.8)), bar = eA(seg(t, 6.6, 8.0));
+      text(ctx, 'MODELO INTERNO', 1100, 380, F_M2, PAL.CYAN, a2 * n95, { spacing: '3px', glow: 8 });
+      text(ctx, 'GPT-5.6 SOL', 1800, 380, F_M2, PAL.INK, a2 * n5 * 0.85, { spacing: '3px', align: 'right', glow: 4 });
+      text(ctx, Math.round(95 * eO(seg(t, 6.6, 7.7))) + ' %', 1100, 560, F_N2, PAL.CYAN, a2 * n95, { glow: 18 });
+      text(ctx, Math.round(5 * eO(seg(t, 7.9, 8.8))) + ' %', 1800, 560, F_N2, PAL.INK, a2 * n5 * 0.9, { align: 'right', glow: 8 });
+      // barra de proporción 700 px: 95 % cian macizo, 5 % contorno blanco
+      const BX = 1100, BW = 700, BY = 610, BH = 52, W95 = BW * 0.95 * bar;
+      ctx.fillStyle = rgba(PAL.CYAN, 0.95 * a2); ctx.fillRect(BX, BY, W95, BH);
+      ctx.strokeStyle = rgba(PAL.INK, 0.25 * a2); ctx.lineWidth = 2; ctx.strokeRect(BX, BY, BW, BH);
+      const s5 = eO(seg(t, 7.7, 8.4));
+      if (s5 > 0) { ctx.strokeStyle = rgba(PAL.INK, 0.95 * a2 * s5); ctx.lineWidth = 4;
+        ctx.strokeRect(BX + BW * 0.95 + 2, BY + 2, BW * 0.05 - 4, BH - 4);
+        ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(BX + BW * 0.975, BY); ctx.lineTo(BX + BW * 0.975, 590);
+        ctx.strokeStyle = rgba(PAL.INK, 0.5 * a2 * s5); ctx.stroke(); }
+      // separación de 95 / 5 en la barra
+      ctx.strokeStyle = rgba(PAL.BG, 0.9 * a2 * bar); ctx.lineWidth = 3; ctx.beginPath();
+      ctx.moveTo(BX + BW * 0.95, BY - 2); ctx.lineTo(BX + BW * 0.95, BY + BH + 2); ctx.stroke();
+    }
+
+    // ===== beat 3: control de rechazos
+    if (a3 > 0.003) {
+      const TX = 1450, T0 = 340, T1 = 800, K0 = 385, K1 = 745;
+      const pa = eO(seg(t, 11.8, 12.6)) * a3;
+      ctx.strokeStyle = rgba(PAL.VIOLET, 0.85 * pa); ctx.lineWidth = 3;
+      ctx.strokeRect(1180, 290, 560, 550);
+      // marcas
+      ctx.strokeStyle = rgba(PAL.INK, 0.28 * pa); ctx.lineWidth = 2; ctx.beginPath();
+      for (let i = 0; i <= 10; i++) { const y = T0 + (T1 - T0) * i / 10; ctx.moveTo(TX - 30, y); ctx.lineTo(TX - 16, y); ctx.moveTo(TX + 16, y); ctx.lineTo(TX + 30, y); }
+      ctx.stroke();
+      const k = eA(seg(t, 12.4, 14.0)), ky = lerp(K0, K1, k);
+      // pista y nivel
+      ctx.strokeStyle = rgba(PAL.VIOLET, 0.4 * pa); ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(TX, T0); ctx.lineTo(TX, T1); ctx.stroke();
+      ctx.strokeStyle = rgba(PAL.VIOLET, 0.9 * pa); ctx.lineWidth = 8; ctx.beginPath(); ctx.moveTo(TX, T1); ctx.lineTo(TX, ky); ctx.stroke();
+      // perilla (foco rojo)
+      const land = eO(seg(t, 14.0, 14.6));
+      ctx.fillStyle = rgba(PAL.BG, 1 * pa); ctx.fillRect(TX - 46, ky - 20, 92, 40);
+      ctx.strokeStyle = rgba(PAL.RED, 1 * pa); ctx.lineWidth = 4; ctx.strokeRect(TX - 46, ky - 20, 92, 40);
+      ctx.strokeStyle = rgba(PAL.INK, 0.9 * pa); ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(TX - 22, ky); ctx.lineTo(TX + 22, ky); ctx.stroke();
+      if (land > 0 && land < 1) { ctx.strokeStyle = rgba(PAL.RED, 0.8 * (1 - land) * pa); ctx.lineWidth = 3;
+        ctx.strokeRect(TX - 46 - 40 * land, ky - 20 - 40 * land, 92 + 80 * land, 40 + 80 * land); }
+      // rótulos de los extremos
+      text(ctx, 'ESTÁNDAR', TX - 56, T0 + 8, F_M, PAL.INK, pa * (0.9 - 0.5 * k), { align: 'right', spacing: '2px', glow: 2 });
+      text(ctx, 'REDUCIDOS', TX - 56, T1 + 8, F_M, PAL.RED, pa * (0.45 + 0.55 * k), { align: 'right', spacing: '2px', glow: 8 * k });
+    }
+
+    // ===== titulares, sellos y leyendas
+    const T = (s, a, col = PAL.INK) => text(ctx, s, 120, 150 - 16 * (1 - a), F_H, col, a, { glow: 6 });
+    T('EXPLOITGYM', a1); T('DOS MODELOS', a2); T('RECHAZOS REDUCIDOS', a3);
+    const S = (s, a) => text(ctx, s, 1800, 112, F_M, PAL.INK, a * 0.8, { align: 'right', spacing: '4px', glow: 4 });
+    S('OPENAI', a1); S('OPENAI', a2); S('SEGÚN REPORTES', a3);
+    leyenda(['OpenAI midió capacidades ofensivas', 'con 898 vulnerabilidades reales.'], a1 * eO(seg(t, 0.9, 1.5)));
+    leyenda(['Casi todos los agentes usaban', 'un modelo interno aún sin lanzar.'], a2 * eO(seg(t, 6.3, 6.9)));
+    leyenda(['Los agentes corrían con rechazos de', 'ciberseguridad reducidos, a propósito.'], a3 * eO(seg(t, 12.1, 12.7)));
+
+    bloom(ctx, cv, { k: 0.7 });
+  });
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>D06 · El enjambre</title>
+<link rel="stylesheet" href="../lib/theme.css">
+<link rel="stylesheet" href="../lib/fonts-spartan.css">
+<style>
+  body { background: #05070D; }
+  #cv { position: absolute; inset: 0; }
+  #grain { position: absolute; inset: -20px; opacity: 0.05; mix-blend-mode: overlay; pointer-events: none; }
+  #vig { position: absolute; inset: 0; background: radial-gradient(120% 110% at 50% 48%, transparent 50%, rgba(2,3,6,0.7) 100%); pointer-events: none; }
+  #fade { position: absolute; inset: 0; background: #05070D; opacity: 1; }
+</style>
+</head>
+<body>
+<div id="world">
+  <canvas id="cv" width="1920" height="1080"></canvas>
+  <div id="vig"></div>
+  <canvas id="grain" width="512" height="512" style="width:1960px;height:1120px"></canvas>
+  <div id="fade"></div>
+</div>
+<script src="../node_modules/gsap/dist/gsap.min.js"></script>
+<script src="../node_modules/gsap/dist/SplitText.min.js"></script>
+<script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
+<script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
+<script src="../lib/stage.js"></script>
+<script src="../lib/audio.js"></script>
+<script src="../lib/neon.js"></script>
+<script>
+/* D06 · El enjambre (18 s, sin voz). ~6.000 puntos cian dibujados por lotes (rects).
+   B1 0,4–4,5   decenas de miles de agentes (7–10 JUL): el enjambre crece
+   B2 4,7–9,2   95 / 5: el 5 % se enciende, el 95 % queda tenue
+   B3 9,5–13,7  nodo coordinador: ≈10 % de las asignaciones (rayos + paquetes)
+   B4 13,9–17,6 algunos arriesgan su tarea por el grupo (anillos rojos + tirantes) */
+M.scene({ duration: 18, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed: { cycle: 8, bright: 0.7, sub: 0.25 } } }, async (tl, M) => {
+  const $ = (s) => document.querySelector(s);
+  const cv = $('#cv'), ctx = cv.getContext('2d');
+  { const g = $('#grain').getContext('2d'); const im = g.createImageData(512, 512); const rn = M.rng(5);
+    for (let i = 0; i < im.data.length; i += 4) { const v = 128 + (rn() - 0.5) * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+    g.putImageData(im, 0, 0); }
+  const F_H = '700 96px "League Spartan"', F_N = '800 190px "League Spartan"', F_L = '500 44px "DM Sans"', F_S = '500 28px "DM Mono"';
+  await Promise.all([
+    document.fonts.load(F_H, 'Decenas de miles Dos modelos, un enjambre Un agente coordina Arriesgan por el grupo'),
+    document.fonts.load(F_N, '95 % 5 % 10 %'),
+    document.fonts.load(F_L, 'Decenas de miles de agentes GPT-5.6 Sol ñ'),
+    document.fonts.load(F_S, '7–10 JUL'),
+  ]);
+
+  const { PAL, rgba, bloom, bg, text } = Neon;
+  const TAU = Math.PI * 2;
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, m) => a + (b - a) * m;
+  const seg = (t, a, b) => clamp((t - a) / (b - a));
+  const eA = gsap.parseEase('apple'), eO = gsap.parseEase('appleOut'), eI = gsap.parseEase('appleIn');
+
+  /* ---- enjambre ---- */
+  const N = 7000, CX = 820, CY = 580, RX = 470, RY = 285;
+  const rn = M.rng(77);
+  const R0 = new Float32Array(N), A0 = new Float32Array(N), PH = new Float32Array(N), SP = new Float32Array(N), W = new Float32Array(N), CL = new Uint8Array(N);
+  for (let i = 0; i < N; i++) {
+    R0[i] = Math.pow(rn(), 0.62) * (0.78 + 0.22 * rn());     // disco denso al centro
+    A0[i] = rn() * TAU; PH[i] = rn() * TAU; SP[i] = 0.5 + rn() * 1.1;
+    W[i] = 0.16 * (1.25 - R0[i]);                            // rotación diferencial
+    const q = rn(); CL[i] = q < 0.6 ? 0 : q < 0.9 ? 1 : 2;
+  }
+  const X = new Float32Array(N), Y = new Float32Array(N);
+  const SUB = (i) => i % 20 === 0;                            // el 5 %
+  const SEL = (i) => i % 400 === 7;                           // quienes arriesgan
+  const ASG = []; for (let i = 3; i < N; i += 160) ASG.push(i); // destinos de asignaciones
+  const SELS = []; for (let i = 7; i < N; i += 400) SELS.push(i);
+  const SZ = [1.7, 2.3, 3.1];
+
+  /* ---- guion de texto ---- */
+  const BEATS = [
+    { a: 0.4, b: 4.5, h: 'Decenas de miles', l: 'Decenas de miles de agentes, lanzados en pocos días.' },
+    { a: 4.7, b: 9.3, h: 'Dos modelos, un enjambre', l: '95 %: modelo interno sin lanzar. 5 %: GPT-5.6 Sol.' },
+    { a: 9.5, b: 13.8, h: 'Un agente coordina', l: 'Un coordinador envió cerca del 10 % de las asignaciones.' },
+    { a: 14.0, b: 17.65, h: 'Arriesgan por el grupo', l: 'Algunos arriesgaron su tarea por el grupo.' },
+  ];
+  const beatIn = (b, t) => eO(seg(t, b.a, b.a + 0.65)), beatOut = (b, t) => 1 - eI(seg(t, b.b - 0.35, b.b));
+
+  /* ---- sonido ---- */
+  M.sfx(0.5, 'grow', { dur: 3.0, density: 120 });
+  M.sfx(0.6, 'tick'); M.sfx(4.8, 'tick'); M.sfx(14.1, 'tick');
+  M.sfx(5.3, 'shimmer', { gain: -6 });
+  M.sfx(9.5, 'swell', { dur: 1.1 }); M.sfx(9.5, 'impact', { weight: 0.7, gain: -4 });
+  M.sfx(10.2, 'tick', { gain: -4, pitch: 7 });
+  M.sfx(14.7, 'tap', { deg: 2, oct: 6, gain: -3 }); M.sfx(15.0, 'tap', { deg: 4, oct: 6, gain: -3 }); M.sfx(15.3, 'tap', { deg: 7, oct: 6, gain: -3 });
+  [[0.3, 4.5], [4.7, 9.3], [9.5, 13.8], [14, 17.6]].forEach(([a, b]) => tl.to({ v: 0 }, { v: 1, duration: b - a, ease: 'none' }, a));
+  tl.fromTo('#fade', { opacity: 1 }, { opacity: 0, duration: 0.5, ease: 'appleOut' }, 0);
+  tl.to('#fade', { opacity: 1, duration: 0.33, ease: 'appleIn' }, 17.67);
+
+  M.onFrame((t) => {
+    bg(ctx, t, { grid: 0.04 * eO(seg(t, 0.2, 1.2)) });
+
+    /* estados por beat */
+    const reveal = eO(seg(t, 0.3, 3.4));
+    const spread = lerp(0.3, 1, eO(seg(t, 0.2, 3.6)));
+    const b2 = eA(seg(t, 4.7, 5.5)) * (1 - eA(seg(t, 9.4, 10.2)));        // 5 % encendido
+    const dim = lerp(lerp(lerp(1, 0.55, eA(seg(t, 4.7, 5.5))), 0.4, eA(seg(t, 9.4, 10.2))), 0.42, eA(seg(t, 13.9, 14.7)));
+    const n = Math.floor(N * reveal);
+
+    /* posiciones */
+    for (let i = 0; i < n; i++) {
+      const r = R0[i] * spread * (1 + 0.035 * Math.sin(t * SP[i] + PH[i]));
+      const a = A0[i] + t * W[i];
+      X[i] = CX + Math.cos(a) * r * RX + Math.sin(t * 0.7 * SP[i] + PH[i]) * 3;
+      Y[i] = CY + Math.sin(a) * r * RY + Math.cos(t * 0.6 * SP[i] + PH[i]) * 3;
+    }
+
+    /* 95 %: tres lotes por tamaño */
+    for (let c = 0; c < 3; c++) {
+      const s = SZ[c];
+      ctx.fillStyle = rgba(PAL.CYAN, (0.55 + c * 0.12) * dim);
+      ctx.beginPath();
+      for (let i = 0; i < n; i++) if (CL[i] === c && !SUB(i) && !SEL(i)) ctx.rect(X[i] - s / 2, Y[i] - s / 2, s, s);
+      ctx.fill();
+    }
+    /* 5 %: se enciende en B2 (cian casi blanco) */
+    {
+      const mix = (k) => PAL.CYAN.map((v, j) => v + (PAL.INK[j] - v) * k);
+      const s = lerp(2.3, 4.6, b2);
+      ctx.fillStyle = rgba(mix(0.75 * b2), lerp(0.55 * dim + 0.1, 1, b2));
+      ctx.beginPath();
+      for (let i = 0; i < n; i += 20) ctx.rect(X[i] - s / 2, Y[i] - s / 2, s, s);
+      ctx.fill();
+    }
+
+    /* B3: nodo coordinador, rayos y paquetes */
+    const co = eO(seg(t, 9.4, 10.3)) * (1 - eI(seg(t, 13.6, 14.4)) * 0.75);
+    const coFaint = eA(seg(t, 8.6, 9.4)) * 0.0;
+    if (co > 0.01) {
+      ctx.lineWidth = 1.4;
+      for (let k = 0; k < ASG.length; k++) {
+        const i = ASG[k]; if (i >= n) continue;
+        const rayA = eO(seg(t, 10.0 + (k % 9) * 0.07, 10.9 + (k % 9) * 0.07)) * co;
+        ctx.strokeStyle = rgba(PAL.CYAN, 0.28 * rayA);
+        ctx.beginPath(); ctx.moveTo(CX, CY); ctx.lineTo(X[i], Y[i]); ctx.stroke();
+        // paquete: va del coordinador al agente
+        const ph = ((t * 0.62 + k * 0.173) % 1), pe = eA(ph);
+        ctx.fillStyle = rgba(PAL.INK, 0.95 * rayA * Math.sin(ph * Math.PI));
+        ctx.beginPath(); ctx.arc(lerp(CX, X[i], pe), lerp(CY, Y[i], pe), 3, 0, TAU); ctx.fill();
+        ctx.fillStyle = rgba(PAL.CYAN, 0.9 * rayA); ctx.beginPath(); ctx.arc(X[i], Y[i], 4.2, 0, TAU); ctx.fill();
+      }
+      // pulso y núcleo
+      const pu = ((t - 9.5) * 0.55) % 1;
+      ctx.strokeStyle = rgba(PAL.CYAN, 0.55 * (1 - pu) * co); ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(CX, CY, 24 + pu * 120, 0, TAU); ctx.stroke();
+      ctx.strokeStyle = rgba(PAL.CYAN, 0.95 * co); ctx.lineWidth = 3.5;
+      ctx.beginPath(); ctx.arc(CX, CY, 26, 0, TAU); ctx.stroke();
+      ctx.fillStyle = rgba(PAL.INK, co); ctx.beginPath(); ctx.arc(CX, CY, 12, 0, TAU); ctx.fill();
+    }
+    void coFaint;
+
+    /* B4: los que arriesgan su tarea: anillo rojo + tirante hacia un par */
+    const sa = eO(seg(t, 14.1, 15.0));
+    if (sa > 0.01) {
+      for (let k = 0; k < SELS.length; k++) {
+        const i = SELS[k]; if (i >= n) continue;
+        const j = SELS[(k + 1) % SELS.length]; if (j >= n) continue;
+        const ka = eO(seg(t, 14.1 + k * 0.05, 14.9 + k * 0.05)) * sa;
+        ctx.strokeStyle = rgba(PAL.CYAN, 0.45 * ka); ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.moveTo(X[i], Y[i]); ctx.lineTo(X[j], Y[j]); ctx.stroke();
+        const ph = (t * 0.7 + k * 0.21) % 1;
+        ctx.fillStyle = rgba(PAL.INK, 0.9 * ka * Math.sin(ph * Math.PI));
+        ctx.beginPath(); ctx.arc(lerp(X[i], X[j], eA(ph)), lerp(Y[i], Y[j], eA(ph)), 2.6, 0, TAU); ctx.fill();
+        ctx.fillStyle = rgba(PAL.CYAN, ka); ctx.beginPath(); ctx.arc(X[i], Y[i], 5, 0, TAU); ctx.fill();
+        ctx.strokeStyle = rgba(PAL.RED, 0.95 * ka); ctx.lineWidth = 2.6;
+        ctx.beginPath(); ctx.arc(X[i], Y[i], 12 + 2.5 * Math.sin(t * 4 + k), 0, TAU); ctx.stroke();
+      }
+    }
+
+    /* cifras (League Spartan, ≥ 160 px) */
+    const fig = (s, y, col, a) => text(ctx, s, 1800, y, F_N, col, a, { align: 'right', glow: 10 });
+    const f2 = eO(seg(t, 5.0, 5.9)) * beatOut(BEATS[1], t), f3 = eO(seg(t, 10.0, 10.9)) * beatOut(BEATS[2], t);
+    fig('95 %', 560 - 16 * (1 - eO(seg(t, 5.0, 5.9))), PAL.CYAN, f2 * 0.75);
+    fig('5 %', 790 - 16 * (1 - eO(seg(t, 5.3, 6.2))), PAL.INK, f2 * eO(seg(t, 5.3, 6.2)));
+    fig('10 %', 680 - 16 * (1 - eO(seg(t, 10.0, 10.9))), PAL.INK, f3);
+
+    /* texto: titular, leyenda, sello */
+    for (const b of BEATS) {
+      const a = beatIn(b, t) * beatOut(b, t);
+      if (a <= 0.004) continue;
+      text(ctx, b.h, 120, 160 + 18 * (1 - beatIn(b, t)), F_H, PAL.INK, a, { glow: 8 });
+      text(ctx, b.l, 120, 990 + 12 * (1 - eO(seg(t, b.a + 0.15, b.a + 0.8))), F_L, PAL.INK, beatOut(b, t) * 0.92 * eO(seg(t, b.a + 0.15, b.a + 0.8)), { glow: 4 });
+    }
+    text(ctx, '7–10 JUL', 1800, 110, F_S, PAL.CYAN, eO(seg(t, 0.6, 1.4)) * (1 - eI(seg(t, 17.3, 17.65))) * 0.9, { align: 'right', spacing: '6px', glow: 10 });
+
+    bloom(ctx, cv, { k: 0.75 });
+  });
+});
+</script>
+</body>
+</html>

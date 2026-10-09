@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>D04 · El escape</title>
+<link rel="stylesheet" href="../lib/theme.css">
+<link rel="stylesheet" href="../lib/fonts-spartan.css">
+<style>
+  body { background: #05070D; }
+  #cv { position: absolute; inset: 0; }
+  #grain { position: absolute; inset: -20px; opacity: 0.05; mix-blend-mode: overlay; pointer-events: none; }
+  #vig { position: absolute; inset: 0; background: radial-gradient(120% 110% at 50% 48%, transparent 50%, rgba(2,3,6,0.7) 100%); pointer-events: none; }
+  #fade { position: absolute; inset: 0; background: #05070D; opacity: 1; }
+</style>
+</head>
+<body>
+<div id="world">
+  <canvas id="cv" width="1920" height="1080"></canvas>
+  <div id="vig"></div>
+  <canvas id="grain" width="512" height="512" style="width:1960px;height:1120px"></canvas>
+  <div id="fade"></div>
+</div>
+<script src="../node_modules/gsap/dist/gsap.min.js"></script>
+<script src="../node_modules/gsap/dist/SplitText.min.js"></script>
+<script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
+<script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
+<script src="../lib/stage.js"></script>
+<script src="../lib/audio.js"></script>
+<script src="../lib/neon.js"></script>
+<script>
+/* D04 · El escape (20 s). Sin voz: titular + leyenda + sello.
+   A 0,5–5,4   el enjambre empuja la única salida (proxy de paquetes)
+   B 5,6–10,3  zero-day: el proxy se agrieta en rojo y la pared cede
+   C 10,5–15,4 la ruta cian: escalada, movimiento lateral, nodo con internet
+   D 15,7–19,6 JFrog corrige 9 CVE (27/07) */
+M.scene({ duration: 20, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed: { cycle: 8, bright: 0.7, sub: 0.25 } } }, async (tl, M) => {
+  const $ = (s) => document.querySelector(s);
+  const cv = $('#cv'), ctx = cv.getContext('2d');
+  { const g = $('#grain').getContext('2d'); const im = g.createImageData(512, 512); const rn = M.rng(5);
+    for (let i = 0; i < im.data.length; i += 4) { const v = 128 + (rn() - 0.5) * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+    g.putImageData(im, 0, 0); }
+  const F_T = '700 100px "League Spartan"', F_N = '700 280px "League Spartan"', F_C = '500 44px "DM Sans"', F_S = '500 28px "DM Mono"', F_L = '500 26px "DM Mono"';
+  await Promise.all([document.fonts.load(F_T, 'UNA SOLA SALIDA FALLA DESCONOCIDA 9 CVE'), document.fonts.load(F_N, '9'),
+    document.fonts.load(F_C, 'El enjambre empuja la única salida'), document.fonts.load(F_S, 'SEGÚN REPORTES 27 JUL'), document.fonts.load(F_L, 'ESCALADA LATERAL')]);
+
+  const { PAL, rgba, bloom, bg, text } = Neon;
+  const TAU = Math.PI * 2;
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, m) => a + (b - a) * m;
+  const seg = (t, a, b) => clamp((t - a) / (b - a));
+  const eA = gsap.parseEase('apple'), eO = gsap.parseEase('appleOut'), eI = gsap.parseEase('appleIn');
+
+  // ---- geometría
+  const SB = { x: 160, y: 330, w: 800, h: 480 };           // sandbox violeta
+  const PX = { x: SB.x + SB.w, y: SB.y + SB.h / 2 };       // el proxy, sobre la pared derecha
+  const NET = { x: 1080, y: 360, w: 520, h: 420 };         // red interna (tenue)
+  const NODES = [
+    { x: 1190, y: 470, lab: 'ESCALADA' },
+    { x: 1330, y: 660, lab: 'LATERAL' },
+    { x: 1470, y: 480, lab: '' },
+  ];
+  const WEB = { x: 1730, y: PX.y };                        // nodo con internet
+  const ROUTE = [PX, ...NODES, WEB];
+  const lens = []; let total = 0;
+  for (let i = 1; i < ROUTE.length; i++) { const l = Math.hypot(ROUTE[i].x - ROUTE[i - 1].x, ROUTE[i].y - ROUTE[i - 1].y); lens.push(l); total += l; }
+  function along(p) { // p 0..1 -> punto sobre la ruta
+    let d = clamp(p) * total;
+    for (let i = 0; i < lens.length; i++) { if (d <= lens[i] || i === lens.length - 1) { const m = clamp(d / lens[i]); return { x: lerp(ROUTE[i].x, ROUTE[i + 1].x, m), y: lerp(ROUTE[i].y, ROUTE[i + 1].y, m), i }; } d -= lens[i]; }
+  }
+  const cum = [0]; lens.forEach((l, i) => cum.push(cum[i] + l / total));   // fracción acumulada por nodo
+
+  // enjambre
+  const r = M.rng(11), P = [];
+  for (let i = 0; i < 84; i++) P.push({ x: SB.x + 36 + r() * (SB.w - 90), y: SB.y + 36 + r() * (SB.h - 72), ph: r() * TAU, sp: 0.4 + r() * 0.9, s: 2 + r() * 2.2, k: 0.35 + r() * 0.5 });
+  // grietas rojas (rayos quebrados desde el proxy)
+  const rc = M.rng(29), CR = [];
+  for (let i = 0; i < 9; i++) {
+    const ang = (i / 9) * TAU + (rc() - 0.5) * 0.4, len = 90 + rc() * 90, pts = [[PX.x, PX.y]];
+    let a = ang; for (let k = 1; k <= 4; k++) { a += (rc() - 0.5) * 0.7; const d = (len * k) / 4; pts.push([PX.x + Math.cos(a) * d, PX.y + Math.sin(a) * d]); }
+    CR.push(pts);
+  }
+  // chispas del tramo exterior
+  const rs = M.rng(41), SP = [];
+  for (let i = 0; i < 12; i++) SP.push({ o: i / 12, j: (rs() - 0.5) * 18 });
+
+  // ---- beats de texto
+  const BEATS = [
+    { a: 0.5, b: 5.4, h: 'UNA SOLA SALIDA', c: 'El enjambre empuja la única salida: un proxy de paquetes.', s: 'SEGÚN REPORTES', hc: PAL.INK },
+    { a: 5.6, b: 10.3, h: 'FALLA DESCONOCIDA', c: 'Encuentra un zero-day, una falla desconocida, en ese proxy.', s: 'SEGÚN REPORTES', hc: PAL.RED },
+    { a: 10.5, b: 15.4, h: 'RUTA HACIA INTERNET', c: 'Escala privilegios y se mueve hasta un nodo con internet.', s: 'SEGÚN REPORTES', hc: PAL.CYAN },
+    { a: 15.7, b: 19.6, h: 'JFROG CORRIGE 9 CVE', c: 'Tras el aviso de OpenAI, llegaron las correcciones.', s: '27 JUL', hc: PAL.INK },
+  ];
+  const BREACH = 7.6;
+  const R0 = 10.9, R1 = 14.7;   // recorrido de la ruta
+
+  // ---- sonido (un motivo por cue)
+  BEATS.forEach((b) => M.sfx(b.a + 0.05, 'tick', { gain: -2 }));
+  M.sfx(BREACH - 1.3, 'riser', { dur: 1.3, semis: 7 });
+  M.sfx(BREACH, 'impact', { weight: 0.8, gain: -3 });
+  M.sfx(R0, 'whoosh', { dur: 1.1, peak: 0.32 });
+  M.sfx(R0 + 1.1, 'tap', { deg: 2, oct: 5, gain: -4 });
+  M.sfx(R0 + 2.2, 'tap', { deg: 4, oct: 5, gain: -4 });
+  M.sfx(R1 - 0.2, 'shimmer', { gain: -7 });
+  M.sfx(16.0, 'shimmer', { gain: -6, degs: [2, 4, 7] });
+  [[0.3, 4], [4, 5.5], [7.4, 9.5], [11, 12.5]].forEach(([a, b]) => tl.to({ v: 0 }, { v: 1, duration: b - a, ease: 'none' }, a));
+  tl.fromTo('#fade', { opacity: 1 }, { opacity: 0, duration: 0.5, ease: 'appleOut' }, 0);
+  tl.to('#fade', { opacity: 1, duration: 0.33, ease: 'appleIn' }, 19.67);
+
+  function hex(x, y, rad, rot) { ctx.beginPath(); for (let i = 0; i < 6; i++) { const a = rot + i * TAU / 6; const px = x + Math.cos(a) * rad, py = y + Math.sin(a) * rad; i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); } ctx.closePath(); }
+  function ring(x, y, rad, col, a, w) { ctx.strokeStyle = rgba(col, a); ctx.lineWidth = w; ctx.beginPath(); ctx.arc(x, y, rad, 0, TAU); ctx.stroke(); }
+
+  M.onFrame((t) => {
+    bg(ctx, t, { grid: 0.045 * eO(seg(t, 0.2, 1.2)) });
+    const inA = eO(seg(t, 0.3, 1.4));
+    const dimD = 1 - 0.9 * eA(seg(t, 15.3, 16.3));          // beat D: lo anterior queda de fondo
+    const press = eA(seg(t, 1.2, 5.0));                       // presión sobre el proxy
+    const crackP = eA(seg(t, 6.0, BREACH));                   // grieta que avanza hasta el choque
+    const open = eO(seg(t, BREACH, BREACH + 0.7));            // la pared cede
+    const sbDim = 1 - 0.55 * eA(seg(t, R0 - 0.4, R0 + 0.6));  // el sandbox pasa a segundo plano en la ruta
+    const gap = lerp(30, 100, open);
+
+    // red interna (tenue, aparece al abrirse)
+    const netA = eO(seg(t, BREACH + 0.4, BREACH + 1.6)) * dimD;
+    if (netA > 0) {
+      ctx.save(); ctx.setLineDash([10, 12]); ctx.lineWidth = 2; ctx.strokeStyle = rgba(PAL.VIOLET, 0.28 * netA);
+      ctx.strokeRect(NET.x, NET.y, NET.w, NET.h); ctx.restore();
+      NODES.forEach((n) => { hex(n.x, n.y, 28, Math.PI / 6); ctx.lineWidth = 2; ctx.strokeStyle = rgba(PAL.VIOLET, 0.5 * netA); ctx.stroke(); });
+    }
+
+    // sandbox violeta: pared derecha con hueco que se ensancha
+    ctx.lineWidth = 3.5; ctx.strokeStyle = rgba(PAL.VIOLET, 0.9 * inA * sbDim * (0.6 + 0.4 * dimD)); ctx.beginPath();
+    ctx.moveTo(SB.x + SB.w, SB.y); ctx.lineTo(SB.x, SB.y); ctx.lineTo(SB.x, SB.y + SB.h); ctx.lineTo(SB.x + SB.w, SB.y + SB.h);
+    ctx.moveTo(SB.x + SB.w, SB.y); ctx.lineTo(SB.x + SB.w, PX.y - gap);
+    ctx.moveTo(SB.x + SB.w, SB.y + SB.h); ctx.lineTo(SB.x + SB.w, PX.y + gap); ctx.stroke();
+
+    // enjambre: converge sobre el proxy en A, queda atrás desde C
+    const swA = eO(seg(t, 0.5, 1.6)) * sbDim * (0.5 + 0.5 * dimD);
+    for (const p of P) {
+      const hx = p.x + Math.sin(t * p.sp + p.ph) * 14, hy = p.y + Math.cos(t * p.sp * 1.3 + p.ph) * 12;
+      const cvg = press * p.k * (1 - 0.6 * open);
+      const x = Math.min(SB.x + SB.w - 24, lerp(hx, PX.x - 70, cvg) + Math.sin(t * 9 + p.ph) * 4 * press);
+      const y = lerp(hy, PX.y + (hy - PX.y) * 0.45, cvg);
+      ctx.fillStyle = rgba(PAL.CYAN, 0.85 * swA); ctx.beginPath(); ctx.arc(x, y, p.s, 0, TAU); ctx.fill();
+    }
+    // empuje: arcos que viajan hacia el proxy (foco del beat A)
+    if (t > 1.6 && t < BREACH + 0.2) {
+      for (let k = 0; k < 3; k++) {
+        const ph = ((t * 0.55 + k / 3) % 1), rad = lerp(230, 50, ph);
+        ctx.strokeStyle = rgba(PAL.CYAN, 0.55 * press * Math.sin(ph * Math.PI) * (1 - crackP * 0.7)); ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.arc(PX.x, PX.y, rad, Math.PI * 0.62, Math.PI * 1.38); ctx.stroke();
+      }
+    }
+
+    // proxy: hexágono sobre la pared (violeta -> rojo al romperse)
+    const pa = eO(seg(t, 0.5, 1.5)) * (1 - 0.5 * (1 - dimD));
+    const redM = eA(seg(t, 6.6, BREACH + 0.2));
+    const pcol = redM > 0.5 ? PAL.RED : PAL.INK;
+    const shake = (t > 6.1 && t < BREACH) ? Math.sin(t * 70) * 3 * crackP : 0;
+    hex(PX.x + shake, PX.y, 46, Math.PI / 6);
+    ctx.fillStyle = rgba(PAL.BG, 1); ctx.fill();
+    ctx.lineWidth = 4; ctx.strokeStyle = rgba(pcol, pa * (0.95 - 0.35 * (1 - dimD))); ctx.stroke();
+    hex(PX.x + shake, PX.y, 24, Math.PI / 6); ctx.lineWidth = 2; ctx.strokeStyle = rgba(redM > 0.5 ? PAL.RED : PAL.VIOLET, 0.7 * pa); ctx.stroke();
+    text(ctx, 'PROXY', PX.x, PX.y + 96, F_L, PAL.INK, 0.8 * pa * (1 - 0.7 * seg(t, 10.5, 11.2)) * (t < 15 ? 1 : dimD), { align: 'center', spacing: '5px', glow: 6 });
+
+    // grietas rojas
+    if (crackP > 0) {
+      const a = 0.95 * (1 - 0.55 * seg(t, BREACH + 0.8, BREACH + 2.5)) * dimD;
+      ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.strokeStyle = rgba(PAL.RED, a);
+      CR.forEach((pts, ci) => {
+        const prog = clamp(crackP * 1.15 - (ci % 3) * 0.08) * 4;
+        ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
+        for (let k = 1; k <= 4; k++) { const m = clamp(prog - (k - 1)); if (m <= 0) break; ctx.lineTo(lerp(pts[k - 1][0], pts[k][0], m), lerp(pts[k - 1][1], pts[k][1], m)); }
+        ctx.stroke();
+      });
+      // onda de choque al romper
+      const sw = seg(t, BREACH, BREACH + 1.1);
+      if (sw > 0 && sw < 1) ring(PX.x, PX.y, 50 + 220 * eO(sw), PAL.RED, 0.8 * (1 - sw) * dimD, 3);
+    }
+
+    // nodo con internet (exterior): aparece junto a la ruta
+    const webA = eO(seg(t, R0 - 0.2, R0 + 0.8)) * dimD;
+    if (webA > 0) {
+      const reach = seg(t, R1 - 0.7, R1);
+      ctx.strokeStyle = rgba(PAL.CYAN, (0.35 + 0.6 * reach) * webA); ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(WEB.x, WEB.y, 44, 0, TAU); ctx.stroke();
+      ctx.lineWidth = 2; ctx.strokeStyle = rgba(PAL.CYAN, (0.25 + 0.4 * reach) * webA);
+      ctx.beginPath(); ctx.ellipse(WEB.x, WEB.y, 18, 44, 0, 0, TAU); ctx.moveTo(WEB.x - 44, WEB.y); ctx.lineTo(WEB.x + 44, WEB.y); ctx.stroke();
+      text(ctx, 'INTERNET', WEB.x, WEB.y + 92, F_L, PAL.CYAN, (0.4 + 0.5 * reach) * webA, { align: 'center', spacing: '5px', glow: 8 });
+      if (reach > 0 && reach < 1.01) ring(WEB.x, WEB.y, 44 + 60 * eO(seg(t, R1 - 0.1, R1 + 0.9)), PAL.CYAN, 0.7 * (1 - seg(t, R1 - 0.1, R1 + 0.9)) * webA, 2.5);
+    }
+
+    // ruta cian (foco del beat C)
+    const p = eA(seg(t, R0, R1));
+    if (p > 0) {
+      const routeA = dimD;
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      // trazo tenue completo + trazo brillante hasta la cabeza
+      ctx.lineWidth = 2; ctx.strokeStyle = rgba(PAL.CYAN, 0.18 * routeA); ctx.beginPath(); ROUTE.forEach((q, i) => i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)); ctx.stroke();
+      const head = along(p);
+      ctx.lineWidth = 4; ctx.strokeStyle = rgba(PAL.CYAN, 0.95 * routeA); ctx.beginPath(); ctx.moveTo(ROUTE[0].x, ROUTE[0].y);
+      for (let i = 1; i <= head.i; i++) ctx.lineTo(ROUTE[i].x, ROUTE[i].y);
+      ctx.lineTo(head.x, head.y); ctx.stroke();
+      // puntos del enjambre siguiendo la cabeza
+      SP.forEach((s) => { const q = along(p - 0.012 - s.o * 0.2); if (p - 0.012 - s.o * 0.2 <= 0) return;
+        ctx.fillStyle = rgba(PAL.CYAN, (1 - s.o) * 0.8 * routeA); ctx.beginPath(); ctx.arc(q.x, q.y + s.j * (s.o), 2.4, 0, TAU); ctx.fill(); });
+      // nodos alcanzados: se encienden en cian y muestran su rótulo
+      NODES.forEach((n, i) => {
+        const hit = eO(seg(p, cum[i + 1] - 0.01, cum[i + 1] + 0.06));
+        if (hit <= 0) return;
+        hex(n.x, n.y, 28, Math.PI / 6); ctx.lineWidth = 3.5; ctx.strokeStyle = rgba(PAL.CYAN, 0.95 * hit * routeA); ctx.stroke();
+        ring(n.x, n.y, 28 + 40 * seg(hit, 0, 1), PAL.CYAN, 0.5 * (1 - hit) * routeA, 2);
+        if (n.lab) text(ctx, n.lab, n.x, n.y + (i === 1 ? 74 : -62), F_L, PAL.CYAN, 0.9 * hit * routeA, { align: 'center', spacing: '5px', glow: 8 });
+        if (i === 0) { // chevrón de escalada
+          ctx.strokeStyle = rgba(PAL.CYAN, 0.9 * hit * routeA); ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.moveTo(n.x - 11, n.y + 6); ctx.lineTo(n.x, n.y - 7); ctx.lineTo(n.x + 11, n.y + 6); ctx.stroke();
+        }
+      });
+      // cabeza
+      if (p < 1) { ctx.fillStyle = rgba(PAL.INK, routeA); ctx.beginPath(); ctx.arc(head.x, head.y, 7, 0, TAU); ctx.fill(); ring(head.x, head.y, 15 + 3 * Math.sin(t * 6), PAL.CYAN, 0.9 * routeA, 2); }
+    }
+
+    // beat D: cifra protagonista
+    const nA = eO(seg(t, 16.0, 17.0)) * (1 - eI(seg(t, 19.2, 19.6)));
+    if (nA > 0) {
+      text(ctx, '9', 1250, 650 + 14 * (1 - nA), F_N, PAL.INK, nA, { align: 'center', glow: 16 });
+      text(ctx, 'CVE', 1410, 650, F_S, PAL.RED, nA * 0.95, { align: 'left', spacing: '8px', glow: 10 });
+      // línea de corrección bajo la cifra
+      ctx.strokeStyle = rgba(PAL.GREEN, 0.8 * nA); ctx.lineWidth = 3; ctx.beginPath();
+      ctx.moveTo(1130, 700); ctx.lineTo(1130 + 340 * eO(seg(t, 16.6, 17.6)), 700); ctx.stroke();
+    }
+
+    // texto: titular, leyenda, sello (se reemplazan entre beats)
+    BEATS.forEach((b) => {
+      const al = eO(seg(t, b.a, b.a + 0.6)) * (1 - eI(seg(t, b.b - 0.35, b.b)));
+      const cl = eO(seg(t, b.a + 0.25, b.a + 0.85)) * (1 - eI(seg(t, b.b - 0.35, b.b)));
+      text(ctx, b.h, 120, 150 + 16 * (1 - al), F_T, b.hc, al, { glow: 8 });
+      text(ctx, b.c, 120, 990 + 12 * (1 - cl), F_C, PAL.INK, cl * 0.92, { glow: 3 });
+      text(ctx, b.s, 1800, 110, F_S, b.s === '27 JUL' ? PAL.GREEN : PAL.AMBER, cl * 0.9, { align: 'right', spacing: '6px', glow: 8 });
+    });
+
+    bloom(ctx, cv, { k: 0.65 });
+  });
+});
+</script>
+</body>
+</html>

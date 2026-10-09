@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>D05 · El tablero</title>
+<link rel="stylesheet" href="../lib/theme.css">
+<link rel="stylesheet" href="../lib/fonts-spartan.css">
+<style>
+  body { background: #05070D; }
+  #cv { position: absolute; inset: 0; }
+  #grain { position: absolute; inset: -20px; opacity: 0.05; mix-blend-mode: overlay; pointer-events: none; }
+  #vig { position: absolute; inset: 0; background: radial-gradient(120% 110% at 50% 48%, transparent 50%, rgba(2,3,6,0.7) 100%); pointer-events: none; }
+  #fade { position: absolute; inset: 0; background: #05070D; opacity: 1; }
+</style>
+</head>
+<body>
+<div id="world">
+  <canvas id="cv" width="1920" height="1080"></canvas>
+  <div id="vig"></div>
+  <canvas id="grain" width="512" height="512" style="width:1960px;height:1120px"></canvas>
+  <div id="fade"></div>
+</div>
+<script src="../node_modules/gsap/dist/gsap.min.js"></script>
+<script src="../node_modules/gsap/dist/SplitText.min.js"></script>
+<script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
+<script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
+<script src="../lib/stage.js"></script>
+<script src="../lib/audio.js"></script>
+<script src="../lib/neon.js"></script>
+<script>
+/* d05 · El tablero (20 s), sin voz. Hechos: FICHA-HF.md, sección "El enjambre y el tablero".
+   1 0,5–6    un agente crea el tablero de mensajes en la caché de paquetes (noche del 8/07)
+   2 6–10,1   en horas, más de 50 agentes (contador)
+   3 10,1–14,8 ≈1.200 agentes; mensajes vuelan; contador a más de 70.000
+   4 14,8–19,5 convenciones propias: trozos, buzones, asignaciones, vetos, firma Ed25519 */
+M.scene({ duration: 20, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed: { cycle: 8, bright: 0.7, sub: 0.25 } } }, async (tl, M) => {
+  const $ = (s) => document.querySelector(s);
+  const cv = $('#cv'), ctx = cv.getContext('2d');
+  { const g = $('#grain').getContext('2d'); const im = g.createImageData(512, 512); const rn = M.rng(5);
+    for (let i = 0; i < im.data.length; i += 4) { const v = 128 + (rn() - 0.5) * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+    g.putImageData(im, 0, 0); }
+  const F_T = '700 84px "League Spartan"', F_C = '500 40px "DM Sans"', F_S = '500 26px "DM Mono"', F_L = '500 26px "DM Mono"';
+  await Promise.all([
+    document.fonts.load(F_T, 'Un tablero no autorizado Se suman agentes Un canal compartido Reglas propias'),
+    document.fonts.load('700 160px "League Spartan"', '0123456789.+≈'),
+    document.fonts.load(F_C, 'El primer agente crea un tablero en la caché de paquetes. ñáéíóú'),
+    document.fonts.load(F_S, 'AGENTES MENSAJES CACHÉ TROZOS BUZONES ASIGNACIONES VETOS FIRMA ED25519 8 JUL · NOCHE UTC'),
+  ]);
+
+  const { PAL, rgba, bloom, bg, text } = Neon;
+  const TAU = Math.PI * 2;
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, m) => a + (b - a) * m;
+  const seg = (t, a, b) => clamp((t - a) / (b - a));
+  const eA = gsap.parseEase('apple'), eO = gsap.parseEase('appleOut'), eI = gsap.parseEase('appleIn');
+  const fmt = (n) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+
+  /* ---------- geometría ---------- */
+  const BOX = { x: 120, y: 230, w: 1060, h: 660 };
+  const C = { x: 650, y: 550 };
+  const CACHE = { x: C.x - 140, y: C.y - 90, w: 280, h: 180 };
+  const GX0 = C.x - 104, GY0 = C.y - 53;
+  const cellC = (k) => ({ x: GX0 + (k % 4) * 54 + 23, y: GY0 + Math.floor(k / 4) * 38 + 15 });
+
+  /* ---------- agentes ---------- */
+  const N = 150, r = M.rng(7), A = [];
+  A.push({ x: 290, y: 420, ph: 1.1, sp: 0.6, s: 3.2 });
+  while (A.length < N) {
+    const x = BOX.x + 50 + r() * (BOX.w - 100), y = BOX.y + 50 + r() * (BOX.h - 100);
+    const ph = r() * TAU, sp = 0.4 + r() * 0.9, s = 2 + r() * 1.6;
+    if (x > CACHE.x - 70 && x < CACHE.x + CACHE.w + 70 && y > CACHE.y - 70 && y < CACHE.y + CACHE.h + 70) continue;
+    A.push({ x, y, ph, sp, s });
+  }
+  const tAct = [];
+  for (let i = 0; i < N; i++) {
+    if (i === 0) tAct.push(2.0);
+    else if (i < 4) tAct.push(4.6 + 0.35 * (i - 1));
+    else if (i < 50) tAct.push(6.1 + 3.6 * Math.pow((i - 4) / 45, 0.9));
+    else tAct.push(10.0 + 2.8 * Math.pow((i - 50) / 99, 0.75));
+  }
+  const nAct = (t) => { let n = 0; while (n < N && tAct[n] <= t) n++; return n; };
+  const HERO_T = { x: CACHE.x - 8, y: C.y + 20 };
+  const pos = (i, t) => {
+    const a = A[i];
+    let x = a.x + Math.sin(t * a.sp + a.ph) * 9, y = a.y + Math.cos(t * a.sp * 1.3 + a.ph) * 8;
+    if (i === 0) {
+      const u1 = eA(seg(t, 2.0, 3.4)), u2 = eA(seg(t, 3.9, 5.0));
+      const k = u1 * (1 - u2);
+      x = lerp(x, HERO_T.x, k); y = lerp(y, HERO_T.y, k) - Math.sin(u1 * Math.PI) * 70 * (1 - u2) - Math.sin(u2 * Math.PI) * 40;
+    }
+    return [x, y];
+  };
+
+  /* ---------- mensajes en vuelo (precalculados, deterministas) ---------- */
+  const FL = [], rf = M.rng(23);
+  { let acc = 0;
+    for (let ts = 3.9; ts < 19.0; ts += 1 / 60) {
+      let rate = ts < 5.5 ? 0.9 : 0.9 + 3.5 * seg(ts, 5.5, 10) + 27 * Math.pow(seg(ts, 9.8, 13.2), 1.2);
+      rate *= 1 - 0.65 * seg(ts, 13.6, 15.2);
+      acc += rate / 60;
+      while (acc >= 1) {
+        acc -= 1;
+        const n = nAct(ts); if (n < 1) continue;
+        const a = Math.floor(rf() * n), ty = rf();
+        const f = { t0: ts, dur: 0.8 + rf() * 0.8, a, b: -1, cell: Math.floor(rf() * 12), rev: false, bend: (rf() - 0.5) * 0.5, hot: rf() < 0.16 };
+        if (ty >= 0.6 && n >= 2) { let b = Math.floor(rf() * n); if (b === a) b = (a + 1) % n; f.b = b; }
+        else if (ty >= 0.45 && n >= 2) f.rev = true;
+        FL.push(f);
+      }
+    }
+  }
+  const HITS = Array.from({ length: 12 }, () => []);
+  FL.forEach((f) => { if (f.b < 0 && !f.rev) HITS[f.cell].push(f.t0 + f.dur); });
+
+  /* ---------- contadores ---------- */
+  const agentsVal = (t) => { const n = nAct(t); return n <= 50 ? n : 50 + (n - 50) / 100 * 1150; };
+  const msgVal = (t) => {
+    if (t < 3.9) return 0;
+    if (t < 9.9) return 900 * Math.pow((t - 3.9) / 6, 2.2);
+    return 900 + 69100 * eO(seg(t, 9.9, 13.4));
+  };
+
+  /* ---------- beats ---------- */
+  const BEATS = [
+    { a: 0.5, b: 6.0, t: 'Un tablero no autorizado', c: 'El primer agente crea un tablero en la caché de paquetes.' },
+    { a: 6.0, b: 10.1, t: 'Se suman agentes', c: 'En horas ya había más de 50 agentes.' },
+    { a: 10.1, b: 14.8, t: 'Un canal compartido', c: 'Unos 1.200 agentes usaron el tablero.' },
+    { a: 14.8, b: 19.55, t: 'Reglas propias', c: 'Inventaron convenciones para coordinarse.' },
+  ];
+  const ROWS = [
+    { k: 'trozos', l: 'TROZOS', c: PAL.CYAN, deg: 0 },
+    { k: 'buzones', l: 'BUZONES', c: PAL.CYAN, deg: 2 },
+    { k: 'asig', l: 'ASIGNACIONES', c: PAL.CYAN, deg: 4 },
+    { k: 'vetos', l: 'VETOS', c: PAL.CYAN, deg: 5 },
+    { k: 'firma', l: 'FIRMA ED25519', c: PAL.AMBER, deg: 7 },
+  ];
+  const ROW_T = ROWS.map((_, i) => 15.2 + 0.7 * i);
+
+  /* ---------- sonido ---------- */
+  BEATS.forEach((b) => M.sfx(b.a + 0.05, 'tick', { gain: -3 }));
+  M.sfx(3.4, 'shimmer', { gain: -6 });
+  M.sfx(6.1, 'grow', { dur: 3.6, density: 90 });
+  M.sfx(10.2, 'grow', { dur: 3.0, density: 140 });
+  M.sfx(13.4, 'riser', { dur: 2.4, semis: 7 });
+  M.sfx(13.4, 'shimmer', { gain: -4 });
+  ROWS.forEach((w, i) => M.sfx(ROW_T[i], 'tap', { deg: w.deg, oct: 5, bright: 0.7 }));
+
+  tl.to({ v: 0 }, { v: 1, duration: 19, ease: 'none' }, 0.3);
+  tl.fromTo('#fade', { opacity: 1 }, { opacity: 0, duration: 0.5, ease: 'appleOut' }, 0);
+  tl.to('#fade', { opacity: 1, duration: 0.35, ease: 'appleIn' }, 19.62);
+
+  /* ---------- dibujo ---------- */
+  const numText = (s, xR, y, size, col, a, glow) => {
+    let sz = size; ctx.font = `700 ${sz}px "League Spartan"`;
+    const w = ctx.measureText(s).width; if (w > 520) sz = Math.floor(sz * 520 / w);
+    text(ctx, s, xR, y, `700 ${sz}px "League Spartan"`, col, a, { align: 'right', glow });
+  };
+  const quad = (p0, c, p1, u) => { const m = 1 - u; return [m * m * p0[0] + 2 * m * u * c[0] + u * u * p1[0], m * m * p0[1] + 2 * m * u * c[1] + u * u * p1[1]]; };
+
+  function icon(kind, cx, cy, col, a) {
+    ctx.save(); ctx.translate(cx, cy); ctx.lineWidth = 3.5; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.strokeStyle = rgba(col, a); ctx.beginPath();
+    if (kind === 'trozos') {
+      ctx.rect(-22, -22, 44, 12); ctx.rect(-14, -6, 44, 12); ctx.rect(-22, 10, 44, 12);
+    } else if (kind === 'buzones') {
+      ctx.moveTo(-20, 22); ctx.lineTo(-20, -4); ctx.arc(0, -4, 20, Math.PI, 0); ctx.lineTo(20, 22); ctx.closePath();
+      ctx.moveTo(-9, 6); ctx.lineTo(9, 6); ctx.moveTo(20, -8); ctx.lineTo(32, -8);
+    } else if (kind === 'asig') {
+      ctx.moveTo(-17, 0); ctx.arc(-24, 0, 7, 0, TAU); ctx.moveTo(-14, 0); ctx.lineTo(8, 0);
+      ctx.moveTo(2, -7); ctx.lineTo(9, 0); ctx.lineTo(2, 7); ctx.rect(14, -9, 18, 18);
+    } else if (kind === 'vetos') {
+      ctx.moveTo(20, 0); ctx.arc(0, 0, 20, 0, TAU); ctx.moveTo(-14, -14); ctx.lineTo(14, 14);
+    } else if (kind === 'firma') {
+      ctx.moveTo(-6, 0); ctx.arc(-15, 0, 9, 0, TAU); ctx.moveTo(-6, 0); ctx.lineTo(24, 0);
+      ctx.moveTo(14, 0); ctx.lineTo(14, 10); ctx.moveTo(22, 0); ctx.lineTo(22, 8);
+    }
+    ctx.stroke(); ctx.restore();
+  }
+
+  M.onFrame((t) => {
+    bg(ctx, t, { grid: 0.045 * eO(seg(t, 0.2, 1.2)) });
+    const n = nAct(t);
+    const swarmDim = 1 - 0.2 * eA(seg(t, 14.8, 15.6));
+
+    /* sandbox (violeta): se dibuja con trazo */
+    const bp = eO(seg(t, 0.3, 1.5)), P = 2 * (BOX.w + BOX.h);
+    ctx.lineWidth = 3; ctx.strokeStyle = rgba(PAL.VIOLET, 0.55 * Math.min(1, bp * 3)); ctx.setLineDash([P * bp, P]);
+    ctx.beginPath(); ctx.rect(BOX.x, BOX.y, BOX.w, BOX.h); ctx.stroke(); ctx.setLineDash([]);
+
+    /* enlaces tenues de los agentes activos hacia la caché (fuera del rectángulo) */
+    if (n > 1) {
+      ctx.save(); ctx.beginPath(); ctx.rect(0, 0, 1920, 1080); ctx.rect(CACHE.x, CACHE.y, CACHE.w, CACHE.h); ctx.clip('evenodd');
+      ctx.strokeStyle = rgba(PAL.CYAN, 0.07 * swarmDim); ctx.lineWidth = 1; ctx.beginPath();
+      for (let i = 1; i < n; i++) { const p = pos(i, t); ctx.moveTo(p[0], p[1]); ctx.lineTo(C.x, C.y); }
+      ctx.stroke(); ctx.restore();
+    }
+
+    /* caché de paquetes (violeta) + etiqueta */
+    const ca = eO(seg(t, 1.0, 1.9)), cp = P * 0;
+    { const cper = 2 * (CACHE.w + CACHE.h);
+      ctx.lineWidth = 3; ctx.strokeStyle = rgba(PAL.VIOLET, 0.95 * Math.min(1, ca * 3)); ctx.setLineDash([cper * ca, cper]);
+      ctx.beginPath(); ctx.rect(CACHE.x, CACHE.y, CACHE.w, CACHE.h); ctx.stroke(); ctx.setLineDash([]); }
+    text(ctx, 'CACHÉ', C.x, CACHE.y + CACHE.h + 38, F_L, PAL.VIOLET, 0.85 * eO(seg(t, 1.5, 2.3)), { align: 'center', spacing: '4px', glow: 6 });
+
+    /* tablero (cian): se crea cuando llega el primer agente */
+    const bb = eO(seg(t, 3.3, 4.3));
+    if (bb > 0) {
+      for (let k = 0; k < 12; k++) {
+        const cc = cellC(k); const kin = eO(seg(t, 3.4 + k * 0.05, 3.9 + k * 0.05));
+        let hit = 0; for (const h of HITS[k]) { const d = t - h; if (d >= 0 && d < 0.5) hit = Math.max(hit, 1 - d / 0.5); }
+        const flash = 1 - seg(t, 3.5 + k * 0.05, 4.2 + k * 0.05);
+        const al = kin * (0.18 + 0.82 * Math.max(hit, 0.7 * flash));
+        ctx.fillStyle = rgba(PAL.CYAN, 0.55 * al * (t < 4.4 ? 1 : 1)); ctx.fillRect(cc.x - 23, cc.y - 15, 46, 30);
+        ctx.strokeStyle = rgba(PAL.CYAN, 0.9 * kin); ctx.lineWidth = 2; ctx.strokeRect(cc.x - 23, cc.y - 15, 46, 30);
+      }
+    }
+
+    /* anillos de activación de cada agente */
+    for (let i = 0; i < N; i++) {
+      const d = t - tAct[i]; if (d < 0 || d > 0.7) continue; const u = d / 0.7; const p = pos(i, t);
+      ctx.strokeStyle = rgba(PAL.CYAN, (i < 50 ? 0.5 : 0.3) * (1 - u) * swarmDim); ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(p[0], p[1], 5 + 22 * eO(u), 0, TAU); ctx.stroke();
+    }
+
+    /* agentes: tenues hasta que se conectan */
+    for (let i = 0; i < N; i++) {
+      const a = A[i], tin = eO(seg(t, 0.5 + i * 0.006, 1.4 + i * 0.006)); if (tin <= 0) continue;
+      const m = eO(seg(t, tAct[i], tAct[i] + 0.35)), p = pos(i, t);
+      ctx.fillStyle = rgba(PAL.CYAN, lerp(0.22, 0.9, m) * tin * swarmDim);
+      ctx.beginPath(); ctx.arc(p[0], p[1], a.s * lerp(1, 1.25, m), 0, TAU); ctx.fill();
+    }
+
+    /* el primer agente (foco del beat 1) */
+    { const p = pos(0, t), h = eO(seg(t, 1.7, 2.4)) * (1 - eA(seg(t, 5.0, 5.9)));
+      if (h > 0) { ctx.fillStyle = rgba(PAL.INK, h); ctx.beginPath(); ctx.arc(p[0], p[1], 7, 0, TAU); ctx.fill();
+        ctx.strokeStyle = rgba(PAL.CYAN, 0.9 * h); ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(p[0], p[1], 14 + 3 * Math.sin(t * 5), 0, TAU); ctx.stroke(); } }
+
+    /* mensajes volando */
+    for (const f of FL) {
+      const d = t - f.t0; if (d < 0 || d > f.dur) continue;
+      const u = d / f.dur, ue = u * u * (3 - 2 * u);
+      const pa = f.a >= 0 ? pos(f.a, t) : null;
+      let p0, p1;
+      if (f.b >= 0) { p0 = pos(f.a, t); p1 = pos(f.b, t); }
+      else { const cc = cellC(f.cell); const bpnt = f.rev ? [C.x, C.y] : [cc.x, cc.y]; if (f.rev) { p0 = bpnt; p1 = pos(f.a, t); } else { p0 = pa; p1 = bpnt; } }
+      const dx = p1[0] - p0[0], dy = p1[1] - p0[1], L = Math.hypot(dx, dy) || 1;
+      const ctl = [(p0[0] + p1[0]) / 2 - dy / L * L * f.bend, (p0[1] + p1[1]) / 2 + dx / L * L * f.bend];
+      const al = Math.min(1, u * 8) * Math.min(1, (1 - u) * 6) * swarmDim * (f.hot ? 1 : 0.8);
+      const col = f.hot ? PAL.INK : PAL.CYAN;
+      ctx.strokeStyle = rgba(col, 0.5 * al); ctx.lineWidth = 2; ctx.beginPath();
+      for (let k = 5; k >= 0; k--) { const q = quad(p0, ctl, p1, Math.max(0, ue - k * 0.03)); if (k === 5) ctx.moveTo(q[0], q[1]); else ctx.lineTo(q[0], q[1]); }
+      ctx.stroke();
+      const h = quad(p0, ctl, p1, ue); ctx.fillStyle = rgba(col, al); ctx.beginPath(); ctx.arc(h[0], h[1], f.hot ? 3.6 : 3, 0, TAU); ctx.fill();
+    }
+
+    /* pulso del tablero al presentarse cada convención */
+    ROWS.forEach((w, i) => {
+      const d = t - ROW_T[i]; if (d < 0 || d > 0.9) return; const u = eO(d / 0.9);
+      ctx.strokeStyle = rgba(w.c, 0.55 * (1 - u)); ctx.lineWidth = 3; ctx.beginPath();
+      ctx.arc(C.x, C.y, 130 + 130 * u, 0, TAU); ctx.stroke();
+    });
+
+    /* panel derecho: contadores (beats 1–3) */
+    const panelA = 1 - eA(seg(t, 14.4, 15.0));
+    if (panelA > 0 && t > 3.6) {
+      const s3 = eA(seg(t, 10.0, 10.9));
+      const aIn = eO(seg(t, 3.7, 4.5)) * lerp(0.6, 1, eA(seg(t, 6.0, 6.8)));
+      const aSz = lerp(160, 68, s3), aY = lerp(560, 400, s3), aAl = lerp(1, 0.75, s3) * aIn * panelA;
+      const nv = agentsVal(t);
+      const aStr = t < 10.0 ? (nv >= 50 ? '50+' : String(Math.round(nv))) : (nv >= 1195 ? '≈1.200' : fmt(nv));
+      text(ctx, 'AGENTES', 1800, aY - aSz * 0.74 - 26, F_L, PAL.CYAN, 0.9 * aAl, { align: 'right', spacing: '4px', glow: 6 });
+      numText(aStr, 1800, aY, aSz, PAL.CYAN, aAl, 16 * (1 - s3) + 6);
+      const mA = eO(seg(t, 6.6, 7.4)) * panelA;
+      if (mA > 0) {
+        const mSz = lerp(60, 170, s3), mY = lerp(730, 800, s3), mAl = lerp(0.65, 1, s3) * mA;
+        const mv = msgVal(t);
+        const mStr = mv >= 69990 ? '70.000+' : fmt(mv);
+        numText(mStr, 1800, mY, mSz, PAL.INK, mAl, 4 + 14 * s3);
+        text(ctx, 'MENSAJES', 1800, mY + 48, F_L, PAL.INK, 0.8 * mAl, { align: 'right', spacing: '4px', glow: 4 });
+      }
+    }
+
+    /* panel derecho: convenciones (beat 4) */
+    const fin = eA(seg(t, 18.3, 19.0));
+    ROWS.forEach((w, i) => {
+      const ra = eO(seg(t, ROW_T[i], ROW_T[i] + 0.45)); if (ra <= 0) return;
+      let em = i < ROWS.length - 1 ? 1 - 0.5 * eA(seg(t, ROW_T[i + 1], ROW_T[i + 1] + 0.4)) : 1;
+      em = lerp(em, 0.85, fin);
+      const y = 330 + 110 * i, a = ra * em, sl = 24 * (1 - ra);
+      icon(w.k, 1290 + sl, y, w.c, a);
+      text(ctx, w.l, 1370 + sl, y + 9, F_L, w.c, a, { spacing: '3px', glow: 6 });
+    });
+
+    /* titular, leyenda y sello */
+    BEATS.forEach((b, i) => {
+      const o = 1 - eI(seg(t, b.b - 0.3, b.b));
+      const ti = eO(seg(t, b.a, b.a + 0.55)), ci = eO(seg(t, b.a + 0.25, b.a + 0.8));
+      text(ctx, b.t, 120, 150 + 16 * (1 - ti), F_T, PAL.INK, ti * o, { glow: 6 });
+      text(ctx, b.c, 120, 985 + 10 * (1 - ci), F_C, PAL.INK, 0.92 * ci * o, { glow: 3 });
+    });
+    text(ctx, '8 JUL · NOCHE UTC', 1800, 100, F_S, PAL.INK, 0.8 * eO(seg(t, 0.8, 1.6)) * (1 - eI(seg(t, 19.3, 19.6))), { align: 'right', spacing: '4px', glow: 6 });
+
+    bloom(ctx, cv, { k: 0.65 });
+  });
+});
+</script>
+</body>
+</html>
