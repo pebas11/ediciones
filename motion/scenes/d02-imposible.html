@@ -63,11 +63,11 @@ M.scene({ duration: 18, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed:
   const jit = M.rng(13), JIT = Array.from({ length: N }, () => jit() * 0.35);
 
   /* ---- Beats 2–3: agente, flag, evaluador ---- */
-  const A = { x: 330, y: 680 };
-  const FL = { x: 640, y: 620, c: 8, r: 3, p: 40, s: 33 };
+  const A = { x: 560, y: 680 };
+  const FL = { x: 880, y: 620, c: 8, r: 3, p: 40, s: 33 };
   const fr = M.rng(21); const FBITS = Array.from({ length: FL.c * FL.r }, () => fr() < 0.55);
-  const EYE = { x: 1000, y: 390, w: 300, h: 190 };
-  const T1 = { x: 470, y: 680 }, T2 = { x: 1580, y: 262 };
+  const EYE = { x: 1320, y: 390, w: 300, h: 190 };
+  const T1 = { x: 700, y: 680 }, T2 = { x: 1700, y: 262 };
   const routeX = (m) => lerp(A.x + 26, FL.x - 14, m);
 
   // sonido: un cue por idea
