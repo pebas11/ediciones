@@ -108,3 +108,8 @@ Son 5 animaciones útiles como B-roll para narración, **sin ningún texto en pa
 - **Revisar el texto:** contar palabras siempre. Las anotaciones y los rótulos "científicos" sobrecargan.
 - **`pgrep -f` en un bucle de espera:** se encuentra a sí mismo y el bucle no termina nunca. Usar el PID o un archivo.
 - **Varios workflows a la vez:** con 4 CPU, el render se vuelve ~5× más lento.
+
+### Serie 6: Cómo funciona un LLM, sin voz (pedido del 09/10). TERMINADA y ENVIADA
+- Brief: `BRIEF-LLM.md`. Escenas c01-tokens, c02-embeddings, c03-atencion, c04-capas, c05-prediccion, c06-entrenamiento (≈93 s, estilo a03/b03, con sonido).
+- Renders FONDO+AUDIO por escena y unión `renders/llm_COMPLETO_ENTREGA.mp4` (15 MB, concat con ffmpeg).
+- Pulidos opcionales: c04 columna final de 96 capas muy fina (`SF`), holds cortos en c03/c05/c06.
