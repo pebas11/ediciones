@@ -105,7 +105,7 @@ M.scene({ duration: 20, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed:
 
   const TIT = [
     [0.7, 6.4, 'SE NEGARON A AYUDAR', PAL.RED],
-    [6.6, 12.0, 'PESOS ABIERTOS, EN CASA', PAL.GREEN],
+    [6.6, 12.0, 'PESOS ABIERTOS', PAL.GREEN],
     [12.2, 19.3, '4× MÁS SECRETOS', PAL.AMBER],
   ];
   const CAP = [
@@ -242,7 +242,7 @@ M.scene({ duration: 20, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed:
       // fila 2: GLM-5.2 (foco)
       text(ctx, '4×', 120, Y_ROW2 + BH / 2 + 66, F_BIG, PAL.AMBER, n4 * hold, { glow: 22 });
       for (let i = 0; i < 4; i++) { const sw = seg4[i]; if (sw <= 0.01) continue; const x0 = BX + i * UNIT, w = (UNIT - 8) * sw;
-        ctx.save(); glow(PAL.AMBER, 0.9 * hold, 20); ctx.fillStyle = rgba(PAL.AMBER, 0.88 * hold); rr(x0, Y_ROW2, w, BH, 10); ctx.fill(); ctx.restore(); }
+        ctx.save(); glow(PAL.AMBER, 0.6 * hold, 12); ctx.fillStyle = rgba(PAL.AMBER, 0.68 * hold); rr(x0, Y_ROW2, w, BH, 10); ctx.fill(); ctx.restore(); }
       text(ctx, 'GLM-5.2', BX + 4 * UNIT + 14, Y_ROW2 + BH / 2 + 9, F_L, PAL.GREEN, seg4[3] * hold, { spacing: '3px', glow: 10 });
     }
 

@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>D21 · Consecuencias</title>
+<link rel="stylesheet" href="../lib/theme.css">
+<link rel="stylesheet" href="../lib/fonts-spartan.css">
+<style>
+  body { background: #05070D; }
+  #cv { position: absolute; inset: 0; }
+  #grain { position: absolute; inset: -20px; opacity: 0.05; mix-blend-mode: overlay; pointer-events: none; }
+  #vig { position: absolute; inset: 0; background: radial-gradient(120% 110% at 50% 48%, transparent 50%, rgba(2,3,6,0.7) 100%); pointer-events: none; }
+  #fade { position: absolute; inset: 0; background: #05070D; opacity: 1; }
+</style>
+</head>
+<body>
+<div id="world">
+  <canvas id="cv" width="1920" height="1080"></canvas>
+  <div id="vig"></div>
+  <canvas id="grain" width="512" height="512" style="width:1960px;height:1120px"></canvas>
+  <div id="fade"></div>
+</div>
+<script src="../node_modules/gsap/dist/gsap.min.js"></script>
+<script src="../node_modules/gsap/dist/SplitText.min.js"></script>
+<script src="../node_modules/gsap/dist/DrawSVGPlugin.min.js"></script>
+<script src="../node_modules/gsap/dist/CustomEase.min.js"></script>
+<script src="../lib/stage.js"></script>
+<script src="../lib/audio.js"></script>
+<script src="../lib/neon.js"></script>
+<script>
+/* D21 · Consecuencias (18 s), sin voz.
+   1 0,5–7,9   CONFIRMADO: HF entra al programa de acceso confiable · refuerzo + escaneo · revisión independiente
+   2 8,3–17,2  SEGÚN REPORTES: pausa del RL (18/08) · citación (1/10) · proyectos de ley (tarjetas punteadas) */
+M.scene({ duration: 18, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed: { cycle: 8, bright: 0.7, sub: 0.25 } } }, async (tl, M) => {
+  const $ = (s) => document.querySelector(s);
+  const cv = $('#cv'), ctx = cv.getContext('2d');
+  { const g = $('#grain').getContext('2d'); const im = g.createImageData(512, 512); const rn = M.rng(21);
+    for (let i = 0; i < im.data.length; i += 4) { const v = 128 + (rn() - 0.5) * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+    g.putImageData(im, 0, 0); }
+  const F_T = '700 100px "League Spartan"', F_L = '500 42px "DM Sans"', F_S = '500 28px "DM Mono"', F_N = '700 160px "League Spartan"';
+  await Promise.all([
+    document.fonts.load(F_T, 'OpenAI actúa Lo que se reporta'),
+    document.fonts.load(F_L, 'Suma a Hugging Face a su programa de acceso confiable, citación fiscalía'),
+    document.fonts.load(F_S, 'CONFIRMADO SEGÚN REPORTES METR REDWOOD RESEARCH AI KILL SWITCH ACT'),
+    document.fonts.load(F_N, '18/08 1/10'),
+  ]);
+
+  const { PAL, rgba, bloom, bg, text } = Neon;
+  const TAU = Math.PI * 2;
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, m) => a + (b - a) * m;
+  const seg = (t, a, b) => clamp((t - a) / (b - a));
+  const eA = gsap.parseEase('apple'), eO = gsap.parseEase('appleOut'), eI = gsap.parseEase('appleIn');
+  const win = (t, a, b, c, d) => eO(seg(t, a, b)) * (1 - eI(seg(t, c, d)));
+
+  // ---- línea de tiempo de textos
+  const T1 = [0.5, 1.1, 7.3, 7.8], L1 = [0.9, 1.4, 7.3, 7.8];
+  const T2 = [8.3, 8.9, 16.6, 17.1], L2 = [8.5, 9.0, 16.4, 16.9];
+  const S1 = [0.5, 1.1, 7.3, 7.8], S2 = [8.3, 8.9, 16.6, 17.1];
+  const CARD = [9.0, 11.3, 13.6];
+
+  // ---- sonido (pocos, con motivo)
+  M.sfx(2.55, 'tap', { deg: 4, oct: 5, bright: 0.7 });      // HF entra al programa
+  M.sfx(3.2, 'scan', { dur: 2.0, from: 700, to: 2600, q: 4, gain: -2 }); // refuerzo + monitoreo
+  M.sfx(5.5, 'tap', { deg: 6, oct: 5, bright: 0.7 });       // revisión independiente
+  M.sfx(7.5, 'whoosh', { dur: 0.8, peak: 0.3, gain: -6 });  // cambio de bloque
+  CARD.forEach((c, i) => M.sfx(c + 0.1, 'tick', { gain: -1, pitch: -2 * i }));
+  [[0.3, 4], [4, 5.5], [7.4, 9.5], [11, 12.5]].forEach(([a, b]) => tl.to({ v: 0 }, { v: 1, duration: b - a, ease: 'none' }, a));
+  tl.fromTo('#fade', { opacity: 1 }, { opacity: 0, duration: 0.5, ease: 'appleOut' }, 0);
+  tl.to('#fade', { opacity: 1, duration: 0.33, ease: 'appleIn' }, 17.67);
+
+  // ---- utilidades de dibujo
+  function hex(x, y, rad) { ctx.beginPath(); for (let k = 0; k < 6; k++) { const a = k * TAU / 6 + TAU / 12; ctx[k ? 'lineTo' : 'moveTo'](x + Math.cos(a) * rad, y + Math.sin(a) * rad); } ctx.closePath(); }
+  function rectPartial(x, y, w, h, f) {           // perímetro dibujado hasta la fracción f
+    const pts = [[x, y], [x + w, y], [x + w, y + h], [x, y + h], [x, y]];
+    let left = f * 2 * (w + h); ctx.beginPath(); ctx.moveTo(x, y);
+    for (let i = 0; i < 4 && left > 0; i++) {
+      const [ax, ay] = pts[i], [bx, by] = pts[i + 1]; const L = Math.hypot(bx - ax, by - ay); const m = Math.min(1, left / L);
+      ctx.lineTo(ax + (bx - ax) * m, ay + (by - ay) * m); left -= L;
+    }
+    ctx.stroke();
+  }
+  function wrapText(s, x, y, font, col, a, o) { text(ctx, s, x, y, font, col, a, o); }
+
+  // ---- geometría del bloque 1
+  const RC = { x: 560, y: 590, r: 215 };
+  const BOX = { x: 900, y: 440, w: 420, h: 300 };
+  const LENS = [{ x: 1580, y: 450, label: 'METR', at: 5.2 }, { x: 1580, y: 680, label: 'REDWOOD RESEARCH', at: 5.8 }];
+  const rn = M.rng(7), DOTS = [];
+  for (let i = 0; i < 28; i++) DOTS.push({ x: BOX.x + 36 + rn() * (BOX.w - 72), y: BOX.y + 36 + rn() * (BOX.h - 72), ph: rn() * TAU, sp: 0.4 + rn() * 0.8, s: 2 + rn() * 2 });
+
+  // ---- tarjetas del bloque 2
+  const CW = 520, CG = 60, CY = 290, CH = 560;
+  const cardX = (i) => 120 + i * (CW + CG);
+
+  function icon(i, cx, cy, a) {
+    ctx.save(); ctx.lineWidth = 4; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    if (i === 0) {          // pausa
+      ctx.strokeStyle = rgba(PAL.VIOLET, 0.95 * a); ctx.beginPath(); ctx.arc(cx, cy, 88, 0, TAU); ctx.stroke();
+      ctx.fillStyle = rgba(PAL.VIOLET, 0.95 * a);
+      ctx.fillRect(cx - 34, cy - 38, 22, 76); ctx.fillRect(cx + 12, cy - 38, 22, 76);
+    } else if (i === 1) {   // citación (documento con esquina doblada)
+      ctx.strokeStyle = rgba(PAL.INK, 0.95 * a); ctx.beginPath();
+      ctx.moveTo(cx - 62, cy - 90); ctx.lineTo(cx + 20, cy - 90); ctx.lineTo(cx + 62, cy - 48); ctx.lineTo(cx + 62, cy + 90); ctx.lineTo(cx - 62, cy + 90); ctx.closePath(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx + 20, cy - 90); ctx.lineTo(cx + 20, cy - 48); ctx.lineTo(cx + 62, cy - 48); ctx.stroke();
+      ctx.strokeStyle = rgba(PAL.INK, 0.6 * a); ctx.beginPath();
+      for (let k = 0; k < 4; k++) { ctx.moveTo(cx - 36, cy - 12 + k * 28); ctx.lineTo(cx + 36 - (k === 3 ? 30 : 0), cy - 12 + k * 28); } ctx.stroke();
+    } else {                // dos proyectos de ley (hojas superpuestas)
+      for (let k = 1; k >= 0; k--) {
+        const ox = cx - 30 + k * 44, oy = cy - 70 + k * 30;
+        ctx.fillStyle = rgba(PAL.BG, 1); ctx.fillRect(ox - 60, oy - 20, 120, 150);
+        ctx.strokeStyle = rgba(PAL.INK, (k ? 0.95 : 0.55) * a); ctx.strokeRect(ox - 60, oy - 20, 120, 150);
+        ctx.strokeStyle = rgba(PAL.INK, (k ? 0.6 : 0.3) * a); ctx.beginPath();
+        for (let m = 0; m < 3; m++) { ctx.moveTo(ox - 36, oy + 20 + m * 30); ctx.lineTo(ox + 36, oy + 20 + m * 30); } ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
+  M.onFrame((t) => {
+    bg(ctx, t, { grid: 0.045 * eO(seg(t, 0.2, 1.2)) });
+
+    // =============== TITULAR, SELLO, LEYENDA ===============
+    const a1 = win(t, ...T1), a2 = win(t, ...T2);
+    wrapText('OpenAI actúa', 120, 150 + 18 * (1 - eO(seg(t, T1[0], T1[1]))), F_T, PAL.INK, a1, { glow: 8 });
+    wrapText('Lo que se reporta', 120, 150 + 18 * (1 - eO(seg(t, T2[0], T2[1]))), F_T, PAL.INK, a2, { glow: 8 });
+    const s1 = win(t, ...S1), s2 = win(t, ...S2);
+    wrapText('CONFIRMADO', 1800, 140, F_S, PAL.GREEN, s1 * 0.95, { align: 'right', spacing: '6px', glow: 12 });
+    if (s1 > 0.01) { ctx.strokeStyle = rgba(PAL.GREEN, 0.7 * s1); ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(1800 - 250 * eO(seg(t, S1[0], S1[1] + 0.3)), 158); ctx.lineTo(1800, 158); ctx.stroke(); }
+    wrapText('SEGÚN REPORTES', 1800, 140, F_S, PAL.AMBER, s2 * 0.95, { align: 'right', spacing: '6px', glow: 12 });
+    if (s2 > 0.01) { ctx.strokeStyle = rgba(PAL.AMBER, 0.7 * s2); ctx.lineWidth = 2; ctx.setLineDash([10, 8]);
+      ctx.beginPath(); ctx.moveTo(1800 - 330 * eO(seg(t, S2[0], S2[1] + 0.3)), 158); ctx.lineTo(1800, 158); ctx.stroke(); ctx.setLineDash([]); }
+
+    const l1 = win(t, ...L1), l2 = win(t, ...L2);
+    const ly = (T) => 12 * (1 - eO(seg(t, T[0], T[1])));
+    wrapText('Suma a Hugging Face a su programa de acceso confiable,', 120, 948 + ly(L1), F_L, PAL.INK, l1 * 0.95, { glow: 4 });
+    wrapText('refuerza monitoreo y acepta revisión independiente.', 120, 1004 + ly(L1), F_L, PAL.INK, l1 * 0.95, { glow: 4 });
+    wrapText('Pausa de dos semanas del aprendizaje por refuerzo,', 120, 948 + ly(L2), F_L, PAL.INK, l2 * 0.95, { glow: 4 });
+    wrapText('citación de la fiscalía de California y leyes en EE. UU.', 120, 1004 + ly(L2), F_L, PAL.INK, l2 * 0.95, { glow: 4 });
+
+    // =============== BLOQUE 1 · CONFIRMADO ===============
+    const b1 = 1 - eI(seg(t, 7.3, 7.8));
+    if (b1 > 0.004) {
+      // programa de acceso confiable: anillo violeta (punteado hasta que HF entra)
+      const ringA = eO(seg(t, 0.7, 1.5)) * b1;
+      const join = eA(seg(t, 2.5, 3.0));
+      const dim1 = 1 - 0.45 * seg(t, 3.3, 4.0);
+      ctx.lineWidth = 3;
+      ctx.setLineDash([14, 12]); ctx.lineDashOffset = -t * 6;
+      ctx.strokeStyle = rgba(PAL.VIOLET, 0.55 * ringA * (1 - join) * dim1); ctx.beginPath(); ctx.arc(RC.x, RC.y, RC.r, 0, TAU); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.strokeStyle = rgba(PAL.VIOLET, 0.95 * ringA * join * dim1); ctx.beginPath(); ctx.arc(RC.x, RC.y, RC.r, 0, TAU); ctx.stroke();
+      // pulso al entrar
+      const pu = seg(t, 2.55, 3.4);
+      if (pu > 0 && pu < 1) { ctx.strokeStyle = rgba(PAL.VIOLET, 0.8 * (1 - pu) * b1); ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(RC.x, RC.y, RC.r + 70 * eO(pu), 0, TAU); ctx.stroke(); }
+
+      // cluster verde de Hugging Face que entra
+      const hx = lerp(228, RC.x, eA(seg(t, 1.3, 2.6))), hy = RC.y + (t > 2.7 ? Math.sin(t * 1.4) * 4 : 0);
+      const hA = eO(seg(t, 1.0, 1.6)) * b1 * (1 - 0.5 * seg(t, 3.3, 4.0));
+      const nodes = [[0, 0]]; for (let k = 0; k < 6; k++) nodes.push([Math.cos(k * TAU / 6) * 62, Math.sin(k * TAU / 6) * 62]);
+      ctx.lineWidth = 2.5; ctx.strokeStyle = rgba(PAL.GREEN, 0.5 * hA);
+      ctx.beginPath(); for (let k = 1; k < 7; k++) { ctx.moveTo(hx, hy); ctx.lineTo(hx + nodes[k][0], hy + nodes[k][1]); const n2 = nodes[k % 6 + 1]; ctx.moveTo(hx + nodes[k][0], hy + nodes[k][1]); ctx.lineTo(hx + n2[0], hy + n2[1]); } ctx.stroke();
+      nodes.forEach(([dx, dy], k) => { hex(hx + dx, hy + dy, k ? 21 : 27); ctx.fillStyle = rgba(PAL.GREEN, 0.16 * hA); ctx.fill(); ctx.strokeStyle = rgba(PAL.GREEN, 0.95 * hA); ctx.lineWidth = 3; ctx.stroke(); });
+
+      // entorno reforzado (caja violeta) + conexión con el programa
+      const bxA = eO(seg(t, 3.1, 3.9)) * b1;
+      const link = eA(seg(t, 3.1, 3.9));
+      ctx.setLineDash([8, 10]); ctx.strokeStyle = rgba(PAL.VIOLET, 0.4 * bxA); ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(RC.x + RC.r, RC.y); ctx.lineTo(lerp(RC.x + RC.r, BOX.x, link), RC.y + (BOX.y + BOX.h / 2 - RC.y) * link * 0); ctx.stroke(); ctx.setLineDash([]);
+      const reinf = eA(seg(t, 3.6, 4.7));
+      const dim2 = 1 - 0.4 * seg(t, 5.0, 5.8);
+      ctx.lineWidth = 3; ctx.strokeStyle = rgba(PAL.VIOLET, 0.85 * bxA * dim2); ctx.strokeRect(BOX.x, BOX.y, BOX.w, BOX.h);
+      if (reinf > 0) { ctx.lineWidth = 5; ctx.strokeStyle = rgba(PAL.VIOLET, 1 * b1 * dim2); rectPartial(BOX.x - 16, BOX.y - 16, BOX.w + 32, BOX.h + 32, reinf); }
+      DOTS.forEach((p) => {
+        const x = p.x + Math.sin(t * p.sp + p.ph) * 12, y = p.y + Math.cos(t * p.sp * 1.3 + p.ph) * 10;
+        ctx.fillStyle = rgba(PAL.CYAN, 0.7 * bxA * dim2); ctx.beginPath(); ctx.arc(x, y, p.s, 0, TAU); ctx.fill();
+      });
+      // monitoreo: barrido verde de ida y vuelta
+      const sc = seg(t, 4.1, 5.9);
+      if (sc > 0 && sc < 1) {
+        const m = sc < 0.5 ? eA(sc * 2) : 1 - eA(sc * 2 - 1); const sy = BOX.y + BOX.h * m;
+        const sa = Math.sin(sc * Math.PI) * b1;
+        ctx.fillStyle = rgba(PAL.GREEN, 0.07 * sa); ctx.fillRect(BOX.x, sc < 0.5 ? BOX.y : sy, BOX.w, sc < 0.5 ? sy - BOX.y : BOX.y + BOX.h - sy);
+        ctx.strokeStyle = rgba(PAL.GREEN, 0.95 * sa); ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(BOX.x - 16, sy); ctx.lineTo(BOX.x + BOX.w + 16, sy); ctx.stroke();
+      }
+
+      // revisión independiente: dos lupas que apuntan a la caja
+      LENS.forEach((L, i) => {
+        const la = eO(seg(t, L.at, L.at + 0.7)) * b1, d = eA(seg(t, L.at + 0.2, L.at + 1.1));
+        if (la <= 0) return;
+        ctx.setLineDash([8, 10]); ctx.lineWidth = 2; ctx.strokeStyle = rgba(PAL.INK, 0.45 * la);
+        ctx.beginPath(); ctx.moveTo(L.x - 58, L.y + 6); ctx.lineTo(lerp(L.x - 58, BOX.x + BOX.w + 22, d), lerp(L.y + 6, BOX.y + BOX.h / 2, d)); ctx.stroke(); ctx.setLineDash([]);
+        ctx.strokeStyle = rgba(PAL.INK, 0.98 * la); ctx.lineWidth = 4; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.arc(L.x, L.y, 42, 0, TAU); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(L.x + 30, L.y + 30); ctx.lineTo(L.x + 60, L.y + 60); ctx.stroke(); ctx.lineCap = 'butt';
+        wrapText(L.label, L.x, L.y + 118, F_S, PAL.INK, la * 0.95, { align: 'center', spacing: '4px', glow: 8 });
+      });
+    }
+
+    // =============== BLOQUE 2 · SEGÚN REPORTES ===============
+    const b2 = 1 - eI(seg(t, 16.6, 17.2));
+    if (t > CARD[0] - 0.1 && b2 > 0.004) {
+      CARD.forEach((c, i) => {
+        const ca = eO(seg(t, c, c + 0.8)) * b2;
+        if (ca <= 0.004) return;
+        const dim = i < 2 ? 1 - 0.4 * seg(t, CARD[i + 1], CARD[i + 1] + 0.9) : 1;
+        const A = ca * dim, x = cardX(i), cx = x + CW / 2, off = 26 * (1 - eO(seg(t, c, c + 0.8)));
+        ctx.save(); ctx.translate(0, off);
+        // tarjeta punteada: nivel C
+        ctx.setLineDash([12, 10]); ctx.lineWidth = 2.5; ctx.strokeStyle = rgba(PAL.AMBER, 0.55 * A);
+        ctx.strokeRect(x, CY, CW, CH); ctx.setLineDash([]);
+        icon(i, cx, 470, A);
+        if (i < 2) {
+          const s = i === 0 ? '18/08' : '1/10';
+          wrapText(s, cx, 760, F_N, i === 0 ? PAL.VIOLET : PAL.INK, A, { align: 'center', glow: 14 });
+        } else {
+          ctx.strokeStyle = rgba(PAL.INK, 0.35 * A); ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(cx - 140, 706); ctx.lineTo(cx + 140, 706); ctx.stroke();
+          wrapText('AI KILL SWITCH ACT', cx, 664, F_S, PAL.INK, A * 0.95, { align: 'center', spacing: '2px', glow: 8 });
+          wrapText('BAN ARTIFICIAL', cx, 760, F_S, PAL.INK, A * 0.95, { align: 'center', spacing: '2px', glow: 8 });
+          wrapText('SUPERINTELLIGENCE ACT', cx, 800, F_S, PAL.INK, A * 0.95, { align: 'center', spacing: '2px', glow: 8 });
+        }
+        ctx.restore();
+      });
+    }
+
+    bloom(ctx, cv, { k: 0.65 });
+  });
+});
+</script>
+</body>
+</html>

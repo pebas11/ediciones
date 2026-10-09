@@ -125,7 +125,7 @@ M.scene({ duration: 20, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed:
   M.onFrame((t) => {
     bg(ctx, t, { grid: 0.045 * eO(seg(t, 0.2, 1.2)) });
     const intro = eO(seg(t, 0.3, 1.3));
-    const infraA = (1 - 0.86 * eA(seg(t, 12.9, 13.9))) * intro;
+    const infraA = (1 - eA(seg(t, 12.9, 13.7))) * intro;
     const s = leadS(t);
 
     // ===== infraestructura de OpenAI (violeta) =====
@@ -167,33 +167,33 @@ M.scene({ duration: 20, push: 0, audio: { key: 'D', mode: 'minor', gain: 3, bed:
 
     // sandbox (violeta) con la pared derecha que se abre
     const gap = 24 * eO(seg(t, 2.2, 2.9));
-    ctx.lineWidth = 3; ctx.strokeStyle = rgba(PAL.VIOLET, 0.95 * intro * (1 - 0.1 * infraA)); ctx.beginPath();
+    ctx.lineWidth = 3; ctx.strokeStyle = rgba(PAL.VIOLET, 0.95 * infraA); ctx.beginPath();
     ctx.moveTo(SB.x + SB.w, SB.y); ctx.lineTo(SB.x, SB.y); ctx.lineTo(SB.x, SB.y + SB.h); ctx.lineTo(SB.x + SB.w, SB.y + SB.h);
     ctx.moveTo(SB.x + SB.w, SB.y); ctx.lineTo(SB.x + SB.w, E[1] - gap); ctx.moveTo(SB.x + SB.w, SB.y + SB.h); ctx.lineTo(SB.x + SB.w, E[1] + gap); ctx.stroke();
-    if (gap > 0) { ctx.strokeStyle = rgba(PAL.RED, 0.9 * (1 - 0.6 * seg(t, 3.4, 5))); ctx.lineWidth = 3; ctx.beginPath();
+    if (gap > 0) { ctx.strokeStyle = rgba(PAL.RED, 0.9 * (1 - 0.6 * seg(t, 3.4, 5)) * infraA); ctx.lineWidth = 3; ctx.beginPath();
       ctx.moveTo(SB.x + SB.w, E[1] - gap); ctx.lineTo(SB.x + SB.w + 22, E[1] - gap - 16); ctx.moveTo(SB.x + SB.w, E[1] + gap); ctx.lineTo(SB.x + SB.w + 22, E[1] + gap + 16); ctx.stroke(); }
 
     // enjambre dentro del sandbox; 16 puntos salen siguiendo al líder en B
     const swA = eO(seg(t, 0.5, 1.6));
     SW.forEach((p, i) => {
-      let x = p.x + Math.sin(t * p.sp + p.ph) * 12, y = p.y + Math.cos(t * p.sp * 1.3 + p.ph) * 11, a = 0.8 * swA;
+      let x = p.x + Math.sin(t * p.sp + p.ph) * 12, y = p.y + Math.cos(t * p.sp * 1.3 + p.ph) * 11, a = 0.8 * swA * (1 - eA(seg(t, 12.9, 13.7)));
       if (i < 16) {
         const m = eA(seg(t, 7.2 + i * 0.05, 8.2 + i * 0.05));
         const ls = clamp(s - 0.12 - i * 0.045, 0, 6), q = posAt(ls);
         const ox = Math.sin(t * 2 + i * 1.7) * 16, oy = Math.cos(t * 2.3 + i) * 16;
-        x = lerp(x, q[0] + ox, m); y = lerp(y, q[1] + oy, m); a = lerp(a, 0.95, m);
+        x = lerp(x, q[0] + ox, m); y = lerp(y, q[1] + oy, m); a = lerp(a, 0.95, m) * (1 - eA(seg(t, 12.9, 13.7)));
       }
       ctx.fillStyle = rgba(PAL.CYAN, a); ctx.beginPath(); ctx.arc(x, y, p.s, 0, TAU); ctx.fill();
     });
     // líder
     if (t > 1.8) {
-      const q = posAt(s), la = intro * (1 - 0.8 * eA(seg(t, 12.9, 13.9)));
+      const q = posAt(s), la = infraA;
       ctx.fillStyle = rgba(PAL.INK, la); ctx.beginPath(); ctx.arc(q[0], q[1], 8, 0, TAU); ctx.fill();
       ctx.strokeStyle = rgba(PAL.CYAN, 0.95 * la); ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(q[0], q[1], 16 + 3 * Math.sin(t * 5), 0, TAU); ctx.stroke();
     }
 
     // ===== A: alerta en el primer nodo =====
-    const al = eO(seg(t, 3.4, 3.9)) * (1 - 0.65 * eA(seg(t, 6.6, 7.6)));
+    const al = eO(seg(t, 3.4, 3.9)) * (1 - 0.65 * eA(seg(t, 6.6, 7.6))) * infraA;
     if (al > 0.01) {
       const on = 1 - eA(seg(t, 6.2, 7.0));
       for (let j = 0; j < 3; j++) {
