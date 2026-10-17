@@ -2,7 +2,9 @@
 
 Medición antes y después de la nivelación nueva del motor (octubre de 2026). Sirve para
 rebalancear las canciones: la **tabla 2** dice cuánto cambió cada instrumento a las
-velocidades típicas; compensalo con `vol` de la pista (o con la velocidad).
+velocidades típicas (mediana de todo el rango) y la **2b** cuánto en cada registro, con las
+notas que más cambiaron (en las cuerdas, también para notas cortas: **2c**); compensalo con
+`vol` de la pista (o con la velocidad).
 
 ## Qué cambió
 
@@ -71,6 +73,11 @@ Mediana en las alturas de las muestras; entre corchetes, del 10 % al 90 % de las
 «antes» era desparejo entre notas, así que el cambio depende de la nota). Positivo = suena más
 fuerte que antes. Para que la mezcla vuelva a sonar como antes, restá este valor al `vol`.
 
+**La mediana subestima los registros extremos y algunas notas sueltas** (p. ej. el contrabajo
+en La1–Sol#2 o los violines en Re5–Re6 bajaron bastante más que la mediana). Para compensar
+una parte concreta usá la **tabla 2b** (por registro, con la nota que más bajó y la que más
+subió), la **2c** si las notas de cuerdas son cortas, o la **tabla 3** (nivel por altura).
+
 | instrumento | vel ≤ 0,3 | vel 0,45 | vel 0,6 | vel 0,75 | vel 0,85 |
 |---|---|---|---|---|---|
 | `Piano()` | **−1.8** [−6.0 … +0.1] | **−0.4** [−4.6 … +2.4] | **+2.7** [−0.9 … +7.9] | **+4.6** [+1.3 … +8.7] | **+5.6** [+2.6 … +7.2] |
@@ -107,6 +114,101 @@ Además (no muestreados):
 * Vibráfonos: domado del parcial 4·f0 (−8 dB después del ataque; con arco, −12 dB) y del 3er modo
   de las láminas graves (a −30 dB de la fundamental). Con `domar=0` vuelve el timbre crudo (la
   nivelación se midió domada: crudos, Sol#3–Do#4 suenan 1–2 dB más en el ataque).
+
+## 2b. Cambio por registro (después − antes, dB)
+
+Cada instrumento partido en tres registros (tercios de su rango, contando cada semitono: también
+las notas transpuestas, que heredan el nivel de su muestra). Mediana del registro y, entre
+corchetes, la nota que más bajó y la que más subió. Misma convención de medida que la tabla 2:
+sostenidos en el tramo estable de una nota de 8 s; percusivos, sus primeros 2 s.
+
+| instrumento | registro | vel 0,3 | vel 0,6 | vel 0,85 |
+|---|---|---|---|---|
+| `Piano()` | grave (La0–Do#3) | **−5.3** [La0 −7.5 … Do3 −2.8] | **−0.3** [Sol#1 −4.6 … Do2 +6.3] | **+3.1** [Sol#1 +0.4 … Do2 +5.6] |
+|  | medio (Re3–Fa#5) | **−1.5** [La3 −3.1 … Fa5 +1.5] | **+4.5** [Sol4 −0.9 … La4 +15.1] | **+5.9** [Sol4 +3.7 … Mi5 +9.6] |
+|  | agudo (Sol5–Do8) | **−0.9** [Do6 −2.6 … Fa6 +1.0] | **+4.2** [Sol#6 −0.8 … La5 +10.3] | **+6.5** [La6 +2.5 … Mi7 +10.6] |
+| `Arpa()` | grave (Mi1–Re#3) | **−2.7** [Fa#2 −3.6 … Mi1 +10.0] | **+2.2** [Re3 −0.7 … Sol1 +7.3] | **+5.0** [Do#3 +3.2 … Re#2 +7.6] |
+|  | medio (Mi3–Mi5) | **−5.1** [Mi4 −8.4 … Fa3 −3.2] | **−2.4** [Mi5 −4.8 … Sol4 +1.2] | **+3.7** [Mi5 +1.0 … La#4 +6.4] |
+|  | agudo (Fa5–Fa7) | **−3.5** [Fa5 −7.3 … Do#7 +8.5] | **−0.1** [Fa#5 −4.9 … Do#7 +5.4] | **+2.2** [Fa#5 +0.1 … Do#6 +4.8] |
+| `Glock()` | grave (Sol5–Mi6) | **−7.9** [Do#6 −7.9 … Sol#5 −2.4] | **−1.2** [La5 −1.3 … Mi6 −0.3] | **+5.4** [Sol#5 +4.9 … Re6 +5.7] |
+|  | medio (Fa6–Re7) | **−7.5** [La#6 −7.5 … La6 −7.5] | **+0.1** [Fa#6 −0.3 … Do7 +0.5] | **+5.1** [La#6 +3.6 … La6 +5.6] |
+|  | agudo (Re#7–Do8) | **−10.7** [Fa7 −10.8 … Re#7 −7.5] | **−2.0** [La7 −2.0 … Re#7 +0.5] | **−0.1** [Sol#7 −0.7 … La#7 +5.0] |
+| `Vibrafono()` | grave (La3–Fa#4) | **−6.1** [Si3 −6.7 … La#3 −4.2] | **+0.6** [Si3 −0.0 … La#3 +5.8] | **+6.0** [Fa#4 +4.5 … La#3 +13.2] |
+|  | medio (Sol4–Fa5) | **−6.0** [Sol4 −6.4 … Mi5 −5.2] | **+1.5** [La4 +1.2 … Re#5 +17.1] | **+4.0** [La4 +3.9 … Sol4 +4.5] |
+|  | agudo (Fa#5–Mi6) | **−7.0** [Re6 −8.5 … Fa#5 −5.2] | **+11.0** [Si5 −2.7 … Mi6 +11.4] | **+1.9** [Mi6 +0.5 … Fa#5 +4.4] |
+| `VibrafonoArco()` (nuevo) | grave (Mi4–Si4) | **−7.3** [Si4 −14.4 … Fa#4 −7.1] | **−6.7** [Si4 −13.9 … Fa#4 −6.4] | **−6.2** [Si4 −13.4 … Fa#4 −6.0] |
+|  | medio (Do5–Sol5) | **−14.2** [Do5 −14.4 … Fa#5 −12.5] | **−13.6** [Do5 −13.8 … Fa#5 −11.9] | **−13.1** [Do5 −13.3 … Fa#5 −11.4] |
+|  | agudo (Sol#5–Mi6) | **−12.5** [Do#6 −16.4 … Do6 −11.8] | **−11.9** [Do#6 −15.9 … Do6 −11.2] | **−11.4** [Do#6 −15.4 … Do6 −10.7] |
+| `Violines()` | grave (Sol3–Mi4) | **−7.1** [Sol#3 −8.8 … Sol3 −5.4] | **−0.7** [Mi4 −2.3 … Sol3 +0.1] | **+0.3** [Mi4 −1.4 … Sol#3 +0.6] |
+|  | medio (Fa4–Re#5) | **−10.2** [Si4 −12.1 … Re5 −7.6] | **−1.4** [Fa4 −2.3 … Sol#4 +0.2] | **+2.5** [Fa4 −1.4 … Sol#4 +3.8] |
+|  | agudo (Mi5–Re6) | **−8.0** [Do#6 −11.2 … Mi5 −7.6] | **−3.2** [Re6 −6.8 … Mi5 −1.0] | **−2.9** [Do#6 −6.4 … Mi5 +0.5] |
+| `Violas()` | grave (Do3–Do4) | **−11.5** [Re3 −11.9 … Do3 −9.1] | **−0.1** [Do3 −2.7 … Fa3 +0.3] | **+5.4** [Do3 −1.7 … Fa#3 +6.9] |
+|  | medio (Do#4–Do#5) | **−11.8** [Do5 −13.7 … Do#4 −10.1] | **−0.5** [Si4 −0.9 … Fa#4 +1.9] | **+5.0** [Do#4 +1.1 … Si4 +5.8] |
+|  | agudo (Re5–Re6) | **−10.9** [Fa#5 −15.7 … Do6 −9.2] | **−0.7** [Re6 −6.2 … Si5 +0.4] | **+3.0** [Do#6 −5.3 … Fa#5 +6.3] |
+| `Chelos()` | grave (Do2–Do#3) | **−12.1** [Do2 −14.3 … Re2 −6.0] | **−0.2** [Do2 −3.4 … Re2 +4.9] | **+11.6** [Do2 +5.3 … Do#3 +13.7] |
+|  | medio (Re3–Re#4) | **−8.4** [Re3 −12.1 … Re4 −3.8] | **+3.4** [Re3 −0.5 … Re#4 +6.9] | **+10.6** [Mi3 +9.1 … Do4 +14.3] |
+|  | agudo (Mi4–Fa5) | **−6.2** [Fa5 −8.6 … Fa4 −3.6] | **+5.3** [Mi5 +3.1 … Mi4 +7.1] | **+10.5** [La4 +9.0 … Sol4 +12.5] |
+| `Contrabajo()` | grave (Mi1–Do#2) | **−1.1** [La1 −7.2 … Sol1 +3.3] | **+2.1** [La#1 −3.1 … Sol#1 +6.4] | **+2.4** [La1 −2.4 … Sol1 +7.1] |
+|  | medio (Re2–Do3) | **−4.9** [Sol2 −14.0 … Re2 +2.6] | **−1.6** [Sol#2 −5.2 … Mi2 +3.5] | **−0.4** [Sol#2 −2.8 … Re#2 +4.9] |
+|  | agudo (Do#3–Si3) | **−7.3** [Fa#3 −10.9 … Do#3 −5.0] | **+0.2** [La#3 −8.1 … Fa3 +3.5] | **+2.2** [Si3 −8.2 … Re#3 +2.7] |
+| `CuerdasTrem("violines")` | grave (Sol3–Mi4) | **−4.7** [La#3 −7.0 … Sol#3 −2.2] | **+6.6** [La#3 +3.3 … Sol#3 +7.7] | **+11.3** [La#3 +7.8 … Sol3 +13.8] |
+|  | medio (Fa4–Re#5) | **−5.5** [La4 −11.4 … Do5 −4.9] | **+4.4** [Sol#4 +0.0 … Fa4 +5.9] | **+8.2** [Si4 +7.7 … Fa4 +11.7] |
+|  | agudo (Mi5–Re6) | **−12.8** [Re6 −14.7 … Mi5 −9.9] | **−0.9** [Re6 −2.9 … Fa5 +1.4] | **+9.9** [Do#6 +6.4 … Sol5 +10.3] |
+| `CuerdasTrem("violas")` | grave (Do3–Do4) | **−9.0** [La#3 −10.4 … Fa#3 −8.9] | **−2.5** [Do4 −3.0 … Do3 +0.8] | **−1.5** [Re3 −1.5 … Do#3 +3.4] |
+|  | medio (Do#4–Do#5) | **−7.9** [Sol#4 −13.4 … Fa#4 −4.4] | **−0.6** [La#4 −7.4 … Mi4 +1.2] | **+0.5** [Sol4 −6.5 … Re4 +1.9] |
+|  | agudo (Re5–Re6) | **−15.6** [La#5 −17.8 … Do#6 −11.5] | **−6.5** [Do6 −7.1 … Re6 −1.2] | **−3.5** [Re5 −5.6 … Do#6 +4.2] |
+| `CuerdasTrem("chelos")` | grave (Do2–Do#3) | **−8.1** [La2 −11.0 … Do2 −4.1] | **+0.2** [La2 −2.3 … Do#2 +3.2] | **+2.9** [Fa#2 −0.8 … Do2 +4.1] |
+|  | medio (Re3–Re#4) | **−6.7** [Re#3 −10.1 … Fa#3 −3.6] | **+1.3** [Re3 +0.3 … Mi3 +1.9] | **+3.1** [Sol3 +2.5 … Re3 +4.1] |
+|  | agudo (Mi4–Fa5) | **−7.5** [Sol4 −8.8 … Re#5 −4.8] | **−0.2** [Fa#4 −2.2 … Mi4 +0.9] | **+1.0** [Sol4 −1.4 … Fa4 +3.1] |
+| `Pizzicato("violines")` | grave (Sol3–Mi4) | **−5.7** [Si3 −6.7 … Sol3 −3.3] | **−0.2** [Si3 −3.0 … Do4 +2.4] | **+1.7** [Si3 +0.8 … Sol3 +2.6] |
+|  | medio (Fa4–Re#5) | **−7.1** [Do5 −13.5 … Sol4 −5.0] | **−2.0** [Do#5 −6.4 … Fa#4 +0.8] | **+0.7** [Do#5 −1.7 … Fa4 +1.9] |
+|  | agudo (Mi5–Re6) | **−8.1** [Fa5 −11.6 … La5 −7.1] | **−2.7** [Do#6 −3.7 … Sol#5 −0.4] | **−0.5** [Fa5 −1.3 … Re6 −0.1] |
+| `Pizzicato("chelos")` | grave (Do2–Do#3) | **−6.3** [Si2 −8.9 … Re#2 −4.8] | **−0.9** [La2 −5.3 … Do3 +3.0] | **+3.4** [Si2 −0.5 … Re#2 +4.4] |
+|  | medio (Re3–Re#4) | **−6.7** [Re#4 −8.5 … Re3 −4.2] | **−0.5** [Sol#3 −4.5 … Sol3 +3.3] | **+1.8** [Do4 +0.1 … Re#3 +3.6] |
+|  | agudo (Mi4–Fa5) | **−7.4** [Sol4 −9.2 … Re5 −5.1] | **−1.0** [Fa5 −5.9 … Sol#4 +1.4] | **+0.7** [Re#5 −1.9 … Fa4 +2.6] |
+| `Pizzicato("contrabajo")` | grave (Mi1–Do#2) | **−0.1** [Do#2 −4.0 … Sol#1 +1.0] | **+4.6** [Do#2 −0.1 … Fa#1 +10.1] | **+7.6** [La#1 +5.0 … Do#2 +9.7] |
+|  | medio (Re2–Do3) | **−1.2** [Sol#2 −5.3 … Mi2 +1.0] | **+3.1** [Re2 −0.7 … Mi2 +5.2] | **+7.1** [La#2 +6.4 … Fa2 +7.6] |
+|  | agudo (Do#3–Si3) | **−2.9** [Si3 −4.9 … Do#3 −1.0] | **+0.9** [La#3 −1.1 … Do#3 +5.4] | **+6.9** [Mi3 +6.1 … Re#3 +8.1] |
+
+* Los +10 a +17 dB del piano y del vibráfono a vel 0,6 son notas que antes casi desaparecían: el
+  cruce de capas cancelaba justo en la mitad del cruce. A vel 0,45 y 0,75 el cambio es mucho
+  menor (tabla 2: vibráfono −1,0 y +3,8; piano −0,4 y +4,6).
+* Donde el «antes» saltaba de nota en nota (sobre todo en el contrabajo), la mediana del registro
+  dice poco: mirá las puntas (contrabajo: La1 −7 dB y Sol2 −14 dB a vel 0,3).
+
+### 2c. Cuerdas y vibráfono con arco: notas cortas (1,5 s)
+
+En una melodía o un bajo de notas de 1–2 s pesa el comienzo de la nota, no el tramo estable.
+Con una sola capa (vel ≤ 0,3 o ≥ 0,85) el cambio es el mismo que en las notas largas; donde se
+mezclan las dos capas (≈ 0,45–0,75) puede diferir hasta 6 dB en algunas notas. Nota aislada de
+1,5 s, LUFS integrado de la nota más 0,5 s de soltar; el resto, como la 2b.
+
+| instrumento | registro | vel 0,3 | vel 0,45 | vel 0,6 | vel 0,85 |
+|---|---|---|---|---|---|
+| `VibrafonoArco()` (nuevo) | grave (Mi4–Si4) | **−5.7** [Si4 −11.5 … Fa#4 −4.1] | **−5.4** [Si4 −11.2 … Fa#4 −3.8] | **−5.1** [Si4 −10.9 … Fa#4 −3.5] | **−4.6** [Si4 −10.4 … Fa#4 −3.0] |
+|  | medio (Do5–Sol5) | **−13.3** [Mi5 −13.9 … Fa#5 −11.2] | **−13.0** [Mi5 −13.6 … Fa#5 −10.9] | **−12.7** [Mi5 −13.3 … Fa#5 −10.6] | **−12.2** [Mi5 −12.8 … Fa#5 −10.1] |
+|  | agudo (Sol#5–Mi6) | **−12.6** [Re#6 −18.9 … Sol#5 −11.8] | **−12.3** [Re#6 −18.6 … Sol#5 −11.5] | **−12.0** [Re#6 −18.3 … Sol#5 −11.2] | **−11.5** [Re#6 −17.8 … Sol#5 −10.8] |
+| `Violines()` | grave (Sol3–Mi4) | **−7.1** [Sol#3 −8.8 … Sol3 −5.4] | **−2.6** [Mi4 −5.1 … La#3 −1.8] | **+0.1** [Mi4 −1.8 … Sol3 +0.2] | **+0.3** [Mi4 −1.4 … La3 +0.6] |
+|  | medio (Fa4–Re#5) | **−10.2** [Do#5 −12.1 … Re#5 −7.6] | **−5.2** [Do#5 −7.8 … Re5 −3.5] | **+0.1** [Sol4 −2.0 … Sol#4 +2.7] | **+2.5** [Fa#4 −1.4 … Sol#4 +3.8] |
+|  | agudo (Mi5–Re6) | **−8.0** [Do#6 −11.2 … Mi5 −7.6] | **−4.8** [Re6 −8.3 … Mi5 −3.6] | **−2.9** [Re6 −6.4 … Mi5 −0.0] | **−2.9** [Re6 −6.4 … Fa5 +0.5] |
+| `Violas()` | grave (Do3–Do4) | **−11.6** [Fa#3 −13.1 … Do3 −9.1] | **−6.1** [Re3 −7.7 … Fa#3 −5.3] | **+2.3** [Do3 −0.5 … Fa#3 +4.1] | **+5.4** [Do3 −1.7 … Sol3 +6.9] |
+|  | medio (Do#4–Do#5) | **−11.8** [Si4 −13.7 … Re4 −10.1] | **−9.2** [Do#5 −9.8 … Do#4 −3.7] | **+0.5** [Sol#4 −0.7 … Mi4 +1.5] | **+5.0** [Do#4 +1.1 … Do5 +5.8] |
+|  | agudo (Re5–Re6) | **−10.7** [Sol#5 −19.4 … La5 −9.5] | **−7.3** [Sol#5 −13.5 … La5 −4.0] | **+0.5** [Re6 −6.1 … La5 +2.2] | **+3.0** [Do#6 −5.3 … Sol5 +6.3] |
+| `Chelos()` | grave (Do2–Do#3) | **−12.5** [Do2 −14.3 … Re2 −6.0] | **−9.9** [Sol#2 −10.9 … Re2 −3.0] | **−0.1** [Sol2 −1.2 … Re#2 +6.1] | **+11.6** [Do#2 +5.3 … Do#3 +13.7] |
+|  | medio (Re3–Re#4) | **−8.4** [Re3 −12.1 … Re4 −3.8] | **−7.1** [Re#3 −7.5 … Re4 −1.5] | **+3.1** [La#3 +0.7 … Si3 +7.3] | **+10.7** [Fa3 +9.1 … Do#4 +14.3] |
+|  | agudo (Mi4–Fa5) | **−6.3** [Mi5 −9.0 … Mi4 −3.8] | **−2.7** [Fa5 −5.1 … Fa#4 −1.2] | **+5.6** [Fa5 +4.8 … Fa#4 +8.1] | **+10.4** [La4 +9.0 … Fa#4 +12.5] |
+| `Contrabajo()` | grave (Mi1–Do#2) | **−1.1** [La1 −7.2 … Sol#1 +3.3] | **+2.2** [La1 −7.8 … Sol1 +5.4] | **+3.4** [La1 −4.5 … Sol1 +7.7] | **+2.4** [La1 −2.4 … Sol1 +7.1] |
+|  | medio (Re2–Do3) | **−4.6** [La2 −14.7 … Re2 +2.6] | **−2.9** [Sol2 −12.5 … Re2 +3.8] | **+0.2** [Sol2 −6.7 … Mi2 +3.2] | **−0.4** [Sol#2 −2.9 … Re#2 +4.9] |
+|  | agudo (Do#3–Si3) | **−7.3** [Fa#3 −10.9 … Do#3 −4.6] | **−6.8** [Sol3 −7.2 … Do#3 −2.6] | **+0.1** [La#3 −7.3 … Do#3 +1.9] | **+2.2** [Si3 −7.8 … Re#3 +2.7] |
+| `CuerdasTrem("violines")` | grave (Sol3–Mi4) | **−4.7** [La#3 −7.0 … La3 −2.2] | **+0.5** [La#3 −4.0 … Sol3 +3.8] | **+9.0** [La#3 +4.2 … Sol3 +12.0] | **+11.3** [Do4 +7.8 … Sol3 +13.8] |
+|  | medio (Fa4–Re#5) | **−5.5** [La#4 −11.4 … Si4 −4.9] | **−2.9** [La#4 −6.5 … Fa4 −1.4] | **+4.3** [La#4 +3.6 … Fa4 +7.7] | **+8.2** [Si4 +7.7 … Fa4 +11.5] |
+|  | agudo (Mi5–Re6) | **−12.8** [Do#6 −14.7 … Mi5 −9.9] | **−6.3** [Re6 −10.3 … Mi5 −4.0] | **+4.5** [Re6 +0.0 … Mi5 +5.4] | **+9.8** [Do#6 +6.4 … Fa#5 +10.3] |
+| `CuerdasTrem("violas")` | grave (Do3–Do4) | **−9.0** [La#3 −10.4 … Sol#3 −8.9] | **−5.5** [Fa3 −6.4 … La3 −4.5] | **−1.8** [Fa3 −2.2 … Do3 +1.6] | **−1.5** [Re#3 −1.5 … Do3 +3.4] |
+|  | medio (Do#4–Do#5) | **−7.9** [Sol4 −13.4 … Fa4 −4.4] | **−2.7** [La#4 −8.4 … Mi4 +1.3] | **+0.3** [La#4 −6.7 … Mi4 +1.8] | **+0.5** [La#4 −6.5 … Do#4 +1.9] |
+|  | agudo (Re5–Re6) | **−15.6** [Si5 −17.6 … Re6 −11.5] | **−9.8** [Do6 −12.4 … Do#6 −0.4] | **−4.4** [Fa5 −6.1 … Do#6 +4.1] | **−3.7** [Re5 −5.6 … Do#6 +4.4] |
+| `CuerdasTrem("chelos")` | grave (Do2–Do#3) | **−8.8** [La#2 −11.0 … Do2 −4.1] | **−4.9** [La#2 −7.6 … Do2 +0.9] | **+2.5** [La#2 −1.9 … Do#2 +3.9] | **+2.7** [Fa#2 −0.8 … Do2 +4.1] |
+|  | medio (Re3–Re#4) | **−6.9** [Re3 −10.7 … Mi3 −3.9] | **−4.5** [Re#3 −6.5 … Fa#3 −2.5] | **+1.4** [Do#4 +1.0 … Re3 +2.0] | **+2.9** [Sol3 +2.5 … Re3 +3.8] |
+|  | agudo (Mi4–Fa5) | **−7.5** [Fa#4 −8.5 … Do#5 −5.1] | **−5.1** [Fa4 −5.4 … Re#5 −3.2] | **−0.1** [Sol4 −1.7 … Mi4 +1.2] | **+1.2** [Sol4 −1.6 … Mi4 +3.4] |
 
 ## 3. Tablas por instrumento (LUFS, nota aislada)
 

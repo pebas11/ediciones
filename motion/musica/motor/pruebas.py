@@ -22,6 +22,8 @@ Pruebas con criterio (OK/MAL, código de salida ≠ 0 si alguna falla):
 * glide      : Sub desliza solo entre notas ligadas y conserva la dinámica
 * vibrafono  : domado del parcial 4·f0 (arco) y del 3er modo (láminas graves)
 * desde      : render con --desde igual al render entero en ese tramo
+* hasta      : con --hasta no empieza nada en la cola (lo de antes sigue sonando) y la tabla
+               de LUFS por pista queda alineada con nombres largos
 """
 from __future__ import annotations
 
@@ -482,8 +484,62 @@ def t_desde(ch):
            f"{err:.1f} dB (margen: {entero['ganancia_db'] - tramo['ganancia_db']:+.2f} dB)")
 
 
+def t_hasta(ch):
+    """--hasta 5 de una canción de 8 compases = la misma canción escrita solo hasta el compás 5:
+    en la cola no empieza nada (notas, clips, pedales, golpes del ducking) y lo de antes sigue."""
+    import contextlib
+    import io
+    from .mezcla import imprimir_niveles
+
+    def armar(corte):
+        C = Cancion("prueba", "_prueba", 90, compas=(4, 4), semilla=3, cola_s=6.0)
+        C.seccion("a", 4, 0.4, "a")
+        C.seccion("b", 4, 0.6, "b")
+        C.progresion(1, "Dmaj9 | E/D | Bm11 | Gmaj13#11 | Dmaj9 | E/D | Bm11 | Gmaj13#11")
+        t_corte = (corte - 1) * C.tempo.tpc
+        pi = C.pista("piano", Piano(), "armonia", envios={"reverb": 0.3})
+        pad = C.pista("pad", Pad(), "armonia", efectos=[Ducking(fuente="bateria", golpe="bombo", prof_db=6)])
+        bat = C.pista("bateria", Bateria(), "bateria")
+        tex = C.pista("textura", Textura(), "textura")
+        for t0, t1, _s, v in C.voicings(1, 9, voces=4, rango=("E3", "B4")):
+            if t0 < t_corte:
+                pi.acorde(C.c(t0), v, t1 - t0, vel=0.45, rasgueo=0.02)
+                pad.acorde(C.c(t0), v, t1 - t0, vel=0.5)
+        pi.nota(4, "D3", 6.0, vel=0.5)                  # cruza el corte: sigue sonando en la cola
+        pi.pedal_por_compas(1, min(9, corte))
+        bat.patron("bombo", "x...x...x...x...", 1, min(9, corte), vel=0.6)
+        tex.clip(nube(Celesta(), "A5/0.5 E6 D6", dur_s=10.0), pos=2)         # empieza antes: sigue
+        tex.clip(swell(Piano(), ["D3", "A3", "E4"], largo_tiempos=4), fin=5)  # empieza en el 4
+        if corte > 5:
+            tex.clip(nube(Celesta(), "E6/0.5 A5", dur_s=3.0), pos=6)
+            tex.clip(swell(Piano(), ["E3", "B3"], largo_tiempos=4), fin=7)   # empieza en el 6
+        return C
+
+    kw = dict(escribir=False, qa=False, niveles=False, hasta_compas=5)
+    C_a, C_b = armar(99), armar(5)
+    with contextlib.redirect_stdout(io.StringIO()):
+        a = render_cancion(C_a, **kw)
+        b = render_cancion(C_b, **kw)
+    for st in ("armonia", "bateria", "textura"):
+        x, y = a["stems"][st].astype(np.float64), b["stems"][st].astype(np.float64)
+        err = 20 * np.log10(np.sqrt(np.mean((x - y) ** 2)) / np.sqrt(np.mean(x ** 2)) + 1e-30)
+        ch("hasta", f"--hasta 5 = la canción escrita hasta el compás 5 ({st}: error < −100 dB)",
+           err < -100.0, f"{err:.1f} dB")
+    i0 = int(round(C_a.tempo.seg(C_a.tempo.pos(5)) * SR))
+    cola = a["stems"]["armonia"][i0 + int(0.2 * SR): i0 + int(1.2 * SR)]
+    v = 20 * np.log10(np.sqrt(np.mean(cola.astype(np.float64) ** 2)) + 1e-12)
+    ch("hasta", "lo que ya sonaba sigue en la cola (nota larga, pedal, reverb)", v > -50.0, f"{v:.1f} dBFS")
+    # la tabla de LUFS por pista queda alineada aunque un nombre pase de 12 caracteres
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        imprimir_niveles(C_b, {"piano_abierto_largo": {"a": -20.0}, "pad": {"a": -30.5, "b": -31.0}})
+    filas = buf.getvalue().strip("\n").splitlines()[1:]      # encabezado + filas
+    ch("hasta", "tabla de LUFS por pista alineada con nombres largos (mismo ancho en todas las filas)",
+       len({len(f) for f in filas}) == 1, " | ".join(filas))
+
+
 TESTS = {"nivelacion": t_nivelacion, "parser": t_parser, "clicks": t_clicks, "glide": t_glide,
-         "vibrafono": t_vibrafono, "desde": t_desde}
+         "vibrafono": t_vibrafono, "desde": t_desde, "hasta": t_hasta}
 
 
 def tests(nombres, rapido=False) -> bool:

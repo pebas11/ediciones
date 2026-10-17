@@ -404,6 +404,11 @@ C.fx["master"]    = {"lufs": -14.0, "techo_dbtp": -1.0, "glue": 0.5}
   `--preroll S`, `--solo pista1,pista2`, `--sin-qa`, `--sin-mp3`,
   `--sin-imagenes`, `--partitura`, `--pianola`, `--salida DIR`. Las pruebas van a
   `salida/_pruebas/` y no generan MP3.
+* `--hasta N`: el render dura hasta el compás N más la cola (`cola_s`), pero en la cola no
+  empieza nada: las notas, clips, pedales y golpes de ducking escritos desde el compás N se
+  descartan (se decide por la posición escrita, no por la humanizada). Lo que ya sonaba sigue:
+  notas largas, el pedal que estaba bajado (sube cuando estaba escrito), la reverb y el eco.
+  Así el QA de la sección siguiente solo mide colas.
 * `--desde N`: se calcula sobre la línea de tiempo completa (automatizaciones, LFO, cinta y
   pedales iguales), pero solo las notas y clips que siguen sonando `--preroll` segundos (12 por
   defecto) antes del compás N: la reverb, el eco y el pedal llegan "cargados". El tramo sale
@@ -419,7 +424,8 @@ C.fx["master"]    = {"lufs": -14.0, "techo_dbtp": -1.0, "glue": 0.5}
   instrumento + `salida/_pruebas/instrumentos/hoja.png`.
 * `python3 -m motor.pruebas tests [--rapido] [nombres]`: pruebas con criterio (nivelación,
   parser de acordes, detector de clicks, glide y dinámica del Sub, domado de los vibráfonos,
-  `--desde`). ~4 min; `--rapido` mide la nivelación en 5 bancos (~1 min).
+  `--desde`, `--hasta` y la tabla de LUFS por pista). ~4 min; `--rapido` mide la nivelación
+  en 5 bancos (~1 min en total).
 * Correr los renders en segundo plano y no más de uno a la vez (la máquina es compartida).
 
 ---

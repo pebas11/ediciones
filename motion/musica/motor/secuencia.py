@@ -313,10 +313,15 @@ class Pista:
                            desfase_ms=desfase_ms)
         return self
 
-    def notas_humanizadas(self) -> list[Nota]:
+    def notas_humanizadas(self, hasta: float | None = None) -> list[Nota]:
+        """Las notas con microtiempos, swing y variación de velocidad (deterministas).
+        `hasta` (tiempos): sin las notas escritas en ese punto o después (render con --hasta;
+        se decide por la posición escrita, no por la humanizada)."""
         h = self.humano
         out = []
         for n in self.notas:
+            if hasta is not None and n.t >= hasta - 1e-6:
+                continue
             m = copy.copy(n)
             m.x = dict(n.x)
             t = n.t

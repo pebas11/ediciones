@@ -391,10 +391,10 @@ def graficar(C, res, ts, st, f, p, carpeta: Path, esp_stems=None):
     fig.savefig(carpeta / "espectro.png")
     plt.close(fig)
 
-    pianola(C, carpeta / "pianola.png", None if t0 else dur)
+    pianola(C, carpeta / "pianola.png", None if t0 else dur, res.get("t_hasta"))
 
 
-def pianola(C, ruta, dur=None):
+def pianola(C, ruta, dur=None, hasta=None):
     """Imagen del arreglo: un carril por pista (altura relativa dentro del carril; en la
     batería, un sub-carril por golpe), secciones sombreadas y cifrado arriba."""
     import matplotlib
@@ -409,11 +409,13 @@ def pianola(C, ruta, dur=None):
                "textura": "#6d6d6d"}
     golpes_orden = ["bombo", "aro", "escobilla", "caja", "barrido", "shaker", "hat", "hat_abierto",
                     "tic", "tac"]
+    t_corte = float("inf") if hasta is None else hasta - 1e-6    # render con --hasta
     for k, p in enumerate(pistas):
         y0 = len(pistas) - 1 - k
         segs, alfas = [], []
+        notas = [n for n in p.notas if n.t < t_corte]
         if p.stem == "bateria":
-            for n in p.notas:
+            for n in notas:
                 g = n.x.get("golpe", "bombo")
                 j = golpes_orden.index(g) if g in golpes_orden else 0
                 yy = y0 + 0.08 + 0.84 * j / (len(golpes_orden) - 1)
@@ -421,10 +423,10 @@ def pianola(C, ruta, dur=None):
                 segs.append([(a, yy), (a + 0.06, yy)])
                 alfas.append(0.3 + 0.7 * n.vel)
         else:
-            alturas = [n.midi for n in p.notas] or [60]
+            alturas = [n.midi for n in notas] or [60]
             lo, hi = min(alturas), max(alturas)
             rng_ = max(12, hi - lo)
-            for n in p.notas:
+            for n in notas:
                 a = float(C.tempo.seg(n.t))
                 b = float(C.tempo.seg(n.t + n.dur))
                 yy = y0 + 0.08 + 0.84 * (n.midi - lo) / rng_
@@ -436,11 +438,15 @@ def pianola(C, ruta, dur=None):
             ax.add_collection(LineCollection(segs, colors=cols, linewidths=1.6, capstyle="butt"))
         for c in p.clips:
             if c["pos"] is not None:
+                if c["pos"] >= t_corte:
+                    continue
                 ta = float(C.tempo.seg(c["pos"]))
                 tb = ta + 8
             else:
                 tb = float(C.tempo.seg(c["fin"]))
                 ta = tb - 4
+                if hasta is not None and ta >= float(C.tempo.seg(hasta)):
+                    continue
             ax.add_patch(plt.Rectangle((ta, y0 + 0.15), tb - ta, 0.7, color=colores[p.stem], alpha=0.25))
         ax.text(-1, y0 + 0.5, f"{p.nombre} [{p.stem}]", ha="right", va="center", fontsize=9)
     for s in C.secciones:

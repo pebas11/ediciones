@@ -7,6 +7,7 @@ compresión de pegamento, normalización a −14 LUFS y limitador true-peak.
 """
 from __future__ import annotations
 
+import copy
 import json
 import shutil
 import subprocess
@@ -73,21 +74,36 @@ def _suena_desde(p, nt, ctx, t_min_s: float) -> bool:
     return ctx.seg(fin) >= t_min_s
 
 
+def _pista_hasta(p, t_hasta: float):
+    """La pista sin los pedales que bajan en t_hasta o después (render con --hasta): el pedal
+    que ya estaba bajado sigue hasta que sube, como en el render entero."""
+    if not p.pedales or all(a < t_hasta - 1e-6 for a, _ in p.pedales):
+        return p
+    q = copy.copy(p)
+    q.pedales = [(a, b) for a, b in p.pedales if a < t_hasta - 1e-6]
+    return q
+
+
 def render_pista(p, ctx) -> np.ndarray:
-    notas = [nt for nt in p.notas_humanizadas() if ctx.muestra(nt.t) < ctx.n]
+    # render con --hasta: nada nuevo empieza en el corte o después (notas, clips, pedales y
+    # disparos del ducking); lo que ya sonaba sigue en la cola
+    t_hasta = getattr(ctx, "t_hasta", None)
+    pr = p if t_hasta is None else _pista_hasta(p, t_hasta)
+    notas = [nt for nt in p.notas_humanizadas(hasta=t_hasta) if ctx.muestra(nt.t) < ctx.n]
     t_min = getattr(ctx, "t_min_s", None)     # render con --desde: lo que ya se apagó no se calcula
     if t_min is not None and not getattr(p.instrumento, "continuo", False):
-        notas = [nt for nt in notas if _suena_desde(p, nt, ctx, t_min)]
-    buf = p.instrumento.render(notas, ctx, p)
+        notas = [nt for nt in notas if _suena_desde(pr, nt, ctx, t_min)]
+    buf = p.instrumento.render(notas, ctx, pr)
     for c in p.clips:
-        if t_min is not None:
-            if c["fin"] is not None and ctx.seg(c["fin"]) < t_min:
-                continue
-            if c["pos"] is not None and ctx.seg(c["pos"]) < t_min - 150.0:
-                continue
+        if c["fin"] is not None and t_min is not None and ctx.seg(c["fin"]) < t_min:
+            continue                       # --desde: ya terminó antes de lo que se calcula
+        if c["fin"] is None and t_hasta is not None and (c["pos"] or 0.0) >= t_hasta - 1e-6:
+            continue                       # --hasta: empieza en el corte o después
         y = c["gen"](ctx)
         if c["fin"] is not None:
             ini = ctx.muestra(c["fin"]) - len(y)
+            if t_hasta is not None and ini >= ctx.muestra(t_hasta):
+                continue
         else:
             ini = ctx.muestra(c["pos"] or 0.0)
         mezclar_en(buf, y * np.float32(desde_db(c["db"])), ini)
@@ -145,7 +161,9 @@ def render_cancion(C, salida=None, solo=None, hasta_compas=None, escribir=True, 
     """Renderiza la canción completa y escribe master, stems, cues, mp3 y QA.
 
     * solo         : lista de nombres de pista a renderizar (pruebas)
-    * hasta_compas : corta la canción en ese compás (+ cola) para pruebas rápidas
+    * hasta_compas : corta la canción en ese compás (+ cola) para pruebas rápidas. Las notas,
+                     clips, pedales y golpes de ducking escritos desde ese compás no suenan;
+                     lo que ya sonaba sigue en la cola (notas largas, pedal bajado, reverb)
     * desde_compas : la salida empieza en ese compás. Se calcula sobre la línea de tiempo
                      completa (automatizaciones, LFO, cinta y pedales iguales al render
                      entero), pero solo las notas y clips que siguen sonando `preroll_s`
@@ -173,6 +191,8 @@ def render_cancion(C, salida=None, solo=None, hasta_compas=None, escribir=True, 
     ctx = Contexto(C, n, C.semilla, hall)
     if desde_s > 0:
         ctx.t_min_s = desde_s - preroll_s
+    if hasta_compas is not None:
+        ctx.t_hasta = float(C.tempo.pos(hasta_compas))
     cinta_cfg = C.fx["cinta"]
     mod = fx.modulacion_cinta(n, C.semilla, cinta_cfg["wow"], cinta_cfg["flutter"]) \
         if (cinta_cfg["wow"] or cinta_cfg["flutter"]) else None
@@ -252,7 +272,7 @@ def render_cancion(C, salida=None, solo=None, hasta_compas=None, escribir=True, 
     res = {"master": master, "stems": stems, "premaster": premaster, "info_master": info_master,
            "carpeta": carpeta, "segundos_render": dt, "tiempos_pistas": tiempos, "n": n,
            "niveles_pistas": niveles_pistas, "t0_s": desde_s, "fin_musica_s": fin_musica_s,
-           "desde_compas": desde_compas, "ganancia_db": off}
+           "desde_compas": desde_compas, "ganancia_db": off, "t_hasta": getattr(ctx, "t_hasta", None)}
     if niveles and niveles_pistas:
         imprimir_niveles(C, niveles_pistas)
     if escribir:
@@ -265,10 +285,11 @@ def render_cancion(C, salida=None, solo=None, hasta_compas=None, escribir=True, 
 
 def imprimir_niveles(C, niv):
     secs = [s.nombre for s in C.secciones]
+    ancho = max([12] + [len(k) for k in niv])     # la columna de nombres, al más largo
     print("\nLUFS por pista y sección (seco, post-fader, escala del premaster):")
-    print(f"{'':12s}" + "".join(f"{s[:9]:>10s}" for s in secs))
+    print(f"{'':{ancho}s}" + "".join(f"{s[:9]:>10s}" for s in secs))
     for k, d in niv.items():
-        print(f"{k:12s}" + "".join(f"{d.get(s, ''):>10}" for s in secs))
+        print(f"{k:{ancho}s}" + "".join(f"{d.get(s, ''):>10}" for s in secs))
 
 
 def masterizar(x: np.ndarray, cfg: dict):

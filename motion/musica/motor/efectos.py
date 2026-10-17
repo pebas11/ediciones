@@ -422,7 +422,8 @@ class Ducking(Efecto):
         n = len(x)
         imp = np.zeros(n)
         hold = int(0.012 * SR)
-        for nt in p.notas_humanizadas():
+        hasta = getattr(ctx, "t_hasta", None)     # --hasta: sin los golpes del corte en adelante
+        for nt in p.notas_humanizadas(hasta=hasta):
             if nt.x.get("golpe") != self.golpe:
                 continue
             i = ctx.muestra(nt.t)
