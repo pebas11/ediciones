@@ -130,7 +130,6 @@ def niveles(voz, pv, pc, pm, mask_sub, P, gan_master: float, bloques=None):
     st = -0.691 + 10 * np.log10(np.maximum(np.convolve(pc, np.ones(CORTO) / CORTO, mode="same"), 1e-30)) + G
     st[:CORTO // 2] = np.maximum(st[:CORTO // 2], -90)
     tipo = tipo_region(voz, m)
-    cola_libre = np.ones(m, bool)        # el final se mide hasta que la música cae 20 dB (no la cola)
     t_sub = (np.arange(m) + 0.5) * 0.1
 
     def resumen(sel, techo=None):
@@ -152,7 +151,7 @@ def niveles(voz, pv, pc, pm, mask_sub, P, gan_master: float, bloques=None):
         if b - a >= larga:
             en_pausa_larga |= (t_sub >= a) & (t_sub < b)
     techo_p = None if lv_fin is None else lv_fin + pn["techo_pausas_lu"]
-    out["pausas"] = resumen((tipo == 1) & cola_libre, techo_p)
+    out["pausas"] = resumen(tipo == 1, techo_p)
     out["pausas_largas"] = resumen(en_pausa_larga, techo_p)
     out["intro"] = resumen(tipo == 2, pn["techo_sin_voz_lufs"])
     out["final"] = resumen(tipo == 3, pn["techo_sin_voz_lufs"])

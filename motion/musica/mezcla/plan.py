@@ -96,6 +96,8 @@ class Tramo:
 
     @property
     def nombre(self) -> str:
+        if self.id == f"tramo {self.indice + 1}":
+            return self.id
         return f"tramo {self.indice + 1} («{self.id}»)"
 
     def barras(self) -> list[int]:

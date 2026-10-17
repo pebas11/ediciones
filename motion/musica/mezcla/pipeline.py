@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 
-from . import SR, STEMS, VERSION
+from . import SR, VERSION
 from . import armado, niveles, voz as voz_mod, plan as plan_mod
 from .canciones import Catalogo
 from .ducking import Control
@@ -147,9 +147,11 @@ def mezclar(voz_path, plan_path, out_dir, extra=None, dir_canciones=None) -> dic
         cama0 = None
         red = np.zeros(1)
         ultimo = np.inf
+        exceso_inicial = None
         for _ in range(5):        # la reducción se promedia en la ventana de 3 s: se itera
             g_prev = ganancia_prevista(p_cama)
             extra, exc = niveles.techos(p_cama, p_voz, mask, voz, bloques, P, voz.lufs_mezcla, g_prev)
+            exceso_inicial = exceso_inicial or exc
             if extra.max() <= 0.3 or extra.max() > 0.8 * ultimo:     # listo, o ya no converge
                 break
             ultimo = extra.max()
@@ -163,6 +165,7 @@ def mezclar(voz_path, plan_path, out_dir, extra=None, dir_canciones=None) -> dic
         if red.max() > 0.05:
             guardia = {"activa": True, "max_db": round(float(red.max()), 2),
                        "segundos": round(float((red > 0.25).sum() * 0.1), 1),
+                       "exceso_antes_db": exceso_inicial,
                        "regiones": _regiones(red, 0.25)}
             log(f"techos (guardia): hasta −{red.max():.1f} dB en {guardia['segundos']:.1f} s")
     t0 = marca("guardia_s", t0)
@@ -176,7 +179,7 @@ def mezclar(voz_path, plan_path, out_dir, extra=None, dir_canciones=None) -> dic
     t0 = marca("master_s", t0)
 
     # ---- salidas de audio: la cama en la escala de la mezcla final (sin limitador)
-    p_cama_pre = niveles.potencia_k_bloques(cama)
+    p_cama_pre = p_cama                    # potencia de la cama antes de la ganancia del master
     cama *= np.float32(10 ** (G / 20))
     nombre = Path(plan_path).stem
     escribir_wav(out / "mezcla_final.wav", mezcla, f"mezcla|{nombre}")
@@ -195,6 +198,9 @@ def mezclar(voz_path, plan_path, out_dir, extra=None, dir_canciones=None) -> dic
     if lim["voz"]["max_db"] > P["master"]["max_reduccion_voz_db"]:
         avisos.append(f"el limitador baja la voz hasta {lim['voz']['max_db']} dB en algún pico "
                       f"(p99,9 {lim['voz']['p999_db']} dB); con la voz entregada a −3 dBTP no tocaría")
+    if info_master["lufs_integrado"] is not None and abs(info_master["lufs_integrado"] - P["master"]["lufs"]) > 0.2:
+        avisos.append(f"la mezcla quedó en {info_master['lufs_integrado']} LUFS (objetivo {P['master']['lufs']}): "
+                      "llegar exigía limitar más de 12 dB")
     nuevos = sum(v["nuevos"] for v in clicks.values())
     if nuevos:
         avisos.append(f"{nuevos} clicks nuevos detectados en los stems armados (ver qa.clicks)")

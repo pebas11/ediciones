@@ -158,6 +158,8 @@ class TramoReal:
     avisos: list = field(default_factory=list)
     ancla_error_ms: float | None = None
     ancla_t: float | None = None
+    info_req: tuple = ()           # (regla, X, info, para_a_mitad_de_compás) del final del tramo
+    n_pre: int | None = None       # compases previos al ancla en la ruta
 
     def ruta_txt(self) -> str:
         partes = []
@@ -383,7 +385,6 @@ class Armador:
         # Tramos seguidos de la misma canción con material contiguo (p. ej. para cambiar el nivel o
         # los stems): si el que sigue entra a menos de medio compás del final natural del anterior,
         # se lo pega a ese límite de compás y la música sigue sin empalme.
-        self.pegado = [False] * n
         for k in range(n - 1):
             A, B = trs[k], trs[k + 1]
             if (A.cancion is not B.cancion or B.ancla is not None or self.fijo[k + 1] is not None
@@ -395,7 +396,6 @@ class Armador:
             t_nat = self.T_e[k] + _dur(A.cancion, mat)     # final natural del material
             if abs(t_nat - self.T_e[k + 1]) <= A.cancion.dur(mat[-1]) / 2:
                 self.T_e[k + 1] = t_nat
-                self.pegado[k + 1] = True
 
     def _punto_final(self, k: int) -> float:
         """Dónde conviene que termine el material del tramo k (para 'acortar': 'inicio')."""
@@ -632,7 +632,7 @@ class Armador:
         self._entradas()
         self._rutas()
         p = self.p
-        g, e = self.g, self.e
+        g = self.g
         segs: dict[int, Segmento] = {}
         orden: list[Corrida] = []
         for tre in self.reales:

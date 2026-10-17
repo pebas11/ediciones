@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import copy
 import difflib
-import json
 
 from . import STEMS
 
@@ -139,7 +138,8 @@ def fusionar(base: dict, cambios: dict, ruta: str = "parametros", errores: list 
                     for s in v:
                         if s not in STEMS:
                             errores.append(f"{r}.{s}: stem desconocido{sugerir(s, STEMS)}. Válidos: {', '.join(STEMS)}")
-                out[k] = fusionar(b, {s: x for s, x in v.items() if s in b}, r, errores)
+                    v = {s: x for s, x in v.items() if s in b}
+                out[k] = fusionar(b, v, r, errores)
             elif isinstance(b, bool):
                 if not isinstance(v, bool):
                     errores.append(f"{r}: se esperaba true/false, llegó {_tipo(v)}")
@@ -218,17 +218,3 @@ def validar_rangos(p: dict, errores: list):
     rango("salidas.fps", 1, 240)
 
 
-def asignar(p: dict, ruta: str, valor_txt: str):
-    """`--param ducking.ataque_ms=60` → p["ducking"]["ataque_ms"] = 60 (valor en JSON o texto)."""
-    try:
-        valor = json.loads(valor_txt)
-    except json.JSONDecodeError:
-        valor = valor_txt
-    partes = ruta.split(".")
-    cambio: dict = {}
-    nodo = cambio
-    for x in partes[:-1]:
-        nodo[x] = {}
-        nodo = nodo[x]
-    nodo[partes[-1]] = valor
-    return fusionar(p, cambio, "--param")

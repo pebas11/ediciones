@@ -89,11 +89,6 @@ def corto_plazo(p: np.ndarray, salto: int = 5) -> tuple[np.ndarray, np.ndarray]:
     return (ini + CORTO / 2) * 0.1, np.maximum(_lk(z), -90.0)
 
 
-def momentaneo(p: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    z = bloques_400(p)
-    return (np.arange(len(z)) + BLOQUE / 2) * 0.1, np.maximum(_lk(z), -90.0)
-
-
 def lufs(x: np.ndarray) -> float | None:
     return integrado(potencia_k_bloques(x))
 
@@ -296,18 +291,6 @@ def estimar(bloques: list[Bloque], plan, voz, p_voz_sub: np.ndarray | None, mask
             bl.objetivo_lu = pn["musica_bajo_voz_lu"] + plan.tramos[bl.tramo].nivel_db
             bl.ganancia_db = 0.0
     return bloques
-
-
-def medir_relativo(p_cama: np.ndarray, p_voz: np.ndarray, mask_sub: np.ndarray, salto: int = 5,
-                   min_habla: float = 0.7):
-    """Cama − voz en LUFS de corto plazo (3 s, salto 0,5 s) en ventanas con ≥ 70 % de habla.
-    Devuelve (centros_s, relativo_lu, fraccion_habla) de TODAS las ventanas (NaN donde no aplica)."""
-    n = min(len(p_cama), len(p_voz), len(mask_sub))
-    t, lc = corto_plazo(p_cama[:n], salto)
-    _, lv = corto_plazo(p_voz[:n], salto)
-    fr = fraccion_ventanas(mask_sub[:n], CORTO, salto)[:len(t)]
-    rel = np.where((fr >= min_habla) & (lv > -60), lc - lv, np.nan)
-    return t, rel, fr, lc, lv
 
 
 def ventanas_del_bloque(bl: Bloque, t: np.ndarray, excluir=()) -> np.ndarray:

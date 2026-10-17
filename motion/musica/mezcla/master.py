@@ -95,32 +95,53 @@ def ganancia_limitador(pk: np.ndarray, techo: float, L: int, relaj_s: float) -> 
 
 
 def masterizar(voz_x: np.ndarray, cama: np.ndarray, p: dict, mascara_voz=None):
-    """Suma voz + cama, lleva a `p['lufs']` y limita a `p['techo_dbtp']`. Devuelve (mezcla, info)."""
+    """Suma voz + cama, lleva a `p['lufs']` y limita a `p['techo_dbtp']`. Devuelve (mezcla, info, gr).
+
+    El pico real escala con la ganancia: se sobremuestrea una sola vez la mezcla previa y, al final,
+    se verifica el pico real de la mezcla limitada (si se pasa, otra vuelta con más margen)."""
     n = max(len(voz_x), len(cama))
     pre = np.zeros((n, 2), np.float32)
     pre[:len(cama)] += cama
     pre[:len(voz_x)] += voz_x
     objetivo, techo_db = p["lufs"], p["techo_dbtp"]
     L = max(2, int(p["lookahead_ms"] / 1000 * SR))
-    l0 = integrado(potencia_k_bloques(pre))
+    p_pre = potencia_k_bloques(pre)
+    l0 = integrado(p_pre)
     gan_db = objetivo - (l0 if l0 is not None else objetivo)
     margen = p["margen_db"]
     info = {"lufs_premaster": None if l0 is None else round(l0, 2)}
-    g_lim = None
-    for it in range(6):
-        y = pre * np.float32(10 ** (gan_db / 20))
-        pk = picos_reales(y)
-        g_lim = ganancia_limitador(pk, 10 ** ((techo_db - margen) / 20), L, p["relajacion_ms"] / 1000)
-        y *= g_lim[:, None]
-        tp = pico_real_db(y)
-        lu = integrado(potencia_k_bloques(y))
-        if tp > techo_db + 0.005:            # pasada extra con más margen
-            margen += (tp - techo_db) + 0.05
-            continue
-        if lu is None or abs(lu - objetivo) < 0.05:
+    pk0 = picos_reales(pre)
+    y = g_lim = None
+    lu = tp = None
+    it = 0
+    for vuelta in range(6):                   # verificación del pico real
+        for it in range(6):                   # ganancia ↔ sonoridad (el limitador casi no la mueve)
+            g = float(10 ** (gan_db / 20))
+            g_lim = ganancia_limitador(pk0 * np.float32(g), 10 ** ((techo_db - margen) / 20), L,
+                                       p["relajacion_ms"] / 1000)
+            if g_lim.min() >= 1.0:            # sin limitador: la sonoridad escala exacta
+                lu = None if l0 is None else l0 + gan_db
+            else:
+                y = pre * (g_lim * np.float32(g))[:, None]
+                lu = integrado(potencia_k_bloques(y))
+            if lu is None or abs(lu - objetivo) < 0.05:
+                break
+            if lu < objetivo and g_lim.min() < 10 ** (-12 / 20):
+                break                         # no perseguir la sonoridad aplastando picos (> 12 dB)
+            gan_db += objetivo - lu
+        y = pre * (g_lim * np.float32(10 ** (gan_db / 20)))[:, None]
+        if g_lim.min() >= 1.0:                # sin limitación el pico real escala exacto
+            tp = float(20 * np.log10(float(pk0.max()) * 10 ** (gan_db / 20) + 1e-12))
+        else:
+            tp = pico_real_db(y)
+        if tp <= techo_db + 0.005:
             break
-        gan_db += objetivo - lu
-    gr = -20 * np.log10(np.maximum(g_lim, 1e-9))
+        margen += (tp - techo_db) + 0.05
+    if tp > techo_db + 0.005:                 # seguridad: el techo nunca se pasa (casos extremos)
+        y *= np.float32(10 ** ((techo_db - 0.02 - tp) / 20))
+        tp = pico_real_db(y)
+    lu = integrado(potencia_k_bloques(y))
+    gr = (-20 * np.log10(np.maximum(g_lim, 1e-9))).astype(np.float32)
     info.update({
         "lufs_integrado": None if lu is None else round(lu, 2),
         "pico_dbtp": round(tp, 2),
@@ -132,14 +153,25 @@ def masterizar(voz_x: np.ndarray, cama: np.ndarray, p: dict, mascara_voz=None):
 
 
 def resumen_reduccion(gr: np.ndarray, mascara_voz=None) -> dict:
+    """Estadísticas de la reducción del limitador (dB): total, mientras habla la voz y sin voz.
+    Casi todas las muestras valen 0: los percentiles se calculan solo sobre las que no."""
+    def pct(nz_ordenado, n, q):
+        rango = q / 100.0 * (n - 1)
+        ceros = n - len(nz_ordenado)
+        if rango < ceros or len(nz_ordenado) == 0:
+            return 0.0
+        return float(nz_ordenado[min(len(nz_ordenado) - 1, int(rango - ceros))])
+
     def st(v):
-        if len(v) == 0:
+        n = len(v)
+        if n == 0:
             return {"max_db": 0.0, "p99_db": 0.0, "p999_db": 0.0, "pct_mas_05db": 0.0, "pct_mas_1db": 0.0}
-        return {"max_db": round(float(v.max()), 2),
-                "p99_db": round(float(np.percentile(v, 99)), 3),
-                "p999_db": round(float(np.percentile(v, 99.9)), 3),
-                "pct_mas_05db": round(float((v > 0.5).mean() * 100), 3),
-                "pct_mas_1db": round(float((v > 1.0).mean() * 100), 3)}
+        nz = np.sort(v[v > 1e-6])
+        return {"max_db": round(float(nz[-1]) if len(nz) else 0.0, 2),
+                "p99_db": round(pct(nz, n, 99), 3),
+                "p999_db": round(pct(nz, n, 99.9), 3),
+                "pct_mas_05db": round(float(np.count_nonzero(nz > 0.5)) / n * 100, 3),
+                "pct_mas_1db": round(float(np.count_nonzero(nz > 1.0)) / n * 100, 3)}
     out = {"total": st(gr)}
     if mascara_voz is not None:
         m = mascara_voz[:len(gr)]

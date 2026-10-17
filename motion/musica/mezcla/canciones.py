@@ -140,10 +140,6 @@ class Cancion:
     def pulso_s(self, compas: int) -> float:
         return self.dur(compas) / self.pulsos
 
-    def compas_en(self, t: float) -> int:
-        i = int(np.searchsorted(self.db, t, side="right"))
-        return int(np.clip(i, 1, self.n_compases))
-
     def seccion(self, nombre: str) -> Seccion:
         for s in self.secciones:
             if s.nombre == nombre:
@@ -292,7 +288,9 @@ class Cancion:
     def factor_eq(self, stem: str, eq: dict) -> float:
         """Fracción de la potencia ponderada K del stem que queda con la EQ dinámica a fondo
         (para estimar niveles sin renderizar)."""
-        clave = (stem, eq["desde_hz"], eq["hasta_hz"], eq["ganancia_db"])
+        clave = f"{stem}@{eq['desde_hz']:g}-{eq['hasta_hz']:g}@{eq['ganancia_db']:g}"
+        if not self._factor_eq:
+            self._factor_eq = {k: float(v) for k, v in (self._leer_cache("eq") or {}).items()}
         if clave not in self._factor_eq:
             from scipy.signal import welch, sosfreqz
             from .niveles import K_SOS
@@ -307,6 +305,7 @@ class Cancion:
                 g = 10 ** (eq["ganancia_db"] / 20)
                 pk = P * np.abs(hk) ** 2
                 self._factor_eq[clave] = float(np.sum(pk * np.abs(1 - (1 - g) * hb) ** 2) / (np.sum(pk) + 1e-30))
+            self._escribir_cache("eq", {k: np.array(v) for k, v in self._factor_eq.items()})
         return self._factor_eq[clave]
 
 
