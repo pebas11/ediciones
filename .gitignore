@@ -4,3 +4,13 @@ motion/renders/draft/
 motion/renders/alfa-test/
 motion/renders/_audio-demo*
 motion/input/
+motion/musica/muestras/
+motion/musica/salida/
+__pycache__/
+
+# Remotion (motion/remotion): dependencias, renders, bundles y cachés
+motion/remotion/node_modules/
+motion/remotion/out/
+motion/remotion/build/
+motion/remotion/**/__pycache__/
+motion/remotion/**/*.part.*

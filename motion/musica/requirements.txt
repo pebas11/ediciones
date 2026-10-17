@@ -1,0 +1,10 @@
+# Motor musical (Python 3.13). Instalar con:  pip install -r motion/musica/requirements.txt
+numpy>=2.1
+numba>=0.61
+scipy>=1.14
+soundfile>=0.13
+soxr>=0.5
+pyloudnorm>=0.1.1
+pedalboard>=0.9      # disponible; el motor actual no lo necesita
+matplotlib>=3.9      # imágenes de QA (espectrograma, forma de onda, pianola)
+imageio-ffmpeg>=0.5  # ffmpeg de respaldo para el MP3 si no hay uno en el sistema
