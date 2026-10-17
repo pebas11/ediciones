@@ -79,7 +79,7 @@ public/                   audio/, datos/ (JSON), fuentes/
 | Un cuadro | `npx remotion still PruebaTecnica out/f300.png --frame=300` | igual |
 | Varios cuadros | `npx remotion render PruebaTecnica out/hoja --sequence --frames=0,150,300` | igual |
 | Video corto directo | `npx remotion render PruebaTecnica out/prueba.mp4` | igual |
-| Video largo por tramos | `node scripts/render-tramos.mjs VideoEjemplo --por-escena --procesos 2 --concurrencia 1 --youtube` | igual |
+| Video largo por tramos | `node scripts/render-tramos.mjs VideoEjemplo --por-escena --perfil final --youtube` | igual |
 | Borrador rápido | `npx remotion render VideoEjemplo out/borrador.mp4 --props='{"hojaSrc":"datos/cues-ejemplo.json","calidad":"borrador"}' --scale=0.5` | `--props` con comillas escapadas o `--props=props.json` |
 | Diagnóstico de GL | `node scripts/diagnostico-gl.mjs` | igual |
 | Benchmark | `node scripts/bench.mjs --casos final-c1,final-c2,final-p2` | igual |
@@ -180,8 +180,10 @@ La estimación con GPU sale de esto:
 `scripts/render-tramos.mjs` parte el video en tramos y renderiza cada uno en un proceso aparte, con su propio navegador. Al final los une sin recomprimir.
 
 ```bash
-# Tramos de 30 s, 2 procesos de 1 pestaña, perfil intermedio, y al final youtube.mp4
-node scripts/render-tramos.mjs VideoEjemplo --tramo 30 --procesos 2 --concurrencia 1 --youtube
+# Tramos de 30 s en calidad de entrega; al final intermedio.mov (unión sin recomprimir) y youtube.mp4
+node scripts/render-tramos.mjs VideoEjemplo --tramo 30 --perfil final --youtube
+# Con GPU (Windows): más pestañas por proceso
+node scripts/render-tramos.mjs VideoEjemplo --tramo 30 --perfil final --concurrencia 6 --youtube
 # Cortar en los inicios de escena de la hoja de cues (y subdividir escenas largas)
 node scripts/render-tramos.mjs VideoEjemplo --por-escena --tramo 30
 # Rehacer solo los tramos 3 y 7 (después de corregir algo en esas escenas)
@@ -214,7 +216,7 @@ Perfiles (`--perfil`):
 | Perfil | Tramos | Para qué |
 |---|---|---|
 | `intermedio` (por defecto) | H.264 CRF 10, x264 veryfast, yuv420p, BT.709 | Intermedio de alta calidad, rápido de codificar. Después va `codificar-youtube.mjs`. |
-| `final` | H.264 CRF 17, x264 slow | Sin segunda codificación: `codificar-youtube.mjs --copiar-video` solo pasa el audio a AAC. |
+| `final` (**recomendado sin GPU**) | H.264 CRF 17, x264 slow, GOP 30 | Sin segunda codificación: `codificar-youtube.mjs --copiar-video` solo pasa el audio a AAC (`--youtube` lo hace solo). |
 | `prores` | ProRes 422 HQ (.mov), unión con demuxer concat | Para editar en un NLE. Ocupa ~3 GB por minuto a 1080p60. |
 
 Disco:
@@ -241,6 +243,12 @@ ffmpeg -i intermedio.mov -map 0:v:0 -map 0:a:0 \
 - AAC-LC 320 kbps a 48 kHz (YouTube recomienda 384k para estéreo: `--audio-kbps 384`).
 - `+faststart`: el índice va al principio del archivo.
 - El grano fino de 1 px se pierde en la recompresión de YouTube y dispara el bitrate. Conviene escala ≥ 1,5 px y poca intensidad.
+- Bitrate medido con el grano de la prueba: ~50 Mbps a CRF 17. YouTube acepta eso sin problema.
+- **Velocidad de x264 `slow`:**
+  - Midió 1,7 fps en este contenedor con la máquina cargada, o sea horas para 10 minutos. En una máquina libre de 4 núcleos se esperan 8–15 fps.
+  - Cuando el render es el cuello de botella (siempre sin GPU), conviene `--perfil final`: x264 `slow` trabaja durante el render, mientras espera cuadros, y al final `codificar-youtube.mjs --copiar-video` solo codifica el audio. `render-tramos.mjs --perfil final --youtube` ya lo hace solo.
+  - El perfil `intermedio` + recodificación conviene si se quiere un máster para varias salidas.
+- El AAC decodificado dura ~13 ms más que el video: es el relleno del último bloque de 1.024 muestras. No mueve la sincronía; está medido en §8.
 
 ## 8. Sincronía de audio y continuidad de cuadros
 
@@ -263,7 +271,16 @@ Cómo se verifica (`scripts/verificar-sync.py`), con `PruebaTecnica` en modo `de
 - **Marcas de sincronía.** En los cuadros 60, 149, 150, 300, 451, 512 y 599 hay una celda blanca en el video y un clic agudo de 2 ms en el audio. Los cuadros 149, 150, 300 y 451 caen justo en las uniones de los tramos de 150 cuadros, y el 599 es el último cuadro.
 - El script mide el desfase de cada clic contra su cuadro. Pasa si todos quedan dentro de medio cuadro (±8,3 ms).
 
-PENDIENTE_RESULTADO_SYNC
+### Resultado (PruebaTecnica, calidad final, 4 tramos de 150 cuadros, 2 procesos)
+Corrida: `node scripts/render-tramos.mjs PruebaTecnica --props '{"calidad":"final","depuracion":true,"tono":"agx"}' --tramo 2.5 --min-tramo 1 --procesos 2 --concurrencia 1 --youtube`
+
+| Archivo | Cuadros | Uniones 149/150, 299/300, 449/450 | Audio | Peor desfase de clic |
+|---|---|---|---|---|
+| `intermedio.mov` (H.264 copiado + PCM) | 600 de 600, en orden | sin perdidos ni repetidos | 480.000 muestras exactas (10,0000 s) | **0,27 ms** |
+| `youtube.mp4` (x264 slow CRF 17 + AAC) | 600 de 600, en orden | ídem | 10,0053 s (relleno AAC al final) | **0,27 ms** |
+
+- `youtube.mp4`: H.264 High 4.2, yuv420p, BT.709, 2 B-frames, 60/1, ~51 Mbps; AAC-LC 48 kHz estéreo; `moov` al principio.
+- Tiempos con la máquina compartida: render 37,7 min (0,26 fps); unión, segundos; x264 slow, 168 s (3,6 fps). Total 41 min por 10 s de video.
 
 ## 9. Utilidades (independientes del estilo)
 
@@ -363,6 +380,8 @@ Verificado con la prueba: los onsets de la voz caen en el cuadro de inicio de ca
    - Además, `<DepthOfField>` recrea el efecto cada vez que cambia el foco.
    - Por eso se sacó esa dependencia.
 5. **Recursos asincrónicos sin Suspense** (troika, workers, imágenes en CSS): retener con `delayRender` hasta que estén listos y volver a dibujar el cuadro (`advance`). Ver `Texto3D.tsx` y `Grano.tsx`.
+   - Trampa: si un hijo SUSPENDE antes del commit, React descarta el estado del padre y vuelve a correr su `useState(() => delayRender())`. El primer handle queda huérfano y el render vence por timeout (pasó con `<Text>`).
+   - Solución: envolver ese hijo en un `<Suspense>` propio, o crear el handle en `useLayoutEffect`.
 6. **Partículas o elementos sin profundidad + DOF**: van en la capa posterior (`PaseCapa`). Si no, el DOF las desenfoca según lo que tienen detrás.
 7. **Sin GPU, cada capa DOM grande que cambia se re-rasteriza en cada cuadro.**
    - Grano y viñeta van en WebGL (`EfectoGrano`, gratis).
@@ -373,6 +392,30 @@ Verificado con la prueba: los onsets de la voz caen en el cuadro de inicio de ca
    - SVG del tamaño justo.
 8. **Capturas en JPEG 95, no PNG.** PNG suma ~0,6 s por cuadro.
 9. Texto en pantalla mínimo (skill `motion-copy`). Tipografía: League Spartan, DM Sans y DM Mono (`src/lib/fuentes.ts`).
+
+## 10 bis. Flujo propuesto para el video real
+1. **Voz:**
+   - Copiar la voz editada a `public/audio/voz.wav`.
+   - Copiar la transcripción a `public/datos/transcripcion.json`. Sirve cualquier formato de §9.1, incluida la salida de WhisperX de `motion/tools`.
+2. **Música:**
+   - Copiar los stems a `public/audio/`.
+   - El `cues.json` de `motion/musica` tiene que traer `bpm` y `downbeats` (o `primer_downbeat`).
+   - Correr `scripts/envolventes.py` con la voz y cada stem (`--bandas` para los stems que van a mover cosas).
+3. **Hoja de cues:**
+   - Escribir `public/datos/cues.json` con las escenas (inicio y fin tomados de la transcripción) y las pistas de audio.
+   - `cuadroDePalabra()` sirve para ubicar momentos exactos dentro de cada escena.
+4. **Escenas:**
+   - Cuando llegue la referencia de estilo, crear `src/escenas/<tipo>.tsx` y un registro propio.
+   - Registrar la composición del video: `(p) => <LineaDeTiempo {...p} registro={...} />` con `calculateMetadata={metadatosLinea}`.
+   - Registrar cada escena también como composición suelta (connected compositions) para editarla en el Studio.
+5. **Revisión:**
+   - Studio + `calidad: "borrador"`.
+   - Stills y hojas de contacto con `npx remotion render --sequence --frames=...`.
+   - `scripts/determinismo.mjs` sobre la composición nueva antes del render largo.
+6. **Render final:**
+   - En la PC con GPU: `render-tramos.mjs --por-escena --perfil final --youtube`.
+   - Si se corta, se reanuda con el mismo comando.
+   - Probar el pipeline con `--rango` sobre un minuto antes de lanzar todo.
 
 ## 11. Problemas encontrados (y cómo quedaron resueltos)
 

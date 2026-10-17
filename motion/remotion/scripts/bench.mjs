@@ -20,6 +20,7 @@ const CASOS = {
   'final-c2': {props: FINAL, concurrencia: 2, procesos: 1},
   'final-p2': {props: FINAL, concurrencia: 1, procesos: 2},
   'borrador-c2': {props: {...FINAL, calidad: 'borrador'}, concurrencia: 2, procesos: 1},
+  'borrador-c1': {props: {...FINAL, calidad: 'borrador'}, concurrencia: 1, procesos: 1},
   'sin-msaa-c1': {props: {...FINAL, perfil: {msaa: 0}}, concurrencia: 1, procesos: 1},
   'sin-dof-c1': {props: {...FINAL, perfil: {dof: false}}, concurrencia: 1, procesos: 1},
   'sin-post-c1': {props: {...FINAL, perfil: {postproceso: false}}, concurrencia: 1, procesos: 1},
