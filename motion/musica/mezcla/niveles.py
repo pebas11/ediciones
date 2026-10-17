@@ -130,6 +130,7 @@ class Bloque:
     mapas: list = field(default_factory=list)       # [(t0, t1, off)]: fuente = línea de tiempo − off
     fuente: tuple = (0.0, 0.0)                      # la sección en la canción (s)
     rel_estimado: float | None = None               # cama − voz estimado bajo la voz (sin ganancia)
+    nivel_db: float = 0.0                           # nivel_db del tramo (para el techo de la guardia)
     metodo: str = ""                                # cómo se estimó (bajo_voz | seccion)
     l_entero: float | None = None                   # LUFS de la sección sin ducking (fuente)
     l_duck: float | None = None                     # LUFS con el ducking pleno (fuente)
@@ -253,23 +254,21 @@ def estimar(bloques: list[Bloque], plan, voz, p_voz_sub: np.ndarray | None, mask
                 acc = c.potencia_mezcla(amp, ks)
                 pd[kk] = acc
             if np.isfinite(pd).sum() >= CORTO:
-                cs_d = np.concatenate([[0.0], np.cumsum(np.nan_to_num(pd))])
-                cs_n = np.concatenate([[0], np.cumsum(np.isfinite(pd))])
-                cs_v = np.concatenate([[0.0], np.cumsum(p_voz_sub)])
-                cs_m = np.concatenate([[0.0], np.cumsum(mask_sub)])
-                ini = np.arange(0, T - CORTO + 1, 5)
-                dentro = (cs_n[ini + CORTO] - cs_n[ini]) == CORTO
-                habla = (cs_m[ini + CORTO] - cs_m[ini]) / CORTO >= 0.7
-                centros = (ini + CORTO / 2) * 0.1
-                libre = np.ones(len(ini), bool)       # las mismas ventanas que mide `corregir`
+                # misma métrica que la medición: cama − voz con compuerta de habla, solo dentro del
+                # bloque y lejos de las transiciones
+                m = (np.asarray(mask_sub[:T]) >= 0.5) & np.isfinite(pd)
+                k = np.ones(CORTO)
+                num_c = np.convolve(np.where(m, pd, 0.0), k, mode="same")
+                num_v = np.convolve(np.where(m, p_voz_sub[:T], 0.0), k, mode="same")
+                den = np.convolve(m.astype(np.float64), k, mode="same")
+                centros = (np.arange(T) + 0.5) * 0.1
+                ok = (den >= 10) & (num_c > 0) & (num_v > 0) & np.isfinite(pd)
                 for (ea, eb) in excluir:
-                    libre &= ~((centros + 1.5 > ea) & (centros - 1.5 < eb))
-                ok = dentro & habla & libre
+                    ok &= ~((centros + 1.5 > ea) & (centros - 1.5 < eb))
+                ok[np.arange(T) % 5 != 0] = False       # una ventana cada 0,5 s (como el informe)
                 if ok.sum() >= 3:
-                    ld = _lk((cs_d[ini + CORTO] - cs_d[ini])[ok] / CORTO)
-                    lv = _lk((cs_v[ini + CORTO] - cs_v[ini])[ok] / CORTO)
-                    bl.rel_estimado = float(np.median(ld - lv))
-                    bl.l_voz = float(np.median(lv))
+                    bl.rel_estimado = float(np.median(10 * np.log10(num_c[ok] / num_v[ok])))
+                    bl.l_voz = float(np.median(_lk(num_v[ok] / den[ok])))
                     bl.metodo = "bajo_voz"
         if bl.l_voz is None:
             bl.l_voz = lv_global
@@ -285,6 +284,7 @@ def estimar(bloques: list[Bloque], plan, voz, p_voz_sub: np.ndarray | None, mask
         for bl in delt:
             dif = np.clip(pn["conservar_dinamica"] * (bl.l_entero - l_med), -pn["ventana_lu"], pn["ventana_lu"])
             bl.objetivo_lu = pn["musica_bajo_voz_lu"] + tr.nivel_db + float(dif)
+            bl.nivel_db = tr.nivel_db
             if bl.rel_estimado is not None:
                 g = bl.objetivo_lu - bl.rel_estimado
             else:
@@ -364,7 +364,8 @@ def guardia_voz(p_cama, p_voz, mask_sub, bloques: list, P: dict) -> np.ndarray:
     techo = np.full(n, pn["musica_bajo_voz_lu"] + pn["ventana_lu"])
     for bl in bloques:
         for (a, b) in bl.rangos:
-            techo[max(0, int(a / 0.1)):max(0, int(b / 0.1))] = bl.objetivo_lu + pn["ventana_lu"]
+            techo[max(0, int(a / 0.1)):max(0, int(b / 0.1))] = \
+                pn["musica_bajo_voz_lu"] + bl.nivel_db + pn["ventana_lu"]
     exceso = np.nan_to_num(rel - techo, nan=0.0)
     exceso = np.clip(exceso, 0.0, pn["guardia_max_db"])
     if exceso.max() <= 0.05:

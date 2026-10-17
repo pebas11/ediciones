@@ -112,7 +112,9 @@ def mezclar(voz_path, plan_path, out_dir, extra=None, dir_canciones=None) -> dic
     pasadas = 1
     if P["niveles"]["corregir"]:
         p_cama = niveles.potencia_k_bloques(cama)
-        t_st, rel, *_ = niveles.medir_relativo(p_cama, p_voz, mask)
+        rel = niveles.relativo_en_habla(p_cama, p_voz, mask)
+        t_st = (np.arange(len(rel)) + 0.5) * 0.1
+        rel[np.arange(len(rel)) % 5 != 0] = np.nan
         if niveles.corregir(bloques, t_st, rel, P["niveles"]["tolerancia_lu"], excluir):
             log("corrección de niveles: " + ", ".join(
                 f"{plan.tramos[b.tramo].id}/{b.seccion} {b.correccion_db:+.1f} dB" for b in bloques
@@ -122,7 +124,9 @@ def mezclar(voz_path, plan_path, out_dir, extra=None, dir_canciones=None) -> dic
             cama = R.cama(por_stem=qa)
             pasadas = 2
             p_cama = niveles.potencia_k_bloques(cama)
-            t_st, rel, *_ = niveles.medir_relativo(p_cama, p_voz, mask)
+            rel = niveles.relativo_en_habla(p_cama, p_voz, mask)
+            t_st = (np.arange(len(rel)) + 0.5) * 0.1
+            rel[np.arange(len(rel)) % 5 != 0] = np.nan
             for b in bloques:          # medición final por bloque
                 m = niveles.ventanas_del_bloque(b, t_st, excluir)
                 v = rel[m & np.isfinite(rel)]
