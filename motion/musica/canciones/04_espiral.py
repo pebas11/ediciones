@@ -24,25 +24,20 @@ Forma (compases):
   57–64  vórtice    todo gira: melodía de violines, lamento de chelos, caja suave
   65–72  claro      cadencia rota a Re y apertura a La mayor; el pulso se frena
 
-Recursos propios de esta canción (no están en el motor; ver sección 2):
-  * Mecanica: la mecánica del piano como percusión (apagadores y pedal reales).
-  * ArcoVibrafono: vibráfono frotado con arco como instrumento de notas largas.
-  * espiral(): el ostinato por índices sobre "columnas" de alturas por compás.
+Recursos que nacieron en esta canción y hoy están en el motor: Mecanica (la mecánica del
+piano como percusión), VibrafonoArco (vibráfono con arco, nivelado), espiral()/columna()
+(el ostinato por índices sobre columnas de alturas) y nube_acordes (la espiral que se deshace).
+
+Mezcla rehecha para la nivelación nueva del motor (NIVELES.md): las capas suaves ya no están
+subidas, así que las pistas que tocan a velocidad baja (pulso, trémolos, pizzicatos, cuerdas
+bajo voz, vibráfonos) llevan su compensación en `vol` o en automatizaciones de volumen.
 """
 from __future__ import annotations
 
-import numpy as np
-
-from motor import (Cancion, Piano, Vibrafono, Glock, Pad, Dron, Sub, Violines, Chelos,
-                   Contrabajo, CuerdasTrem, Pizzicato, Bateria, Textura, swell, EQ, Ducking,
-                   Compresor, Saturacion, nota)
-from motor.nucleo import SR, desde_db, rng, cortar
-from motor.teoria import pc_de
-from motor.secuencia import Nota
-from motor.efectos import biquad, sosf
-from motor.instrumentos.base import Instrumento, Banco, envolvente_nota
-from motor.instrumentos.muestreados import extender
-from motor.instrumentos.texturas import nube_granular
+from motor import (Cancion, Piano, Vibrafono, VibrafonoArco, Glock, Pad, Dron, Sub, Violines,
+                   Chelos, Contrabajo, CuerdasTrem, Pizzicato, Bateria, Mecanica, Textura, swell,
+                   nube_acordes, espiral, columna, EQ, Ducking, Compresor, Saturacion, Ancho)
+from motor.figuras import pasos_espiral
 
 # =============================================================== 1. DATOS ==
 BPM = 96
@@ -148,181 +143,17 @@ GROOVE = {
 }
 
 
-# ================================================ 2. RECURSOS PROPIOS ======
-def _a_estereo(x: np.ndarray) -> np.ndarray:
-    x = np.asarray(x, dtype=np.float32)
-    if x.ndim == 1:
-        return np.stack([x, x], axis=1) * np.float32(0.7071)
-    if x.shape[1] == 1:
-        return np.repeat(x, 2, axis=1) * np.float32(0.7071)
-    return x
+# ================================================================ 2. AYUDAS ===
+def cols(compas: int) -> list[int]:
+    """Columna de alturas (desde La3) entre las que gira la espiral en ese compás."""
+    return columna(COLUMNAS[COL_COMPAS[compas]])
 
 
-class Mecanica(Instrumento):
-    """La mecánica del piano como percusión orgánica (el motor no la trae como instrumento).
-
-    Golpes (nota.x["golpe"], con Pista.patron / Pista.golpe):
-      apagador  el apagador cayendo sobre la cuerda (muestras reales de "release" del
-                vertical Knight). La altura de la nota elige la tecla: queda un resto
-                de tono (con altura=73 suena un Do#5 apagado: el Do# de la pregunta).
-      pedal     el golpe sordo del pedal de resonancia al soltarse (≈ 40 Hz): un latido.
-    Cada golpe toma otra tecla vecina y otro largo (determinista): no es un reloj.
-    Nivel: el pico de RMS (10 ms) de cada muestra se lleva a −20 dBFS a vel 1."""
-    nombre = "mecanica"
-    usa_pedal = False
-    _picos: dict = {}
-
-    def __init__(self, ganancia_db=0.0, pb_hz=3000.0, largo_s=0.5, pan=0.25):
-        self.ganancia_db, self.pb_hz, self.largo_s, self.pan = ganancia_db, pb_hz, largo_s, pan
-
-    def _pico(self, banco, i):
-        k = (banco.nombre, i)
-        if k not in self._picos:
-            x = np.asarray(banco.audio(i)[: int(0.4 * SR)], np.float64).mean(axis=1)
-            h = int(0.01 * SR)
-            nb = max(1, len(x) // h)
-            e = np.sqrt((x[: nb * h].reshape(nb, h) ** 2).mean(axis=1) + 1e-20)
-            self._picos[k] = float(e.max())
-        return self._picos[k]
-
-    def voz(self, nt, ctx, pista):
-        golpe = nt.x.get("golpe", "apagador")
-        g = rng(ctx.semilla, "mecanica", pista.nombre if pista else "", golpe, round(nt.t * 960))
-        if golpe == "pedal":
-            b = Banco.de("piano_pedal")
-            cands = [i for i, e in enumerate(b.muestras) if "off" in e.get("articulacion", "")]
-            cands = cands or list(range(len(b.muestras)))
-            i = int(cands[int(g.integers(0, len(cands)))])
-            largo, pb, pan = 0.7, 900.0, 0.0
-        else:
-            b = Banco.de("piano_soltar")
-            i = b.elegir(nt.midi + int(g.integers(-2, 3)), 0)
-            largo = self.largo_s * float(g.uniform(0.75, 1.25))
-            pb = self.pb_hz
-            pan = float(nt.x.get("pan", g.uniform(-self.pan, self.pan)))
-        x = _a_estereo(cortar(np.asarray(b.audio(i), np.float32), int(largo * SR), 0.12))
-        y = x * np.float32(desde_db(self.ganancia_db - 20.0) / max(self._pico(b, i), 1e-9)
-                          * max(nt.vel, 1e-3) ** 1.4)
-        y = sosf(np.vstack([biquad("pb", pb, 0.6), biquad("pa", 32.0, 0.6)]), y)
-        nf = int(0.0015 * SR)
-        y[:nf] *= np.linspace(0, 1, nf, dtype=np.float32)[:, None]
-        a = (np.clip(pan, -1, 1) + 1) * np.pi / 4
-        y = y * np.array([min(1.0, np.cos(a) * np.sqrt(2)), min(1.0, np.sin(a) * np.sqrt(2))],
-                         dtype=np.float32)
-        return y.astype(np.float32), ctx.muestra(nt.t)
-
-
-class ArcoVibrafono(Instrumento):
-    """Vibráfono frotado con arco (muestras reales VCSL, sin motor) como instrumento de
-    notas largas (el motor solo lo usa como nube granular). Aparece despacio, tono casi
-    puro: el color de la intriga sin caer en el terror.
-    * La muestra de La3 está casi vacía: se usan las de Mi4, Sol4, Re5, La5 y Mi6.
-    * Nivel propio: el RMS de la zona estable de cada muestra se lleva a −20 dBFS a vel 1
-      (los niveles del banco difieren en más de 20 dB).
-    * Las láminas del vibráfono tienen afinado el parcial de dos octavas (4·f0): con arco
-      queda como un silbido fijo en 2,2–2,4 kHz, justo donde vive la voz. Se recorta
-      nota por nota (campana angosta en 4·f0) y se cierra arriba con un pasabajos."""
-    nombre = "vibrafono_arco"
-    BUENAS = (64, 67, 74, 81, 88)
-    _niveles: dict = {}
-
-    def __init__(self, ataque=0.35, soltar=2.2, ganancia_db=0.0, rango_db=20.0, pan=0.0,
-                 pb_hz=3600.0, parcial_db=-15.0):
-        self.ataque, self.soltar, self.ganancia_db = ataque, soltar, ganancia_db
-        self.rango_db, self.pan, self.pb_hz, self.parcial_db = rango_db, pan, pb_hz, parcial_db
-
-    def voz(self, nt, ctx, pista):
-        b = Banco.de("vibrafono_arco")
-        cands = [i for i in range(len(b.muestras)) if int(round(b.midi[i])) in self.BUENAS]
-        i = min(cands, key=lambda j: (abs(b.midi[j] - nt.midi), b.midi[j]))
-        semis = float(nt.midi - b.midi[i] - b.cents[i] / 100.0)
-        a = b.remuestreado(i, semis, None)
-        i0 = ctx.muestra(nt.t)
-        n_on = max(32, ctx.muestra(nt.t + nt.dur) - i0)
-        n_sol = int(nt.x.get("soltar", self.soltar) * SR)
-        n = n_on + n_sol
-        if len(a) < n:
-            a = extender(a, n + SR, ("arco", i, round(semis, 4)))
-        y = np.array(a[:n], dtype=np.float32)
-        k = (i, round(semis, 4))
-        if k not in self._niveles:
-            z = np.asarray(a[int(1.5 * SR): int(6.0 * SR)], np.float64)
-            self._niveles[k] = float(np.sqrt(np.mean(z ** 2)) + 1e-9)
-        env = envolvente_nota(n, n_on, nt.x.get("ataque", self.ataque), n_sol / SR, "cos")
-        gan = desde_db(self.ganancia_db - 20.0 + self.rango_db * (max(nt.vel, 1e-3) - 1))
-        y *= (env * gan / self._niveles[k])[:, None].astype(np.float32)
-        f0 = 440.0 * 2 ** ((nt.midi - 69) / 12)
-        sos = [biquad("pb", self.pb_hz, 0.6), biquad("pa", 140.0, 0.6)]
-        if 4 * f0 < 0.45 * SR:
-            sos.append(biquad("campana", 4 * f0, 3.0, self.parcial_db))
-        y = sosf(np.vstack(sos), y)
-        p = float(nt.x.get("pan", self.pan))
-        ang = (np.clip(p, -1, 1) + 1) * np.pi / 4
-        y = y * np.array([min(1.0, np.cos(ang) * np.sqrt(2)), min(1.0, np.sin(ang) * np.sqrt(2))],
-                         dtype=np.float32)
-        return y.astype(np.float32), i0
-
-
-def columna(clave: str, piso="A3", n=18) -> list[int]:
-    """Alturas MIDI ascendentes de la columna (desde `piso`)."""
-    pcs = {pc_de(x) for x in COLUMNAS[clave]}
-    m, out = nota(piso), []
-    while len(out) < n:
-        if m % 12 in pcs:
-            out.append(m)
-        m += 1
-    return out
-
-
-def pasos_espiral(desde, hasta, desplaz=0, patron=P7, paso=0.5, k0=0, retraso=0.0,
-                  filtro=None, piso="A3"):
-    """[(t, compás, k, midi)] del ostinato: el paso k toca el índice patron[k] + desplaz
-    de la columna de su compás. El patrón corre continuo a través de los compases."""
-    pasos = patron.split()
-    t = (desde - 1) * 4.0 + retraso
-    t_fin = (hasta - 1) * 4.0
-    k = k0
-    out = []
-    while t < t_fin - 1e-9:
-        s = pasos[k % len(pasos)]
-        c = int(t // 4) + 1
-        if s not in (".", "-") and (filtro is None or filtro(k, c)):
-            out.append((t, c, k, columna(COL_COMPAS[c], piso)[int(s) + desplaz]))
-        t += paso
-        k += 1
-    return out
-
-
-def espiral(p, desde, hasta, desplaz=0, vel=0.36, dur=0.42, acento=1.18, cresc=(0.92, 1.08),
-            patron=P7, paso=0.5, retraso=0.0, filtro=None, transponer=0, piso="A3", **x):
-    """El ostinato que gira. Acento en el comienzo de cada vuelta de la célula (se oye
-    cómo la célula de 7 se corre contra el compás de 8) y crescendo a lo largo del tramo."""
-    pasos = patron.split()
-    n_pat = len(pasos)
-    media = float(np.mean([int(z) for z in pasos if z not in (".", "-")]))
-    t_a, t_b = (desde - 1) * 4.0, (hasta - 1) * 4.0
-    for t, c, k, m in pasos_espiral(desde, hasta, desplaz, patron, paso, 0, retraso, filtro, piso):
-        f = (t - t_a) / max(1e-9, t_b - t_a)
-        v = vel * (cresc[0] + (cresc[1] - cresc[0]) * f) * (acento if k % n_pat == 0 else 1.0)
-        v *= 1.0 + 0.035 * (int(pasos[k % n_pat]) - media)   # la cresta de cada giro, apenas más
-        p.nota(1 + t / 4.0, m + transponer, dur, vel=min(1.0, v), **x)
-
-
-def notas_espiral(desde, hasta, desplaz=0, vel=0.45, dur=0.42, patron=P7):
-    """Las notas del ostinato con tiempos relativos (para convertirlas en nube)."""
-    t0 = (desde - 1) * 4.0
-    return [(t - t0, dur, m, vel) for t, c, k, m in pasos_espiral(desde, hasta, desplaz, patron)]
-
-
-def nube_de_notas(instrumento, notas, dur_s, **kw):
-    """Clip: toca estas notas [(t_tiempos, dur, midi, vel)] y las vuelve nube granular
-    (la espiral que se deshace)."""
-    def gen(ctx):
-        ns = [Nota(t, d, float(m), v, {}) for (t, d, m, v) in notas]
-        src = ctx.aislado(instrumento, ns, cola_s=2.5)
-        kw.setdefault("semilla", (ctx.semilla, "nube_notas", len(notas), round(dur_s, 2)))
-        return nube_granular(src, dur_s, **kw)
-    return gen
+def notas_espiral(C, desde, hasta, desplaz=0, vel=0.45, dur=0.42):
+    """Las notas del ostinato con tiempos relativos al compás `desde` (para nube_acordes)."""
+    t0 = (desde - 1) * C.tempo.tpc
+    return [(t - t0, dur, m, vel) for t, _c, _k, m in pasos_espiral(C.tempo, desde, hasta, cols,
+                                                                     desplaz=desplaz)]
 
 
 def pulso(p, desde, hasta, alturas=("C#4",), vel=0.3, figura=0.5, dur=0.36,
@@ -359,25 +190,8 @@ def trem_linea(p, C, desde, hasta, octava=12, rango=("G1", "F#2"), v0=0.16, v1=0
         p.nota(C.c(t0), b + octava, t1 - t0, vel=a, vel_fin=z, legato=k > 0)
 
 
-# Desnivel medido del banco de pizzicato de violín (dB respecto de la mediana, una nota a
-# vel 0.3 por altura): Si4, Do5 y Do#5 salen 3–6 dB más fuertes que sus vecinas aunque el
-# banco esté "nivelado". Se corrige en la velocidad de la pista del canon (al 80 %).
-DESNIVEL_PIZZ_VL = {57: -3.1, 58: -1.8, 60: -2.1, 61: -2.4, 62: -3.2, 63: -2.5, 68: -1.9,
-                    70: -2.2, 71: 3.7, 72: 5.8, 73: 2.7, 75: 1.7, 78: -2.0, 80: -2.1,
-                    81: 2.0, 82: 1.9, 83: 2.5, 84: 2.5}
-
-
-def nivelar_por_altura(p, tabla, rango_db=20.0, cuanto=0.8):
-    """Compensa en la velocidad el desnivel de un banco (tabla midi → dB)."""
-    for n in p.notas:
-        off = tabla.get(int(round(n.midi)), 0.0)
-        if off:
-            n.vel = float(np.clip(n.vel - cuanto * off / rango_db, 0.05, 1.0))
-
-
 def groove(bat, nombre, desde, hasta, solo=None, sin=(), escala=1.0):
-    """Toca un groove de GROOVE. `escala` multiplica las velocidades de x/X/o (los patrones
-    escritos con dígitos ya traen su velocidad: dígito/9)."""
+    """Toca un groove de GROOVE; `escala` sube o baja el groove entero (dígitos incluidos)."""
     g = GROOVE[nombre]
     vel = {"bombo": 0.62, "aro": 0.44, "aro_f": 0.44, "escobilla": 0.5, "esc_f": 0.5,
            "caja": 0.5, "hat": 0.4, "shaker": 0.6}
@@ -385,7 +199,7 @@ def groove(bat, nombre, desde, hasta, solo=None, sin=(), escala=1.0):
         if (solo and k not in solo) or k in sin:
             continue
         golpe = {"aro_f": "aro", "esc_f": "escobilla"}.get(k, k)
-        bat.patron(golpe, patron, desde, hasta, vel=vel[k] * escala)
+        bat.patron(golpe, patron, desde, hasta, vel=vel[k], escala=escala)
 
 
 # ============================================================ 3. CANCIÓN ==
@@ -401,7 +215,7 @@ def cancion() -> Cancion:
     C.fx["eco"].update(division=0.75, realim=0.32, corte=2600.0)
 
     # ---------------------------------------------------------------- pistas
-    mec = C.pista("mecanica", Mecanica(pb_hz=3000.0), "bateria", vol=-8.0,
+    mec = C.pista("mecanica", Mecanica(pb_hz=3000.0, pan=0.18), "bateria", vol=-8.0,
                   envios={"sala": 0.2, "reverb": 0.12},
                   efectos=[EQ(("pa", 36), ("campana", 280, -3.0, 1.0))])
     bat = C.pista("bateria", Bateria(color=0.4), "bateria", vol=0.0,
@@ -413,43 +227,45 @@ def cancion() -> Cancion:
                   efectos=[Ducking(prof_db=2.5, relaj_ms=170)])
     pizz_cb = C.pista("pizz_cb", Pizzicato("contrabajo"), "bajo", vol=-4.0,
                       envios={"reverb": 0.1}, efectos=[EQ(("pa", 35), ("pb", 2400))])
-    cbajo = C.pista("contrabajo", Contrabajo(), "bajo", vol=-2.0, envios={"reverb": 0.14},
+    cbajo = C.pista("contrabajo", Contrabajo(), "bajo", vol=-3.6, envios={"reverb": 0.14},
                     efectos=[EQ(("pa", 35), ("pb", 3000))])
     piano = C.pista("piano", Piano(fieltro=0.85, brillo=0.35, mecanica=0.6), "armonia", vol=2.0,
                     envios={"reverb": 0.18, "eco": 0.04},
                     efectos=[EQ(("pa", 80), ("campana", 300, -3.0, 0.9))])
-    piano_ab = C.pista("piano_abierto", Piano(fieltro=0.55, mecanica=0.5), "armonia", vol=0.0,
+    piano_ab = C.pista("piano_abierto", Piano(fieltro=0.55, mecanica=0.5), "armonia", vol=2.0,
                        envios={"reverb": 0.26, "eco": 0.04},
                        efectos=[EQ(("pa", 45), ("campana", 320, -2.0, 0.8))])
-    pul = C.pista("pulso", Pizzicato("chelos"), "armonia", vol=-5.0,
+    pul = C.pista("pulso", Pizzicato("chelos"), "armonia", vol=2.4,
                   envios={"reverb": 0.12, "sala": 0.1},
                   efectos=[EQ(("pa", 160), ("campana", 290, -3.0, 1.1), ("pb", 3600))])
-    pizz_vl = C.pista("pizz_vl", Pizzicato("violines"), "armonia", vol=-3.0,
+    pizz_vl = C.pista("pizz_vl", Pizzicato("violines"), "armonia", vol=4.6,
                       envios={"reverb": 0.2, "eco": 0.06},
                       efectos=[EQ(("pa", 180), ("campana", 2800, -2.0, 1.0), ("pb", 4200))])
-    pizz_ac = C.pista("pizz_acentos", Pizzicato("violines"), "armonia", vol=-8.0,
+    pizz_ac = C.pista("pizz_acentos", Pizzicato("violines"), "armonia", vol=2.8,
                       envios={"reverb": 0.2, "eco": 0.06},
                       efectos=[EQ(("pa", 180), ("campana", 2800, -2.0, 1.0), ("pb", 4200))])
-    trem_vc = C.pista("trem_vc", CuerdasTrem("chelos"), "armonia", vol=-3.0,
+    trem_vc = C.pista("trem_vc", CuerdasTrem("chelos"), "armonia", vol=6.0,
                       envios={"reverb": 0.22}, efectos=[EQ(("pa", 45), ("pb", 5000))])
-    trem_va = C.pista("trem_va", CuerdasTrem("violas"), "armonia", vol=-6.0,
+    trem_va = C.pista("trem_va", CuerdasTrem("violas"), "armonia", vol=1.3,
                       envios={"reverb": 0.28}, efectos=[EQ(("pa", 150), ("pb", 6000))])
-    violines = C.pista("violines", Violines(doble=True), "melodia", vol=1.5,
+    violines = C.pista("violines", Violines(doble=True), "melodia", vol=7.0,
                        envios={"reverb": 0.34},
                        efectos=[EQ(("pa", 170), ("campana", 3200, -2.5, 0.9), ("pb", 11000))])
-    chelos = C.pista("chelos", Chelos(), "armonia", vol=1.0, envios={"reverb": 0.28},
+    chelos = C.pista("chelos", Chelos(), "armonia", vol=1.5, envios={"reverb": 0.28},
                      efectos=[EQ(("pa", 50))])
-    vibes = C.pista("vibrafono", Vibrafono(motor_hz=2.2, motor_prof=0.25), "melodia", vol=-4.0,
-                    envios={"reverb": 0.36, "eco": 0.16},
-                    efectos=[EQ(("pa", 120), ("campana", 2300, -5.0, 1.2))])
-    arco = C.pista("arco", ArcoVibrafono(), "melodia", vol=-6.0, envios={"reverb": 0.4})
-    glock = C.pista("glock", Glock(), "melodia", vol=-8.0, envios={"reverb": 0.42, "eco": 0.15},
+    vibes = C.pista("vibrafono", Vibrafono(motor_hz=2.2, motor_prof=0.25), "melodia", vol=0.5,
+                    envios={"reverb": 0.36, "eco": 0.1},
+                    efectos=[EQ(("pa", 120))])
+    arco = C.pista("arco", VibrafonoArco(), "melodia", vol=-7.5, envios={"reverb": 0.32},
+                   efectos=[EQ(("pa", 140), ("pb", 3600))])
+    glock = C.pista("glock", Glock(), "melodia", vol=-0.5, envios={"reverb": 0.42, "eco": 0.15},
                     efectos=[EQ(("agudos", 7000, -3.0))])
     pad = C.pista("pad", Pad(voces=6, desafinar=12, sub=0.0, ataque=2.5, soltar=3.5, pa=150,
                              respira=0.3), "armonia", vol=-7.0, envios={"reverb": 0.18},
                   efectos=[EQ(("campana", 320, -2.0, 0.9)), Ducking(prof_db=2.0, relaj_ms=200)])
     dron = C.pista("dron", Dron(corte=520, aire=0.12), "textura", vol=-4.0, envios={"reverb": 0.2})
-    tex = C.pista("textura", Textura(), "textura", vol=0.0, envios={"reverb": 0.12})
+    tex = C.pista("textura", Textura(), "textura", vol=0.0, envios={"reverb": 0.12},
+                  efectos=[Ancho(ancho=0.75)])
 
     # humanización (determinista)
     mec.humanizar(tiempo_ms=9, vel=0.14)
@@ -488,19 +304,19 @@ def cancion() -> Cancion:
                    vel=0.5), fin=9, ganancia_db=-18)
 
     # ------------------------------------------------------- 9–16 vuelta 1
-    espiral(piano, 9, 17, desplaz=0, vel=0.34)
+    espiral(piano, 9, 17, cols, desplaz=0, vel=0.34)
     pulso(pul, 9, 17, vel=0.28)
     for t0, t1, _s, b in C.bajos(9, 17, rango=("G1", "F#2")):        # bajo cromático
         pizz_cb.nota(C.c(t0), b, 3.4, vel=0.5, apagar=True, soltar=0.35)
     trem_linea(trem_vc, C, 9, 17, v0=0.14, v1=0.3)
     mec.patron("apagador", "x.....x.....x...", 9, 13, vel=0.42, altura=73)
     mec.patron("apagador", "......x.......o.", 13, 17, vel=0.4, altura=73)
-    groove(bat, "tictac", 13, 17, solo=("shaker",), escala=0.8)
+    groove(bat, "tictac", 13, 17, solo=("shaker",))
     vibes.melodia(15, PREGUNTA_3, vel=0.33)
     vibes.pedal(15, 16.95)
 
     # ------------------------------------------------------- 17–24 vuelta 2
-    espiral(piano, 17, 25, desplaz=1, vel=0.35)
+    espiral(piano, 17, 25, cols, desplaz=1, vel=0.35)
     pulso(pul, 17, 25, vel=0.3)
     pulso(pizz_ac, 21, 25, alturas=("C#5",), vel=0.2, solo_acentos=True)
     bajo_332(sub, C, 17, 25, vel=0.5)
@@ -514,8 +330,8 @@ def cancion() -> Cancion:
 
     # ------------------------------------------------------- 25–32 vuelta 3
     tex.clip(swell(Piano(fieltro=0.6), ["B2", "F#3", "D4", "C#5"], largo_tiempos=6, vel=0.5),
-             fin=25, ganancia_db=-15)
-    espiral(piano, 25, 33, desplaz=2, vel=0.37)
+             fin=25, ganancia_db=-14)
+    espiral(piano, 25, 33, cols, desplaz=2, vel=0.37)
     pulso(pul, 25, 33, vel=0.31)
     pulso(pizz_ac, 29, 33, alturas=("C#5",), vel=0.22, solo_acentos=True)   # a mitad de vuelta
     bajo_332(sub, C, 25, 33, vel=0.58)
@@ -537,10 +353,10 @@ def cancion() -> Cancion:
     trem_va.acordes_ligados(C.voicings(33, 41, voces=2, rango=("C#4", "A4")), vel=0.26)
     pad.acordes_ligados(C.voicings(33, 41, voces=4, rango=("C#4", "F#5")), vel=0.45)
     arco.nota(33, "D5", 16, vel=0.55).nota(37, "C#5", 16, vel=0.5)
-    espiral(piano, 33, 37, desplaz=2, vel=0.3, filtro=lambda k, c: k % 3 == 0, cresc=(1.0, 1.0))
-    espiral(piano, 37, 39, desplaz=2, vel=0.32, filtro=lambda k, c: k % 2 == 0, cresc=(1.0, 1.0))
-    espiral(piano, 39, 41, desplaz=2, vel=0.34, cresc=(0.95, 1.1))
-    tex.clip(nube_de_notas(Piano(fieltro=0.8, mecanica=0.0), notas_espiral(25, 29, desplaz=2),
+    espiral(piano, 33, 37, cols, desplaz=2, vel=0.3, filtro=lambda k, c: k % 3 == 0, cresc=(1.0, 1.0))
+    espiral(piano, 37, 39, cols, desplaz=2, vel=0.32, filtro=lambda k, c: k % 2 == 0, cresc=(1.0, 1.0))
+    espiral(piano, 39, 41, cols, desplaz=2, vel=0.34, cresc=(0.95, 1.1))
+    tex.clip(nube_acordes(Piano(fieltro=0.8, mecanica=0.0), notas_espiral(C, 25, 29, desplaz=2),
                            dur_s=15.0, estirar=5.0, densidad=12, grano=(0.12, 0.34),
                            tonos=(0, 12, -12), pesos=(4, 1, 1), ataque=3, caida=6),
              pos=33, ganancia_db=-9)
@@ -560,8 +376,8 @@ def cancion() -> Cancion:
                    vel=0.55, curva=2.0), fin=41, ganancia_db=-13)
 
     # ------------------------------------------------------- 41–48 vuelta 4
-    espiral(piano, 41, 49, desplaz=3, vel=0.38)
-    espiral(pizz_vl, 41, 49, desplaz=0, vel=0.32, dur=0.4, retraso=0.5,
+    espiral(piano, 41, 49, cols, desplaz=3, vel=0.38)
+    espiral(pizz_vl, 41, 49, cols, desplaz=0, vel=0.32, dur=0.4, retraso=0.5,
             filtro=lambda k, c: k % 2 == 0, apagar=True)                   # canon
     pulso(pul, 41, 49, vel=0.32)
     bajo_332(sub, C, 41, 49, vel=0.62)
@@ -576,8 +392,8 @@ def cancion() -> Cancion:
     vibes.pedal(47, 48.95)
 
     # ------------------------------------------------------- 49–56 vuelta 5
-    espiral(piano, 49, 57, desplaz=4, vel=0.4)
-    espiral(pizz_vl, 49, 57, desplaz=1, vel=0.33, dur=0.4, retraso=0.5,
+    espiral(piano, 49, 57, cols, desplaz=4, vel=0.4)
+    espiral(pizz_vl, 49, 57, cols, desplaz=1, vel=0.33, dur=0.4, retraso=0.5,
             filtro=lambda k, c: k % 2 == 0, apagar=True)
     pulso(pul, 49, 57, vel=0.33)
     bajo_332(sub, C, 49, 57, vel=0.66)
@@ -595,11 +411,11 @@ def cancion() -> Cancion:
     bat.golpe("56:4.5", "hat_abierto", 0.48)
     vibes.nota(55, "G#4", 1, vel=0.3).nota("55:3", "C#5", 1, vel=0.32)
     tex.clip(swell(CuerdasTrem("violas"), ["C#4", "F#4", "A4", "C#5"], largo_tiempos=8, vel=0.55,
-                   curva=2.2), fin=57, ganancia_db=-13)
+                   curva=2.2), fin=57, ganancia_db=-10.5)
 
     # ------------------------------------------------------- 57–64 vórtice
-    espiral(piano, 57, 65, desplaz=5, vel=0.46, cresc=(0.95, 1.08))
-    espiral(pizz_vl, 57, 65, desplaz=1, vel=0.34, dur=0.4, retraso=0.5, apagar=True)
+    espiral(piano, 57, 65, cols, desplaz=5, vel=0.46, cresc=(0.95, 1.08))
+    espiral(pizz_vl, 57, 65, cols, desplaz=1, vel=0.34, dur=0.4, retraso=0.5, apagar=True)
     pulso(pul, 57, 65, alturas=("C#4",), vel=0.36)
     pulso(pul, 57, 65, alturas=("C#5",), vel=0.3, solo_acentos=True)
     bajo_332(sub, C, 57, 65, vel=0.72)
@@ -618,11 +434,11 @@ def cancion() -> Cancion:
     # ------------------------------------------------------- 65–72 claro
     # cadencia rota (C#7b9 → Dmaj9): se levanta el apagado, el piano suena abierto
     mec.golpe(65, "pedal", 0.45)
-    espiral(piano_ab, 65, 67, desplaz=0, vel=0.28, acento=1.1, cresc=(1.05, 0.9),
+    espiral(piano_ab, 65, 67, cols, desplaz=0, vel=0.28, acento=1.1, cresc=(1.05, 0.9),
             patron=P8_CIERRA, dur=0.9)
-    espiral(piano_ab, 67, 69, desplaz=0, vel=0.26, acento=1.1, cresc=(1.0, 0.9),
+    espiral(piano_ab, 67, 69, cols, desplaz=0, vel=0.26, acento=1.1, cresc=(1.0, 0.9),
             patron="5 3 4 2", paso=1.0, dur=1.6)
-    espiral(piano_ab, 69, 71, desplaz=2, vel=0.23, acento=1.0, cresc=(1.0, 0.85),
+    espiral(piano_ab, 69, 71, cols, desplaz=2, vel=0.23, acento=1.0, cresc=(1.0, 0.85),
             patron="4 2", paso=2.0, dur=3.0)
     piano_ab.acorde(71, ["A2", "E3", "D4", "F#4", "C#5"], 4, vel=0.25, rasgueo=0.06)
     piano_ab.acorde(72, ["A2", "E3", "B3", "C#4", "F#4", "C#5"], 8, vel=0.25, rasgueo=0.07)
@@ -642,8 +458,8 @@ def cancion() -> Cancion:
     vibes.melodia(67, RESPUESTA, vel=0.33)
     vibes.pedal(67, 70.95)
     glock.nota("69:3", "E6", 2, vel=0.26).nota(72, "C#7", 4, vel=0.22)
-    tex.clip(nube_de_notas(Vibrafono(motor_hz=0.0), [(0, 1, nota("D5"), 0.5), (1, 3, nota("C#5"), 0.55),
-                                                     (4, 4, nota("A4"), 0.45)],
+    tex.clip(nube_acordes(Vibrafono(motor_hz=0.0), [(0, 1, "D5", 0.5), (1, 3, "C#5", 0.55),
+                                                    (4, 4, "A4", 0.45)],
                            dur_s=16.0, estirar=6.0, densidad=10, grano=(0.15, 0.4),
                            tonos=(0, 12), pesos=(4, 1), ataque=4, caida=8),
              pos=69, ganancia_db=-8)
@@ -660,8 +476,19 @@ def cancion() -> Cancion:
     chelos.auto("expresion", [(57, 0.85), (60.9, 1.0, "suave"), (61, 0.92), (64.9, 1.0, "suave"),
                               (65, 0.75), (73, 0.4)])
     cbajo.auto("expresion", [(57, 0.8), (64.9, 1.0, "suave"), (65, 0.75), (73, 0.35)])
-    nivelar_por_altura(pizz_vl, DESNIVEL_PIZZ_VL)
-    sub.auto("vol", [(17, -2.5), (24.95, -2.5), (25, -1.0), (40.95, -1.0), (41, 0.0),
-                     (65, 0.0), (69, -4, "suave"), (72, -14, "suave")])
-    piano.auto("vol", [(9, -1.5), (17, 0.0, "suave")])
+    sub.auto("vol", [(17, -0.7), (24.95, -0.7), (25, 0.0), (38.95, 0.0), (39, 1.0), (40.95, 1.0),
+                     (41, 0.8), (56.95, 0.8), (57, 0.0), (64.95, 0.0), (65, 3.5),
+                     (69, -0.5, "suave"), (72, -10.5, "suave")])
+    # cuerdas: bajo voz y en el claro tocan suave (capa suave, que ahora suena a su nivel real)
+    violines.auto("vol", [(49, 4.5), (56.95, 4.5), (57, 0.0), (64.95, 0.0), (65.05, 5.0)])
+    chelos.auto("vol", [(57, 0.0), (64.95, 0.0), (65.05, 6.5)])
+    cbajo.auto("vol", [(57, 0.0), (64.95, 0.0), (65.05, 5.6)])
+    # el pulso y el trémolo de chelos, parejos sección por sección con la mezcla anterior
+    pul.auto("vol", [(40.95, 0.0), (41, -0.5), (56.95, -0.5), (57, -1.1), (64.95, -1.1), (65, 0.0)])
+    trem_vc.auto("vol", [(24.95, 0.0), (25, 1.1), (32.95, 1.1), (33, 1.6), (40.95, 1.6), (41, -0.5),
+                         (48.95, -0.5), (49, 0.0)])
+    # el piano suave suena menos que antes y el fuerte más (curva nueva): se compensa por sección
+    piano.auto("vol", [(9, 0.2), (16.95, 1.7, "suave"), (17, 0.9), (24.95, 0.9), (25, 0.6),
+                       (32.95, 0.6), (33, 0.9), (40.95, 0.9), (41, -1.1), (48.95, -1.1), (49, -0.1),
+                       (56.95, -0.1), (57, -2.9)])
     return C

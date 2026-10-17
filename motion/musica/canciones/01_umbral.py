@@ -214,13 +214,13 @@ def cancion() -> Cancion:
     tex = C.pista("textura", Textura(), "textura", vol=0.0, envios={"reverb": 0.12})
     celesta = C.pista("celesta", Celesta(brillo=0.5, golpe=0.45), "melodia", vol=0.0,
                       envios={"reverb": 0.38, "eco": 0.2})
-    piano = C.pista("piano", Piano(fieltro=0.65, mecanica=0.5), "armonia", vol=3.0,
+    piano = C.pista("piano", Piano(fieltro=0.65, mecanica=0.5), "armonia", vol=5.3,
                     envios={"reverb": 0.22, "eco": 0.03},
                     efectos=[EQ(("pa", 40), ("campana", 320, -2.0, 0.8))])
     pad = C.pista("pad", Pad(voces=6, desafinar=13, sub=0.0, ataque=2.2, soltar=3.5, pa=140),
                   "armonia", vol=-5.0, envios={"reverb": 0.15},
                   efectos=[EQ(("campana", 300, -2.0, 0.9)), Ducking(prof_db=2.5, relaj_ms=200)])
-    arpa = C.pista("arpa", Arpa(), "armonia", vol=-5.5, envios={"reverb": 0.3, "eco": 0.06},
+    arpa = C.pista("arpa", Arpa(), "armonia", vol=0.0, envios={"reverb": 0.3, "eco": 0.06},
                    efectos=[EQ(("pa", 65))])
     rhodes = C.pista("rhodes", Rhodes(trem_prof=0.3), "armonia", vol=0.0,
                      envios={"reverb": 0.18, "eco": 0.1},
@@ -237,9 +237,9 @@ def cancion() -> Cancion:
                      efectos=[EQ(("pa", 130))])
     chelos = C.pista("chelos", Chelos(), "armonia", vol=2.0, envios={"reverb": 0.3},
                      efectos=[EQ(("pa", 55))])
-    cbajo = C.pista("contrabajo", Contrabajo(), "bajo", vol=-2.0, envios={"reverb": 0.14},
+    cbajo = C.pista("contrabajo", Contrabajo(), "bajo", vol=0.0, envios={"reverb": 0.14},
                     efectos=[EQ(("pa", 40), ("pb", 3500))])
-    glock = C.pista("glock", Glock(), "melodia", vol=-4.0, envios={"reverb": 0.4, "eco": 0.18},
+    glock = C.pista("glock", Glock(), "melodia", vol=-3.5, envios={"reverb": 0.4, "eco": 0.18},
                     efectos=[EQ(("agudos", 7000, -3.0))])
 
     # humanización (determinista)
@@ -264,7 +264,7 @@ def cancion() -> Cancion:
                            grano=(0.15, 0.4), tonos=(0, 12, -5), pesos=(4, 1, 1), ataque=6, caida=8),
              pos=1, ganancia_db=-17)
     tex.clip(swell(Piano(fieltro=0.5), ["D3", "A3", "E4", "F#4", "C#5"], largo_tiempos=6,
-                   vel=0.5), fin=3, ganancia_db=-12)
+                   vel=0.5), fin=3, ganancia_db=-13.5)
     celesta.melodia(3, MOTIVO, vel=0.45)
     celesta.melodia(5, RESPUESTA, vel=0.43)
     celesta.melodia(7, EXTENSION, vel=0.47)
@@ -272,20 +272,20 @@ def cancion() -> Cancion:
 
     # ------------------------------------------------------- 9–16 despertar
     tex.clip(swell(Piano(fieltro=0.5), ["D2", "A2", "F#3", "C#4", "E4"], largo_tiempos=8,
-                   vel=0.55), fin=9, ganancia_db=-9)
-    piano_respira(piano, C, 9, 17, vel=0.44)
+                   vel=0.55), fin=9, ganancia_db=-10.5)
+    piano_respira(piano, C, 9, 17, vel=0.42)
     for c, frase in ECOS.items():
         celesta.melodia(c, frase, vel=0.4)
     # el piano despierta solo (con el dron); el pad se suma recién en el 13
     pad.acordes_ligados(C.voicings(13, 17, voces=5, rango=("E3", "F5")), vel=0.5)
 
     # ------------------------------------------------------- 17–24 arpa
-    arpa_ondas(arpa, C, 17, 25, vel=0.47)
-    piano_blancas(piano, C, 17, 25, vel=0.3)
+    arpa_ondas(arpa, C, 17, 25, vel=0.44)
+    piano_blancas(piano, C, 17, 25, vel=0.33)
     pad.acordes_ligados(C.voicings(17, 25, voces=5, rango=("E3", "F5")), vel=0.55)
     # chelos asoman (divisi, registro medio: el grave queda para el piano y el arpa)
-    chelos.nota(21, "F#3", 4, vel=0.25, vel_fin=0.4).nota(22, "G#3", 4, vel=0.3, vel_fin=0.42)
-    chelos.nota(23, "A3", 8, vel=0.3, vel_fin=0.48).nota(23, "E3", 8, vel=0.22, vel_fin=0.4)
+    chelos.nota(21, "F#3", 4, vel=0.52, vel_fin=0.64).nota(22, "G#3", 4, vel=0.55, vel_fin=0.66)
+    chelos.nota(23, "A3", 8, vel=0.55, vel_fin=0.7).nota(23, "E3", 8, vel=0.48, vel_fin=0.64)
 
     # ------------------------------------------------------- 25–32 pulso
     tex.clip(swell(Piano(fieltro=0.5), ["B2", "F#3", "A3", "D4", "C#5"], largo_tiempos=4,
@@ -308,16 +308,16 @@ def cancion() -> Cancion:
     piano_blancas(piano, C, 33, 37, vel=0.34, con_sub=True)
     piano_negras(piano, C, 37, 41, vel=0.3)
     pad.acordes_ligados(C.voicings(33, 41, voces=5, rango=("E3", "F5")), vel=0.65)
-    violas.acordes_ligados(C.voicings(37, 41, voces=2, rango=("C#4", "A4")), vel=0.35)
+    violas.acordes_ligados(C.voicings(37, 41, voces=2, rango=("C#4", "A4")), vel=0.62)
     for t0, t1, _s, b in C.bajos(37, 41, rango=("F#3", "F4")):       # chelos: el bajo en 8va
-        chelos.nota(C.c(t0), b, t1 - t0, vel=0.45)
+        chelos.nota(C.c(t0), b, t1 - t0, vel=0.65)
     for t0, t1, _s, b in C.bajos(37, 41, rango=("A1", "G#2")):
-        cbajo.nota(C.c(t0), b, t1 - t0, vel=0.4)
+        cbajo.nota(C.c(t0), b, t1 - t0, vel=0.67)
     for p in (violas, chelos, cbajo):
         p.auto("expresion", [(37, 0.45), (40.9, 1.0, "suave"), (41, 0.92), (57, 0.92), (59, 0.25)])
     celesta.melodia(39, "r/2 A5/0.5 B5 C#6/1 | D6/2 E6/2", vel=0.45)   # transición: sube
     tex.clip(swell(Piano(fieltro=0.45), ["D2", "A2", "E3", "F#3", "C#4", "A4", "E5"],
-                   largo_tiempos=8, vel=0.62, curva=2.2), fin=41, ganancia_db=-12)
+                   largo_tiempos=8, vel=0.62, curva=2.2), fin=41, ganancia_db=-16)
 
     # ------------------------------------------------------- 41–56 cumbres
     for a, b in ((41, 49), (49, 56)):
@@ -331,31 +331,31 @@ def cancion() -> Cancion:
     sub_linea(sub, C, 41, 57)
     sub.nota(57, "D2", 8, vel=0.6)
     piano_negras(piano, C, 41, 57, vel=0.33)
-    arpa_ondas(arpa, C, 41, 49, patron="1 2 3 4 5 4 3 2", paso=0.25, vel=0.36, con_bajo=False)
-    arpa_ondas(arpa, C, 49, 56, patron="1 3 2 4 3 5 4 6", paso=0.25, vel=0.38, con_bajo=False)
+    arpa_ondas(arpa, C, 41, 49, patron="1 2 3 4 5 4 3 2", paso=0.25, vel=0.38, con_bajo=False)
+    arpa_ondas(arpa, C, 49, 56, patron="1 3 2 4 3 5 4 6", paso=0.25, vel=0.39, con_bajo=False)
     # gesto de arpa hacia el cierre: Gm6 en seisillos que desemboca en el 57
+    # el arpista apaga el gesto con las palmas en el 57: el Sol2 y los Si bemol no
+    # siguen sonando sobre el Re de la resolución (grave limpio, cadencia clara)
     gm6 = ["G2", "G3", "Bb3", "D4", "E4", "G4", "Bb4", "D5", "E5", "G5", "Bb5", "D6"]
     for k, alt in enumerate(gm6):
-        arpa.nota(f"56:{3 + k / 6:.4f}", alt, 1.5, vel=0.38 + 0.025 * k)
-    arpa.nota(57, "F#6", 3, vel=0.46).nota(57, "A5", 3, vel=0.42)
+        ini = 3 + k / 6
+        arpa.nota(f"56:{ini:.4f}", alt, 4.85 - ini, vel=0.38 + 0.025 * k, apagar=True)
+    arpa.nota(57, "F#6", 3, vel=0.4).nota(57, "A5", 3, vel=0.37)
     pad.acordes_ligados(C.voicings(41, 57, voces=5, rango=("E3", "F5")), vel=0.7)
-    violines.melodia(41, TEMA, vel=0.74)
-    violines.melodia(49, TEMA_2, vel=0.76)
-    violines.nota(57, "C#5", 8, vel=0.4, vel_fin=0.05, legato=True)
+    violines.melodia(41, TEMA, vel=0.68)
+    violines.melodia(49, TEMA_2, vel=0.83)        # la segunda cumbre, más arriba y más fuerte
+    violines.nota(57, "C#5", 8, vel=0.63, vel_fin=0.08, legato=True)
     violines.auto("expresion", [(41, 0.86), (44.9, 1.0, "suave"), (45, 0.9), (48.9, 1.0, "suave"),
                                 (49, 0.92), (52.9, 1.0, "suave"), (53, 0.94), (56.9, 1.0, "suave")])
     # violas: callan en la cumbre 1 (textura transparente) y en la 2 doblan el tema a la 8va baja
-    violas.melodia(49, TEMA_2, vel=0.66, transponer=-12)
-    violas.nota(57, "F#4", 8, vel=0.35, vel_fin=0.04).nota(57, "A4", 8, vel=0.3, vel_fin=0.04)
-    chelos.melodia(41, CONTRA, vel=0.8)
-    chelos.melodia(49, CONTRA_2, vel=0.82)
-    # chelos: discretos en el arpa, presentes en las cumbres (el contracanto canta)
-    chelos.auto("vol", [(17, -3.0), (36.9, -3.0), (37, 0.0, "paso"), (40.9, 0.0),
-                        (41, 5.0, "paso"), (56.9, 5.0), (57, 0.0, "paso")])
-    chelos.nota(57, "A3", 8, vel=0.4, vel_fin=0.04, legato=True)
+    violas.melodia(49, TEMA_2, vel=0.63, transponer=-12)
+    violas.nota(57, "F#4", 8, vel=0.75, vel_fin=0.1).nota(57, "A4", 8, vel=0.7, vel_fin=0.1)
+    chelos.melodia(41, CONTRA, vel=0.59)          # el contracanto canta sin tapar el tema
+    chelos.melodia(49, CONTRA_2, vel=0.61)
+    chelos.nota(57, "A3", 8, vel=0.62, vel_fin=0.06, legato=True)
     for t0, t1, _s, b in C.bajos(41, 57, rango=("A1", "G#2")):
-        cbajo.nota(C.c(t0), b, t1 - t0, vel=0.55)
-    cbajo.nota(57, "D2", 8, vel=0.45, vel_fin=0.05)
+        cbajo.nota(C.c(t0), b, t1 - t0, vel=0.63 if t0 < C.tempo.pos(49) else 0.7)
+    cbajo.nota(57, "D2", 8, vel=0.6, vel_fin=0.06)
     celesta.melodia(41, MOTIVO, vel=0.55)
     celesta.melodia(43, VARIANTE_B, vel=0.52)
     celesta.melodia(45, MOTIVO, vel=0.55)
@@ -363,11 +363,11 @@ def cancion() -> Cancion:
     celesta.melodia(49, RESPUESTA, vel=0.53)
     celesta.melodia(53, "F#5/0.5 C#6 B5 E5/1.5 F#5/1 | G#5/3 r/1", vel=0.52)
     for c, frase in GLOCK.items():
-        glock.melodia(c, frase, vel=0.5)
+        glock.melodia(c, frase, vel=0.46 if c < 49 else 0.57)
 
     # ------------------------------------------------------- 57–64 cierre
     tex.clip(swell(Piano(fieltro=0.55), ["D3", "A3", "E4", "F#4", "G#4"], largo_tiempos=6,
-                   vel=0.5), fin=57, ganancia_db=-11)
+                   vel=0.5), fin=57, ganancia_db=-13)
     celesta.melodia(57, MOTIVO, vel=0.52)
     celesta.melodia(59, RESPUESTA, vel=0.48)
     celesta.nota(63, "G#5", 4, vel=0.42, dejar_sonar=True)          # la #4 queda flotando

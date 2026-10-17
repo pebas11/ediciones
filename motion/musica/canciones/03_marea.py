@@ -26,19 +26,16 @@ Lugar para la voz: en las secciones [bajo voz] la melodía es el chelo en notas
 largas (Fa#3–Si4, fundamentales < 500 Hz), el vibráfono con arco no tiene ataque
 y el piano va con fieltro y velocidades bajas.
 
-Instrumentos propios de esta canción (definidos abajo, sin tocar el motor):
-  * VibArco: vibráfono con arco (banco `vibrafono_arco`), nivelado por muestra.
-  * ChelosN, ViolasN, ViolinesN, ContrabajoN, PianoN, PizzN: los mismos muestreos
-    del motor con una tabla de corrección de nivel por muestra (capa, altura, rr),
-    medida sobre el tramo estable (K-ponderado; en el pizzicato, el primer segundo).
-    En `chelos` y `violas` la capa suave quedaba 12 y 7 dB más fuerte que la fuerte
-    (un crescendo no subía de volumen) y `vibrafono_arco` no estaba nivelado.
+Dinámica de cuerdas (motor nivelado por capas): bajo la voz las cuerdas tocan en la capa
+suave (cálida, con poca presencia) y el `vol` de cada pista las pone en su lugar; en el giro y
+la pleamar cruzan a la capa fuerte: los crescendos crecen de verdad (10–15 dB).
 """
 import numpy as np
 
-from motor import (Cancion, Muestreador, Cuerdas, Piano, Pizzicato, Bateria, Textura,
-                   swell, nube_de_banco, EQ, Filtro, Auto, acorde)
-from motor.nucleo import desde_db, nota
+from motor import (Cancion, Piano, Chelos, Violas, Violines, Contrabajo, Pizzicato,
+                   VibrafonoArco, Bateria, Textura, swell, nube_de_banco, EQ, Filtro, Auto,
+                   acorde)
+from motor.nucleo import nota
 
 # =============================================================== 1. DATOS ==
 BPM = 72
@@ -128,7 +125,7 @@ VIB = [
     (51, "A5", 6.0, 0.50), (53, "F#5", 6.0, 0.48), (55, "C#6", 6.0, 0.50), (57, "B5", 3.0, 0.48),
     (58, "E6", 3.0, 0.44),
     # reflujo: la novena queda sonando
-    (59, "F#5", 6.0, 0.3), (63, "F#5", 6.0, 0.22), (65, "E5", 6.0, 0.22), (67, "E5", 6.0, 0.22),
+    (59, "F#5", 6.0, 0.27), (63, "F#5", 6.0, 0.2), (65, "E5", 6.0, 0.2), (67, "E5", 6.0, 0.2),
 ]
 
 # ---- Filtro del piano (Hz): la marea entera y, adentro, olas de 4 compases (cresta al 40 %).
@@ -143,129 +140,33 @@ CORTE_PIANO = [
     (59, 14000), (61, 7000, "exp"), (64, 4500, "exp"), (69, 2600, "exp"),                       # reflujo
 ]
 
+# ---- Timbre de cuerdas y vibráfono: (recorte en Hz, dB, Q) y (estante de aire en Hz, dB).
+#      Siguen haciendo falta con el motor nivelado: las muestras de cuerdas tienen el filo en
+#      2,5–3,5 kHz y casi nada arriba de 5 kHz (sin esto la presencia vs vecinas da ~4 dB).
+EQ_TIMBRE = {
+    "chelo": ((3000, -4.5, 0.8), (7000, 4.5)),
+    "violas": ((2800, -3.5, 0.8), (7000, 3.0)),
+    "violines": ((2800, -5.0, 0.7), (8500, 4.5)),
+    "vib": (None, (6500, 4.0)),
+}
+
+
+def eq_timbre(nombre, *bandas):
+    """EQ de la pista: sus bandas propias + el recorte de presencia y el aire de EQ_TIMBRE."""
+    corte, aire = EQ_TIMBRE[nombre]
+    extra = []
+    if corte:
+        extra.append(("campana", corte[0], corte[1], corte[2]))
+    if aire:
+        extra.append(("agudos", aire[0], aire[1]))
+    return EQ(*bandas, *extra)
+
+
 # ---- Pulso grave (solo en la pleamar): negras con puntillo, como un latido lejano.
 PULSO = "x..... x....."            # 12 semicorcheas = un compás de 6/8
 
 
-# ============================================ 2. INSTRUMENTOS NIVELADOS ===
-# Corrección de nivel (dB) por muestra: (capa, midi de la muestra, rr). Medida sobre el
-# tramo estable K-ponderado de cada muestra (con el ajuste del banco) y refinada con el
-# render de cada capa pura: el instrumento queda parejo (±1 dB) entre alturas y la
-# velocidad vuelve a mandar en el volumen (en chelos la capa suave sonaba 12 dB más).
-CORR = {
-    "vibrafono_arco": {(0, 57, 1): 12, (0, 64, 1): 2, (0, 67, 1): 3.5, (0, 74, 1): -4,
-                       (0, 81, 1): -2, (0, 88, 1): -8.5},
-    "chelos": {(0, 36, 1): -9.5, (0, 40, 1): -3, (0, 40, 2): -6.5, (0, 43, 1): -10.5,
-               (0, 47, 1): -10, (0, 50, 1): -8.5, (0, 53, 1): -6.5, (0, 57, 1): -6.5,
-               (0, 60, 1): -3.5, (0, 64, 1): -0.5, (0, 67, 1): -2, (0, 71, 1): -2,
-               (0, 74, 1): -5, (0, 77, 1): -6, (1, 36, 1): 0.5, (1, 40, 1): 3.5,
-               (1, 43, 1): 7, (1, 47, 1): 6.5, (1, 50, 1): 9.5, (1, 53, 1): 5, (1, 57, 1): 6,
-               (1, 60, 1): 10, (1, 64, 1): 6, (1, 67, 1): 8.5, (1, 71, 1): 4.5, (1, 74, 1): 5,
-               (1, 77, 1): 6},
-    "contrabajo": {(0, 28, 1): 5.5, (0, 30, 1): 3.5, (0, 31, 1): 9, (0, 34, 1): -0.5,
-                   (0, 36, 1): 3, (0, 38, 1): 9, (0, 40, 1): 6, (0, 42, 1): 1.5,
-                   (0, 44, 1): -8.5, (0, 45, 1): -9.5, (0, 49, 1): 1, (0, 52, 1): 0.5,
-                   (0, 56, 1): -4, (0, 59, 1): -3, (1, 28, 1): 1.5, (1, 30, 1): 2.5,
-                   (1, 31, 1): 6.5, (1, 34, 1): -4.5, (1, 36, 1): -1, (1, 38, 1): 0,
-                   (1, 40, 1): 2.5, (1, 42, 1): -3, (1, 44, 1): -4, (1, 45, 1): -1.5,
-                   (1, 49, 1): 1, (1, 52, 1): 1, (1, 56, 1): 1, (1, 59, 1): -9},
-    "violas": {(0, 48, 1): -4, (0, 50, 1): -5, (0, 52, 1): -4.5, (0, 55, 1): -5,
-               (0, 59, 1): -1.5, (0, 62, 1): -3, (0, 65, 1): -4, (0, 69, 1): -5,
-               (0, 72, 1): -7.5, (0, 76, 1): -4, (0, 79, 1): -11.5, (0, 83, 1): -1,
-               (0, 86, 1): -4.5, (1, 48, 1): -0.5, (1, 50, 1): 3.5, (1, 52, 1): 5,
-               (1, 55, 1): 8.5, (1, 59, 1): 5.5, (1, 62, 1): 2, (1, 65, 1): 7.5, (1, 69, 1): 5,
-               (1, 72, 1): 6.5, (1, 76, 1): 3.5, (1, 79, 1): 7, (1, 83, 1): 4, (1, 86, 1): -5},
-    "violines": {(0, 55, 1): 2.5, (0, 57, 1): 1, (0, 59, 1): 3, (0, 62, 1): 2, (0, 66, 1): -1,
-                 (0, 69, 1): -1.5, (0, 72, 1): -4, (0, 76, 1): 1, (0, 79, 1): -1, (0, 83, 1): 1,
-                 (0, 86, 1): -2.5, (1, 55, 1): 0.5, (1, 57, 1): -0.5, (1, 59, 1): -0.5,
-                 (1, 62, 1): -1, (1, 66, 1): -2, (1, 69, 1): 3, (1, 72, 1): 1.5, (1, 76, 1): -1,
-                 (1, 79, 1): -6, (1, 83, 1): -1.5, (1, 86, 1): -8},
-    # pizzicato: nivel de los primeros ~1,2 s desde el pico de cada muestra
-    "contrabajo_pizz": {(0, 28, 1): -3.5, (0, 28, 2): -4, (0, 30, 1): 5, (0, 30, 2): 5.5,
-                        (0, 31, 1): 3.5, (0, 31, 2): 3, (0, 34, 1): -2, (0, 34, 2): 0,
-                        (0, 36, 1): 4.5, (0, 36, 2): 3, (0, 38, 1): -8, (0, 38, 2): -8,
-                        (0, 40, 1): 1.5, (0, 40, 2): 1, (0, 42, 1): -3.5, (0, 42, 2): -3.5,
-                        (0, 44, 1): 3.5, (0, 44, 2): 5, (0, 45, 1): 1, (0, 45, 2): -0.5,
-                        (0, 49, 1): 0.5, (0, 49, 2): 2, (0, 52, 1): -1.5, (0, 52, 2): -2.5,
-                        (0, 56, 1): 1, (0, 56, 2): -0.5, (0, 59, 1): -4, (0, 59, 2): -4,
-                        (1, 28, 1): -3, (1, 28, 2): -3, (1, 30, 1): 0, (1, 30, 2): -1.5,
-                        (1, 31, 1): -2, (1, 31, 2): -1.5, (1, 34, 1): -0.5, (1, 34, 2): 1.5,
-                        (1, 36, 1): 3, (1, 36, 2): 3.5, (1, 40, 1): 1, (1, 40, 2): 2.5},
-    # piano: solo los saltos entre muestras vecinas (residuo sobre una recta: conserva la
-    # caída natural hacia el agudo)
-    "piano": {(0, 33, 1): -1, (0, 35, 1): 0, (0, 37, 1): 2.5, (0, 39, 1): 2.5, (0, 41, 1): -1,
-              (0, 43, 1): 1, (0, 45, 1): -2.5, (0, 47, 1): 0, (0, 49, 1): 1.5, (0, 51, 1): 2.5,
-              (0, 53, 1): 0, (0, 55, 1): -0.5, (0, 57, 1): -1, (0, 59, 1): 2, (0, 61, 1): -2,
-              (0, 63, 1): -2, (0, 65, 1): 1, (0, 67, 1): -0.5, (0, 69, 1): -0.5, (0, 71, 1): -1,
-              (0, 73, 1): 1.5, (0, 75, 1): -1, (0, 77, 1): 2.5, (0, 79, 1): -1, (0, 81, 1): -1,
-              (0, 83, 1): -1.5, (0, 85, 1): -5, (0, 87, 1): -4,
-              (1, 33, 1): -2, (1, 35, 1): 1, (1, 37, 1): 2.5, (1, 39, 1): 2.5, (1, 41, 1): -0.5,
-              (1, 43, 1): 1.5, (1, 45, 1): -1.5, (1, 47, 1): 0.5, (1, 49, 1): 1.5,
-              (1, 51, 1): 1.5, (1, 53, 1): 0, (1, 55, 1): -1, (1, 57, 1): -1, (1, 59, 1): 0,
-              (1, 61, 1): -0.5, (1, 63, 1): -0.5, (1, 65, 1): 0.5, (1, 67, 1): -1,
-              (1, 69, 1): -1, (1, 71, 1): -0.5, (1, 73, 1): 2, (1, 75, 1): -2, (1, 77, 1): 2.5,
-              (1, 79, 1): -3, (1, 81, 1): -2.5, (1, 83, 1): -3, (1, 85, 1): -5.5, (1, 87, 1): -2},
-}
-
-
-class Nivelado:
-    """Mezcla: aplica CORR[banco] a cada muestra leída (antes del cruce de capas)."""
-
-    def leer(self, midi, capa, n_total, offset, clave, sostenida=False, semilla=0):
-        y = super().leer(midi, capa, n_total, offset, clave, sostenida, semilla)
-        b = self.banco
-        i = b.elegir(midi, capa, clave)
-        g = CORR.get(self.banco_nombre, {}).get(
-            (int(b.capa[i]), int(round(b.midi[i])), int(b.rr[i])), 0.0)
-        return y * np.float32(desde_db(g)) if g else y
-
-
-class CuerdasN(Nivelado, Cuerdas):
-    pass
-
-
-def ChelosN(**kw):
-    kw.setdefault("ganancia_db", 3.5)        # vuelve a la calibración del motor (−26 a vel 0,6)
-    return CuerdasN("chelos", **kw)
-
-
-def ViolasN(**kw):
-    kw.setdefault("ganancia_db", 1.0)
-    return CuerdasN("violas", **kw)
-
-
-def ViolinesN(**kw):
-    return CuerdasN("violines", **kw)
-
-
-def ContrabajoN(**kw):
-    kw.setdefault("rango_db", 20.0)
-    kw.setdefault("ganancia_db", 2.0)
-    return CuerdasN("contrabajo", **kw)
-
-
-class PianoN(Nivelado, Piano):
-    pass
-
-
-class PizzN(Nivelado, Pizzicato):
-    pass
-
-
-class VibArco(Nivelado, Muestreador):
-    """Vibráfono con arco (VCSL, bowed): el arco entra en ~0,5 s, sostiene unos 5 s y la
-    lámina sigue sonando al soltar. Sin ataque percusivo: brillo que no pisa la voz."""
-
-    def __init__(self, rango_db=18.0, soltar=2.8, **kw):
-        kw.setdefault("tope_hz", 9000.0)
-        kw.setdefault("capas_vel", (0.3, 0.85))
-        kw.setdefault("ganancia_db", -11.0)   # banco sin calibrar: −26 LUFS a vel 0,6
-        kw.setdefault("abrir", 0.2)
-        super().__init__("vibrafono_arco", rango_db=rango_db, soltar=soltar, **kw)
-        self.nombre = "vibrafono_arco"
-
-
-# ============================================================ 3. AYUDAS ===
+# ============================================================ 2. AYUDAS ===
 def grave_ok(lo, hi):
     """Regla del grave del proyecto (la misma que revisar_grave)."""
     d = hi - lo
@@ -311,6 +212,10 @@ def escalera(sim, bajo, sup, quinta=True, octava=False, medio=True, techo_medio=
 
 
 CRESTA = 0.4      # la ola crece durante el 40 % de su período y se retira en el resto
+# Piano nivelado por capas: a velocidad baja el grave perdió más que el agudo (La1 −7 dB,
+# La5 −0,2 dB a vel 0,3). La mano izquierda va un poco más fuerte y la derecha un poco menos,
+# para conservar el balance interno (calidez del bajo, mano derecha sin brillo de más).
+MI, MD = 1.25, 0.88
 
 
 def ola(c, desde, periodo=4.0, prof=0.15, cresta=CRESTA):
@@ -375,10 +280,11 @@ def pedal_por_acorde(p, C, desde, hasta, hueco=0.06):
 
 def figura(p, C, desde, hasta, pasos, vel, rango=("A4", "A5"), voces=3, quinta=True,
            octava=False, acentos=(1.12, 0.78, 0.86, 1.0, 0.8, 0.86), periodo=4.0, prof=0.15,
-           dur=1.5, tope=None, rasgueo=0.012, forma=None, melodicas=()):
+           dur=1.5, tope=None, rasgueo=0.012, forma=None, melodicas=(), mi=MI, md=MD):
     """Figura de piano en 6/8: `pasos` = 6 elementos por compás (uno por corchea), cada uno
     un índice de la escalera (0 = bajo), una tupla de índices (acorde) o None (silencio).
-    La velocidad respira en olas de `periodo` compases; `forma(c)` la escala (crescendos)."""
+    La velocidad respira en olas de `periodo` compases; `forma(c)` la escala (crescendos).
+    `mi`/`md` escalan la mano izquierda (índices 0–2) y la derecha (3 en adelante)."""
     vs = C.voicings(desde, hasta, voces=voces, rango=rango, tope=tope)
     if melodicas:
         vs = sin_roces(vs, melodicas, rango)
@@ -396,6 +302,7 @@ def figura(p, C, desde, hasta, pasos, vel, rango=("A4", "A5"), voces=3, quinta=T
                 c = C.c(t)
                 f = ola(c, desde, periodo, prof) * acentos[k] * (forma(c) if forma else 1.0)
                 idx = paso if isinstance(paso, tuple) else (paso,)
+                f *= mi if max(idx) < 3 else md
                 alts = sorted({esc[min(i, len(esc) - 1)] for i in idx})
                 d = min(dur, t1 - t - 0.01)       # la tecla se suelta antes del acorde nuevo
                 if len(alts) > 1:
@@ -424,17 +331,17 @@ def respira(p, C, desde, hasta, vel=0.32, rango=("A4", "A5"), melodicas=()):
     bs = C.bajos(desde, hasta, rango=("A1", "G#2"))
     for (t0, t1, sim, v), (_, _, _, b) in zip(vs, bs):
         esc = escalera(sim, b, v)
-        p.acorde(C.c(t0), esc[:2], t1 - t0 - 0.01, vel=vel + 0.04, rasgueo=0.02)
+        p.acorde(C.c(t0), esc[:2], t1 - t0 - 0.01, vel=(vel + 0.04) * MI, rasgueo=0.02)
         # la mano derecha entra un instante después (y se suelta antes del acorde nuevo)
         p.acorde(C.c(t0 + 0.06), [m for m in esc[2:] if m not in esc[:2]], t1 - t0 - 0.08,
-                 vel=vel * 0.9, rasgueo=0.03)
+                 vel=vel * 0.9 * MD, rasgueo=0.03)
         if t1 - t0 >= TPC - 1e-6:
-            p.nota(C.c(t0 + 1.5), esc[-1], 1.5, vel=vel * 0.72)
-            p.nota(C.c(t0 + 2.5), esc[-2], 0.5, vel=vel * 0.6)
+            p.nota(C.c(t0 + 1.5), esc[-1], 1.5, vel=vel * 0.72 * MD)
+            p.nota(C.c(t0 + 2.5), esc[-2], 0.5, vel=vel * 0.6 * MD)
     pedal_por_acorde(p, C, desde, hasta)
 
 
-# ============================================================ 4. CANCIÓN ==
+# ============================================================ 3. CANCIÓN ==
 def cancion() -> Cancion:
     C = Cancion("Marea", slug="03-marea", bpm=BPM, compas=(6, 8),
                 tonalidad="Si menor → Re mayor", semilla=SEMILLA, cola_s=10.0)
@@ -445,40 +352,37 @@ def cancion() -> Cancion:
     C.ritardando(65, 69, 58)          # la última ola se demora
     # mismo espacio que «Umbral» (sala grande, cinta); el eco va a la negra: contra el
     # 6/8 dibuja ondas que se cruzan
-    C.fx["reverb"].update(dur=3.8, predelay_ms=32, brillo=0.46)
+    C.fx["reverb"].update(dur=3.8, predelay_ms=32, brillo=0.42)
     C.fx["eco"].update(division=1.0, realim=0.3, corte=2600.0)
 
     # ---------------------------------------------------------------- pistas
-    mar = C.pista("mar", Textura(), "textura", vol=3.0, envios={"reverb": 0.22},
+    mar = C.pista("mar", Textura(), "textura", vol=3.5, envios={"reverb": 0.22},
                   efectos=[EQ(("pa", 140), ("campana", 290, -3.0, 0.8)),
                            Filtro("pasabajos", corte=Auto([(1, 1300)] + olas_auto(3, 59, 1100, 2600)[1:] +
                                                          [(63, 1200, "suave"), (69, 800, "suave")]),
                                   q=0.7, polos=2)])
     oleaje = C.pista("oleaje", Textura(), "textura", vol=0.0)
-    piano = C.pista("piano", PianoN(fieltro=0.7, mecanica=0.5), "armonia", vol=0.5,
+    piano = C.pista("piano", Piano(fieltro=0.7, mecanica=0.5), "armonia", vol=2.5,
                     envios={"reverb": 0.24, "eco": 0.04},
                     efectos=[EQ(("pa", 38), ("campana", 300, -3.0, 0.8), ("agudos", 7000, 3.0)),
                              Filtro("pasabajos", corte=Auto(CORTE_PIANO), q=0.65, polos=2)])
     # el chelo que canta, apenas a la derecha: deja el centro exacto para la voz
-    chelo = C.pista("chelo", ChelosN(pan=0.2), "melodia", vol=0.0, envios={"reverb": 0.26},
-                    efectos=[EQ(("pa", 65), ("campana", 230, -1.5, 0.9), ("campana", 3000, -4.5, 0.8),
-                                ("agudos", 7000, 4.5))])
-    chelos2 = C.pista("chelos2", ChelosN(), "armonia", vol=-2.0, envios={"reverb": 0.3},
+    chelo = C.pista("chelo", Chelos(pan=0.2), "melodia", vol=7.5, envios={"reverb": 0.26},
+                    efectos=[eq_timbre("chelo", ("pa", 65), ("campana", 230, -1.5, 0.9))])
+    chelos2 = C.pista("chelos2", Chelos(), "armonia", vol=1.8, envios={"reverb": 0.3},
                       efectos=[EQ(("pa", 55), ("campana", 260, -2.0, 0.9))])
-    violas = C.pista("violas", ViolasN(), "armonia", vol=-4.0, envios={"reverb": 0.32},
-                     efectos=[EQ(("pa", 160), ("campana", 330, -3.0, 0.9), ("campana", 2800, -3.5, 0.8),
-                              ("agudos", 7000, 3.0))])
-    violines = C.pista("violines", ViolinesN(doble=True), "melodia", vol=0.0,
-                       envios={"reverb": 0.36},
-                       efectos=[EQ(("pa", 200), ("campana", 2800, -5.0, 0.7), ("agudos", 8500, 4.5))])
-    cbajo = C.pista("contrabajo", ContrabajoN(), "bajo", vol=-2.5, envios={"reverb": 0.14},
+    violas = C.pista("violas", Violas(), "armonia", vol=2.2, envios={"reverb": 0.32},
+                     efectos=[eq_timbre("violas", ("pa", 160), ("campana", 330, -3.0, 0.9))])
+    violines = C.pista("violines", Violines(doble=True), "melodia", vol=6.4,
+                       envios={"reverb": 0.36}, efectos=[eq_timbre("violines", ("pa", 200))])
+    cbajo = C.pista("contrabajo", Contrabajo(), "bajo", vol=6.0, envios={"reverb": 0.14},
                     efectos=[EQ(("pa", 36), ("pb", 3200))])
-    pizz = C.pista("pizz", PizzN("contrabajo"), "bajo", vol=-3.0, envios={"reverb": 0.2},
+    pizz = C.pista("pizz", Pizzicato("contrabajo"), "bajo", vol=-1.0, envios={"reverb": 0.2},
                    efectos=[EQ(("pa", 40), ("pb", 2500))])
-    vib = C.pista("vib", VibArco(tope_hz=12000.0), "melodia", vol=0.0,
-                  envios={"reverb": 0.38, "eco": 0.08},
-                  efectos=[EQ(("pa", 200), ("campana", 2500, -10.0, 0.6), ("agudos", 6500, 4.0))])
-    pulso = C.pista("pulso", Bateria(color=0.2, tono=0.9), "bateria", vol=0.0,
+    # el motor doma el parcial 4·f0 de la lámina (−12 dB): ya no hace falta recortar 2,5 kHz
+    vib = C.pista("vib", VibrafonoArco(tope_hz=12000.0), "melodia", vol=-3.0,
+                  envios={"reverb": 0.38, "eco": 0.08}, efectos=[eq_timbre("vib", ("pa", 200))])
+    pulso = C.pista("pulso", Bateria(color=0.2, tono=0.9), "bateria", vol=1.5,
                     envios={"sala": 0.15}, efectos=[EQ(("pb", 170, 0.7), ("pa", 30))])
 
     # humanización (determinista)
@@ -506,97 +410,101 @@ def cancion() -> Cancion:
              [(61, -5, "suave"), (64, -6, "suave"), (69, -10, "suave")])
 
     # ---------------------------------------------------------------- 1–6 bajamar
-    figura(piano, C, 1, 3, [(0, 1), None, None, 2, None, None], vel=0.28,
+    figura(piano, C, 1, 3, [(0, 1), None, None, 2, None, None], vel=0.3,
            acentos=(1, 1, 1, 0.8, 1, 1), prof=0.0, dur=3.0)
-    piano.melodia(3, MOTIVO, vel=0.46)
+    piano.melodia(3, MOTIVO, vel=0.44)
     figura(piano, C, 3, 7, [(0, 1), None, None, 2, None, None], vel=0.25,
            acentos=(1, 1, 1, 0.75, 1, 1), prof=0.0, dur=3.0)
 
     # ---------------------------------------------------------------- 7–14 orilla
-    oleaje.clip(swell(PianoN(fieltro=0.6), ["B2", "F#3", "D4", "C#5"], largo_tiempos=4.5, vel=0.5),
+    oleaje.clip(swell(Piano(fieltro=0.6), ["B2", "F#3", "D4", "C#5"], largo_tiempos=4.5, vel=0.5),
                 fin=7, ganancia_db=-17)
     figura(piano, C, 7, 15, [0, 1, 2, 3, 4, 3], vel=0.31)
     bajo_largo(cbajo, C, 7, 15, vel=0.34)
     # las violas asoman con una nota común (Fa#4 cabe en Em9, D/F#, Gmaj9#11) y bajan a Mi
-    violas.nota(11, "F#4", 9.0, vel=0.22, vel_fin=0.34).nota(14, "E4", 3.0, vel=0.3, vel_fin=0.2)
+    violas.nota(11, "F#4", 9.0, vel=0.2, vel_fin=0.28).nota(14, "E4", 3.0, vel=0.26, vel_fin=0.18)
 
     # ---------------------------------------------------------------- 15–22 ola
-    chelo.melodia(15, TEMA_A, vel=0.48)
+    chelo.melodia(15, TEMA_A, vel=0.42)
     figura(piano, C, 15, 23, [(0, 1), None, 2, (3, 5), None, 4], vel=0.3, melodicas=[chelo])
     bajo_largo(cbajo, C, 15, 23, vel=0.38)
     violas.acordes_ligados(sin_roces(C.voicings(15, 23, voces=2, rango=("E4", "C#5")), [chelo],
-                                     ("E4", "D5")), vel=0.34)
+                                     ("E4", "D5")), vel=0.38)
 
     # ---------------------------------------------------------------- 23–30 resaca
-    oleaje.clip(swell(VibArco(), ["F#4", "B4", "C#5"], largo_tiempos=3.0, vel=0.5),
+    oleaje.clip(swell(VibrafonoArco(), ["F#4", "B4", "C#5"], largo_tiempos=3.0, vel=0.5),
                 fin=23, ganancia_db=-12)
-    chelo.melodia(23, TEMA_A2, vel=0.56)
+    chelo.melodia(23, TEMA_A2, vel=0.46)
     figura(piano, C, 23, 31, [(0, 1), 2, 3, (4, 5), 3, 2], vel=0.31, melodicas=[chelo])
     bajo_largo(cbajo, C, 23, 31, vel=0.44)
     violas.acordes_ligados(sin_roces(C.voicings(23, 31, voces=2, rango=("E4", "D5")),
-                                     [chelo, violines], ("E4", "D5")), vel=0.4)
-    violines.nota(27, "F#5", 6.0, vel=0.2, vel_fin=0.3).nota(29, "E5", 3.0, vel=0.3)
-    violines.nota(30, "E5", 1.5, vel=0.32, legato=True).nota("30:2.5", "C#5", 1.5, vel=0.34,
+                                     [chelo, violines], ("E4", "D5")), vel=0.42)
+    # los violines asoman y crecen de verdad hacia el giro (capa suave → fuerte)
+    violines.nota(27, "F#5", 6.0, vel=0.38, vel_fin=0.46).nota(29, "E5", 3.0, vel=0.46)
+    violines.nota(30, "E5", 1.5, vel=0.48, legato=True).nota("30:2.5", "C#5", 1.5, vel=0.5,
                                                            legato=True)
 
     # ---------------------------------------------------------------- 31–34 giro
-    oleaje.clip(swell(VibArco(), ["G4", "B4", "F#5"], largo_tiempos=4.5, vel=0.55),
+    oleaje.clip(swell(VibrafonoArco(), ["G4", "B4", "F#5"], largo_tiempos=4.5, vel=0.55),
                 fin=31, ganancia_db=-11)
-    violines.melodia(31, GIRO_VLN, vel=0.56)
-    chelo.melodia(31, GIRO_CHELO, vel=0.56)
-    bajo_largo(chelos2, C, 31, 35, vel=0.5, rango=("A2", "G#3"), prof=0.0)
-    bajo_largo(cbajo, C, 31, 35, vel=0.52, prof=0.0, arco=0.08)
+    violines.melodia(31, GIRO_VLN, vel=0.53)
+    chelo.melodia(31, GIRO_CHELO, vel=0.47)
+    bajo_largo(chelos2, C, 31, 35, vel=0.55, rango=("A2", "G#3"), prof=0.0)
+    bajo_largo(cbajo, C, 31, 35, vel=0.45, prof=0.0, arco=0.08)
     violas.acordes_ligados(sin_roces(C.voicings(31, 35, voces=3, rango=("D4", "B4")),
-                                     [chelo, violines], ("D4", "C#5")), vel=0.48)
+                                     [chelo, violines], ("D4", "C#5")), vel=0.5)
     # sin la 5ª grave: los chelos tocan el bajo a la 8va (la regla del grave entre pistas)
     figura(piano, C, 31, 35, [0, 1, 2, 3, 4, 5], vel=0.34, voces=4, rango=("A4", "D6"),
            octava=True, prof=0.0, acentos=(1.1, 0.8, 0.85, 1.0, 0.9, 0.95),
            forma=lambda c: float(np.interp(c, [31, 33.5, 34.9], [0.95, 1.2, 0.9])),
            melodicas=[chelo, violines])
     # la oleada desemboca en Re mayor: el acorde nuevo se adelanta desde el reverso
-    oleaje.clip(swell(VibArco(), ["D4", "A4", "E5", "F#5"], largo_tiempos=6.0, vel=0.6, curva=2.2),
+    oleaje.clip(swell(VibrafonoArco(), ["D4", "A4", "E5", "F#5"], largo_tiempos=6.0, vel=0.6,
+                      curva=2.2),
                 fin=35, ganancia_db=-9)
 
     # ---------------------------------------------------------------- 35–42 claridad
-    chelo.melodia(35, TEMA_B, vel=0.53)
+    chelo.melodia(35, TEMA_B, vel=0.44)
     figura(piano, C, 35, 43, [0, 1, 2, 4, 3, 2], vel=0.29, rango=("A4", "B5"), melodicas=[chelo])
     bajo_largo(cbajo, C, 35, 43, vel=0.36)
     violas.acordes_ligados(sin_roces(C.voicings(37, 43, voces=2, rango=("E4", "C#5")), [chelo],
-                                     ("E4", "D5")), vel=0.34)
+                                     ("E4", "D5")), vel=0.38)
 
     # ---------------------------------------------------------------- 43–50 crecida
-    chelo.melodia(43, TEMA_B2, vel=0.56)
+    chelo.melodia(43, TEMA_B2, vel=0.49)
     figura(piano, C, 43, 51, [(0, 1), 2, 3, (4, 5), 3, 2], vel=0.32, rango=("A4", "B5"),
            octava=True, melodicas=[chelo, violines])
-    # pizzicato del contrabajo: fundamental en el 1 y su 8va en el 4 (el pulso de la marea)
+    # pizzicato del contrabajo: fundamental en el 1 y su 8va en el 4 (el pulso de la marea);
+    # el músico apaga la cuerda antes del acorde nuevo (si no, el Si2 sigue sonando sobre el Mi3
+    # del piano en el c47 y el La1 sobre el Re2 del c51)
     for t0, t1, _s, b in C.bajos(43, 51, rango=("A1", "G#2")):
         f = ola(C.c(t0), 43, 4.0, 0.12)
-        pizz.nota(C.c(t0), b, 1.4, vel=0.5 * f)
+        pizz.nota(C.c(t0), b, 1.3, vel=0.5 * f, apagar=True)
         if t1 - t0 >= TPC - 1e-6:
-            pizz.nota(C.c(t0 + 1.5), b + 12, 1.4, vel=0.4 * f)
+            pizz.nota(C.c(t0 + 1.5), b + 12, 1.3, vel=0.4 * f, apagar=True)
     violines.acordes_ligados(sin_roces(C.voicings(43, 51, voces=2, rango=("C#5", "A5")), [chelo],
-                                       ("C#5", "B5")), vel=0.3)
+                                       ("C#5", "B5")), vel=0.5)
     violas.acordes_ligados(sin_roces(C.voicings(43, 51, voces=2, rango=("E4", "C#5")),
-                                     [chelo, violines], ("E4", "D5")), vel=0.4)
+                                     [chelo, violines], ("E4", "D5")), vel=0.43)
     bajo_largo(cbajo, C, 47, 51, vel=0.4, prof=0.0, arco=0.12)
-    oleaje.clip(swell(PianoN(fieltro=0.55), ["D2", "A2", "E3", "F#3", "C#4", "A4", "E5"],
-                      largo_tiempos=7.5, vel=0.6, curva=2.2), fin=51, ganancia_db=-12)
+    oleaje.clip(swell(Piano(fieltro=0.55), ["D2", "A2", "E3", "F#3", "C#4", "A4", "E5"],
+                      largo_tiempos=7.5, vel=0.6, curva=2.2), fin=51, ganancia_db=-16.5)
 
     # ---------------------------------------------------------------- 51–58 pleamar
-    chelo.melodia(51, TEMA_B, vel=0.74)
-    violines.melodia(51, TEMA_B, vel=0.76, transponer=12)
+    chelo.melodia(51, TEMA_B, vel=0.55)
+    violines.melodia(51, TEMA_B, vel=0.62, transponer=12)
     bajo_largo(chelos2, C, 51, 59, vel=0.64, rango=("A2", "G#3"), legato=True)
-    bajo_largo(cbajo, C, 51, 59, vel=0.62)
+    bajo_largo(cbajo, C, 51, 59, vel=0.55)
     violas.acordes_ligados(sin_roces(C.voicings(51, 59, voces=3, rango=("D4", "B4")),
-                                     [chelo, violines], ("D4", "C#5")), vel=0.6)
+                                     [chelo, violines], ("D4", "C#5")), vel=0.57)
     figura(piano, C, 51, 59, [(0, 1), 2, 3, (4, 5), 3, 2], vel=0.36, voces=4,
            rango=("A4", "D6"), octava=True, prof=0.1, melodicas=[chelo, violines])
     pulso.patron("bombo", PULSO, 51, 59, vel=0.36)
 
     # ---------------------------------------------------------------- 59–68 reflujo
-    violines.nota(59, "F#5", 5.0, vel=0.32, vel_fin=0.05, legato=True)
+    violines.nota(59, "F#5", 5.0, vel=0.28, vel_fin=0.05, legato=True)
     violas.nota(59, "A4", 5.0, vel=0.3, vel_fin=0.05).nota(59, "D5", 5.0, vel=0.26, vel_fin=0.04)
-    chelo.nota(59, "D4", 6.0, vel=0.38, vel_fin=0.14)
+    chelo.nota(59, "D4", 6.0, vel=0.32, vel_fin=0.12)
     cbajo.nota(59, "D2", 12.0, vel=0.36, vel_fin=0.2).nota(63, "B1", 3.0, vel=0.23)
     cbajo.nota(64, "G1", 3.0, vel=0.23).nota(65, "A1", 6.0, vel=0.23, vel_fin=0.26)
     cbajo.nota(67, "D2", 6.0, vel=0.25, vel_fin=0.07)
@@ -616,14 +524,14 @@ def cancion() -> Cancion:
                [(33.5, 1.0, "suave"), (34.9, 0.8, "suave")] + olas_auto(35, 51, 0.8, 1.0)[1:] +
                [(52.4, 1.0, "suave"), (54.5, 0.9, "suave"), (56.2, 1.0, "suave"),
                 (58.9, 0.95, "suave"), (60, 0.85, "suave")])
-    violas.auto("expresion", [(11, 0.8), (15, 0.6)] + olas_auto(15, 31, 0.6, 0.95)[1:] +
-                [(33.5, 1.0, "suave"), (34.9, 0.6, "suave"), (37, 0.55)] +
-                olas_auto(37, 51, 0.55, 0.95, periodo=7.0)[1:] + [(52, 0.85, "suave"), (58.5, 1.0),
-                                                     (60, 0.8, "suave")])
-    violines.auto("expresion", [(27, 0.6), (31, 0.9, "suave"), (33.5, 1.0, "suave"),
-                                (34.9, 0.55, "suave"), (43, 0.55)] +
-                  olas_auto(43, 47, 0.55, 0.85)[1:] +
-                  [(50.9, 0.92, "suave"), (52.4, 1.0, "suave"), (54.5, 0.9, "suave"),
+    violas.auto("expresion", [(11, 0.9), (15, 0.8, "suave")] + olas_auto(15, 31, 0.8, 1.0)[1:] +
+                [(33.5, 1.0, "suave"), (34.9, 0.6, "suave"), (37, 0.8, "suave")] +
+                olas_auto(37, 51, 0.8, 1.0, periodo=7.0)[1:] + [(52, 0.85, "suave"), (58.5, 1.0),
+                                                                (60, 0.8, "suave")])
+    violines.auto("expresion", [(27, 0.75), (31, 0.85, "suave"), (33.5, 1.0, "suave"),
+                                (34.9, 0.55, "suave"), (43, 0.7, "suave")] +
+                  olas_auto(43, 47, 0.7, 0.85)[1:] +
+                  [(50.9, 0.95, "suave"), (52.4, 1.0, "suave"), (54.5, 0.9, "suave"),
                    (56.2, 1.0, "suave"), (58.9, 0.92, "suave"), (60, 0.8, "suave")])
     chelos2.auto("expresion", [(31, 0.6), (33.5, 1.0, "suave"), (34.9, 0.6, "suave"),
                                (51, 0.85), (59, 0.8)])
