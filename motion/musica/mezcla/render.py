@@ -83,7 +83,10 @@ class Renderizador:
                 env *= f_in.entra(t)
             if f_out is not None:
                 env *= f_out.sale(t)
-            env *= (10.0 ** (curva(t) / 20.0)).astype(np.float32)
+            ganancia = curva(t)
+            if sg.rampas:
+                ganancia = ganancia + sg.extra_db(t)
+            env *= (10.0 ** (ganancia / 20.0)).astype(np.float32)
             nz = np.nonzero(env > 1e-7)[0]
             if len(nz) == 0:
                 continue
@@ -193,7 +196,7 @@ class Renderizador:
                 env = env * sg.entra[s].entra(tt)
             if sg.sale.get(s) is not None:
                 env = env * sg.sale[s].sale(tt)
-            env = env * 10 ** (self.curvas[cr.tramo](tt) / 20)
+            env = env * 10 ** ((self.curvas[cr.tramo](tt) + sg.extra_db(tt)) / 20)
             tot[m] += env
         for co in self.edl.colas:
             if s not in co.stems:

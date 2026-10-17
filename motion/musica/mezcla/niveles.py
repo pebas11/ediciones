@@ -355,25 +355,58 @@ def relativo_en_habla(p_cama: np.ndarray, p_voz: np.ndarray, mask_sub: np.ndarra
     return rel
 
 
-def guardia_voz(p_cama, p_voz, mask_sub, bloques: list, P: dict) -> np.ndarray:
-    """Reducción (dB, por sub-bloque de 100 ms) donde la cama bajo la voz supera el objetivo del
-    bloque + ventana_lu. Se sostiene 1 s y se suaviza (rampas de ~0,5 s); tope `guardia_max_db`."""
+def tipo_region(voz, n: int) -> np.ndarray:
+    """Por sub-bloque de 100 ms: 0 habla, 1 pausa entre frases, 2 intro (antes de la primera
+    palabra), 3 final (después de la última)."""
+    t = (np.arange(n) + 0.5) * 0.1
+    tipo = np.ones(n, np.int8)
+    if not voz.frases:
+        tipo[:] = 2
+        return tipo
+    tipo[t < voz.frases[0][0]] = 2
+    tipo[t >= voz.frases[-1][1]] = 3
+    for a, b in voz.frases:
+        tipo[(t >= a) & (t < b)] = 0
+    return tipo
+
+
+def techos(p_cama, p_voz, mask_sub, voz, bloques: list, P: dict, l_voz: float, gan_master: float):
+    """Reducción (dB por sub-bloque de 100 ms) para que la cama nunca pase sus techos:
+      * mientras se habla: cama − voz (con compuerta de habla) ≤ objetivo + nivel del tramo + ventana;
+      * en pausas: sonoridad de corto plazo de la cama ≤ voz − |techo_pausas_lu|;
+      * intro y final sin voz: ≤ techo_sin_voz_lufs en la mezcla final (con la ganancia del master).
+    Se sostiene 1 s y se suaviza (rampas de ~0,5 s). Devuelve (reducción, exceso_por_tipo)."""
     pn = P["niveles"]
     n = min(len(p_cama), len(p_voz), len(mask_sub))
-    rel = relativo_en_habla(p_cama, p_voz, mask_sub)
+    # 1) bajo la voz
+    rel = relativo_en_habla(p_cama, p_voz, mask_sub)[:n]
     techo = np.full(n, pn["musica_bajo_voz_lu"] + pn["ventana_lu"])
     for bl in bloques:
         for (a, b) in bl.rangos:
             techo[max(0, int(a / 0.1)):max(0, int(b / 0.1))] = \
                 pn["musica_bajo_voz_lu"] + bl.nivel_db + pn["ventana_lu"]
-    exceso = np.nan_to_num(rel - techo, nan=0.0)
-    exceso = np.clip(exceso, 0.0, pn["guardia_max_db"])
+    tipo = tipo_region(voz, n)
+    # solo donde se habla: en una pausa la música tiene permiso para subir (lo controla el techo
+    # de pausas); medirla con el habla de los bordes la bajaría justo donde debe respirar
+    exc_habla = np.clip(np.nan_to_num(rel - techo[:len(rel)], nan=0.0), 0.0, None)
+    exc_habla = np.where(tipo[:len(exc_habla)] == 0, exc_habla, 0.0)
+    # 2) sin voz: sonoridad de corto plazo (3 s centrada) de la cama
+    k = np.ones(CORTO) / CORTO
+    st = _lk(np.convolve(p_cama[:n], k, mode="same"))
+    techo_sv = np.full(n, np.inf)
+    techo_sv[tipo == 1] = l_voz + pn["techo_pausas_lu"]
+    techo_sv[(tipo == 2) | (tipo == 3)] = pn["techo_sin_voz_lufs"] - gan_master - 0.3
+    exc_sv = np.where(tipo > 0, np.clip(st - techo_sv, 0.0, None), 0.0)
+    exceso = np.clip(np.maximum(exc_habla, exc_sv), 0.0, pn["guardia_max_db"])
+    resumen = {"bajo_voz_max_db": round(float(exc_habla.max()), 2) if len(exc_habla) else 0.0,
+               "pausas_max_db": round(float(exc_sv[tipo == 1].max()), 2) if (tipo == 1).any() else 0.0,
+               "sin_voz_max_db": round(float(exc_sv[tipo >= 2].max()), 2) if (tipo >= 2).any() else 0.0}
     if exceso.max() <= 0.05:
-        return np.zeros(n)
+        return np.zeros(n), resumen
     from scipy.ndimage import maximum_filter1d, uniform_filter1d
     red = maximum_filter1d(exceso, size=11, mode="constant")
     red = uniform_filter1d(uniform_filter1d(red, size=7, mode="constant"), size=7, mode="constant")
-    return np.clip(red, 0.0, pn["guardia_max_db"])
+    return np.clip(red, 0.0, pn["guardia_max_db"]), resumen
 
 
 class CurvaTramo:

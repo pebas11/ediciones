@@ -39,18 +39,21 @@ DEFECTOS: dict = {
         },
     },
     "niveles": {
-        "musica_bajo_voz_lu": -20.0,  # cama vs voz en sonoridad de corto plazo, mientras habla
-        "ventana_lu": 2.0,            # tolerancia: ±2 → 18–22 dB por debajo de la voz
+        # Pedido del autor: la música "bajito, nunca a tope".
+        "musica_bajo_voz_lu": -24.0,  # cama vs voz en sonoridad de corto plazo (3 s), mientras habla
+        "ventana_lu": 2.0,            # tolerancia: ±2 → 22–26 dB por debajo de la voz
+        "techo_pausas_lu": -10.0,     # en pausas puede subir, pero no más que la voz − 10 LU
+        "techo_sin_voz_lufs": -20.0,  # intro y final sin voz: tope de LUFS de corto plazo en la mezcla final
         "conservar_dinamica": 0.5,    # fracción de la diferencia de sonoridad entre secciones que se respeta
-        "realce_pausas_db": 3.0,      # extra en pausas largas
+        "realce_pausas_db": 4.0,      # extra en pausas largas (siempre bajo el techo de pausas)
         "pausa_larga_s": 2.5,
-        "realce_intro_db": 6.0,       # extra antes de la primera palabra y después de la última
+        "realce_intro_db": 8.0,       # extra antes de la primera palabra y después de la última (bajo el tope)
         "rampa_realce_s": 1.2,
         "rampa_bloque_tiempos": 2.0,  # cambio de nivel entre secciones: rampa que termina en el downbeat
         "corregir": True,             # segunda pasada: mide la cama real y corrige cada bloque
         "tolerancia_lu": 0.5,
-        "guardia_voz": True,          # baja la cama donde, mientras se habla, supera objetivo + ventana
-        "guardia_max_db": 6.0,
+        "guardia_voz": True,          # aplica los techos: bajo la voz (objetivo + ventana), pausas y sin voz
+        "guardia_max_db": 12.0,
     },
     "empalmes": {
         "loop_tiempos": 1.0,          # fundido en cada vuelta de loop
@@ -196,7 +199,9 @@ def validar_rangos(p: dict, errores: list):
     rango("niveles.realce_pausas_db", 0, 18)
     rango("niveles.realce_intro_db", 0, 24)
     rango("niveles.pausa_larga_s", 0.5, 60)
-    rango("niveles.guardia_max_db", 0, 18)
+    rango("niveles.guardia_max_db", 0, 30)
+    rango("niveles.techo_pausas_lu", -40, 0)
+    rango("niveles.techo_sin_voz_lufs", -40, -8)
     rango("empalmes.loop_tiempos", 0.125, 8)
     rango("empalmes.empalme_tiempos", 0.0625, 8)
     rango("empalmes.guarda_ms", 0, 100)

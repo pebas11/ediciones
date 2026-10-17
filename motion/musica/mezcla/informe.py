@@ -79,74 +79,91 @@ def _st(v):
             "max": round(float(v.max()), 2), "n": int(len(v))}
 
 
-def niveles(voz, cama, mezcla, mask_sub, P, voz_regiones):
-    """LUFS de la voz, de la cama bajo la voz, en pausas largas, intro y final; relativos ST."""
-    pv = potencia_k_bloques(voz.x)
-    pc = potencia_k_bloques(cama)
-    pm = potencia_k_bloques(mezcla)
+def niveles(voz, pv, pc, pm, mask_sub, P, gan_master: float, bloques=None):
+    """Niveles en la escala de la MEZCLA FINAL (la cama ya con la ganancia del master, como en
+    musica_cama.wav): voz, música bajo la voz (relativo con compuerta de habla), pausas, intro,
+    final y máximo de la música. pv, pc, pm: potencias K por sub-bloque (voz y cama antes del
+    master, mezcla final)."""
+    from .niveles import relativo_en_habla, tipo_region
+    pn = P["niveles"]
+    G = float(gan_master)
     n = min(len(pv), len(pc), len(mask_sub))
-    f400 = fraccion_ventanas(mask_sub[:n], BLOQUE)
-    out = {}
+    obj, w = pn["musica_bajo_voz_lu"], pn["ventana_lu"]
+    out = {"escala": "mezcla final (cama con la ganancia del master)", "ganancia_master_db": round(G, 2)}
+    lv_mez = voz.lufs_mezcla
+    lv_fin = None if lv_mez is None else lv_mez + G
     out["voz_lufs_archivo"] = None if voz.lufs_archivo is None else round(voz.lufs_archivo, 2)
-    out["voz_lufs_en_mezcla_estereo"] = None if voz.lufs_mezcla is None else round(voz.lufs_mezcla, 2)
+    out["voz_lufs_en_mezcla_final"] = None if lv_fin is None else round(lv_fin, 2)
     out["voz_canales_origen"] = voz.canales_origen
-    lc_voz = integrado(pc[:n], f400 >= 0.7)
-    out["cama_bajo_voz_lufs"] = None if lc_voz is None else round(lc_voz, 2)
-    lv_voz = integrado(pv[:n], f400 >= 0.7)
-    out["voz_mientras_habla_lufs"] = None if lv_voz is None else round(lv_voz, 2)
-    # relativos de corto plazo
+    # 1) música bajo la voz: cama − voz con compuerta de habla, en ventanas de 3 s centradas en
+    #    momentos con habla (cada 0,5 s)
+    rh_full = relativo_en_habla(pc[:n], pv[:n], mask_sub[:n])
+    sel = np.zeros(len(rh_full), bool)
+    sel[::5] = True
+    sel &= (np.asarray(mask_sub[:len(rh_full)]) >= 0.5) & np.isfinite(rh_full)
+    vh = rh_full[sel]
+    # objetivo de cada momento: el global + nivel_db del tramo que suena
+    obj_k = np.full(len(rh_full), obj)
+    for bl in bloques or []:
+        for (a, b) in bl.rangos:
+            obj_k[max(0, int(a / 0.1)):max(0, int(b / 0.1))] = obj + bl.nivel_db
+    bv = _st(vh) or {}
+    if len(vh):
+        bv["objetivo_lu"] = obj
+        bv["ventana_lu"] = [obj - w, obj + w]
+        bv["dentro_ventana_pct"] = round(float(np.mean(np.abs(vh - obj) <= w)) * 100, 1)
+        bv["por_encima_pct"] = round(float(np.mean(vh > obj + w)) * 100, 1)
+        bv["dentro_ventana_del_tramo_pct"] = round(float(np.mean(np.abs(vh - obj_k[sel]) <= w)) * 100, 1)
+        bv["por_encima_del_tramo_pct"] = round(float(np.mean(vh > obj_k[sel] + w)) * 100, 1)
+    out["musica_bajo_voz_lu"] = bv
+    # referencia: ventanas de 3 s con ≥ 70 % de habla (incluyen la subida en las pausas cortas)
     t, lc = corto_plazo(pc[:n])
     _, lv = corto_plazo(pv[:n])
     fr = fraccion_ventanas(mask_sub[:n], CORTO, 5)[:len(t)]
     rel = np.where((fr >= 0.7) & (lv > -60), lc - lv, np.nan)
-    obj = P["niveles"]["musica_bajo_voz_lu"]
-    w = P["niveles"]["ventana_lu"]
-    vals = rel[np.isfinite(rel)]
-    out["relativo_bajo_voz_lu"] = _st(vals)
-    # con compuerta de habla: solo los sub-bloques con voz (sin la subida de las pausas)
-    from .niveles import relativo_en_habla
-    rh = relativo_en_habla(pc[:n], pv[:n], mask_sub[:n])[::5]
-    vh = rh[np.isfinite(rh)]
-    out["relativo_en_habla_lu"] = _st(vh)
-    if len(vh):
-        out["relativo_en_habla_lu"]["dentro_18_22_pct"] = round(float(np.mean((vh <= -18) & (vh >= -22))) * 100, 1)
-    if len(vals):
-        out["relativo_bajo_voz_lu"]["dentro_ventana_pct"] = round(float(np.mean(np.abs(vals - obj) <= w)) * 100, 1)
-        out["relativo_bajo_voz_lu"]["dentro_18_22_pct"] = round(float(np.mean((vals <= -18) & (vals >= -22))) * 100, 1)
-        out["relativo_bajo_voz_lu"]["objetivo"] = obj
-    # regiones sin voz
-    dur = len(cama) / SR
-    larga = P["niveles"]["pausa_larga_s"]
-    pausas = [(a, b) for (a, b) in voz.pausas() if b - a >= larga]
-    intro = [(0.0, voz.frases[0][0])] if voz.frases and voz.frases[0][0] > 1.0 else []
-    final = [(voz.frases[-1][1], dur)] if voz.frases else [(0.0, dur)]
+    out["musica_ventanas_con_voz_lu"] = _st(rel[np.isfinite(rel)])
+    f400 = fraccion_ventanas(mask_sub[:n], BLOQUE)
+    lc_voz = integrado(pc[:n], f400 >= 0.7)
+    out["musica_bajo_voz_integrado_lufs"] = None if lc_voz is None else round(lc_voz + G, 2)
+    # 2) sin voz: sonoridad de corto plazo de la música (3 s centrada), por tipo de región
+    m = len(pc)
+    st = -0.691 + 10 * np.log10(np.maximum(np.convolve(pc, np.ones(CORTO) / CORTO, mode="same"), 1e-30)) + G
+    st[:CORTO // 2] = np.maximum(st[:CORTO // 2], -90)
+    tipo = tipo_region(voz, m)
+    cola_libre = np.ones(m, bool)        # el final se mide hasta que la música cae 20 dB (no la cola)
+    t_sub = (np.arange(m) + 0.5) * 0.1
 
-    def lufs_regiones(p, regs, margen=0.5):
-        sel = np.zeros(len(p), bool)
-        for a, b in regs:
-            i0, i1 = int((a + margen) / 0.1), int((b - margen) / 0.1)
-            if i1 > i0:
-                sel[max(0, i0):min(len(p), i1)] = True
-        m = fraccion_ventanas(sel, BLOQUE) >= 1.0
-        if m.sum() < 5:
+    def resumen(sel, techo=None):
+        if not sel.any():
             return None
-        v = integrado(p, m)
-        return None if v is None else round(v, 2)
+        v = st[sel]
+        d = {"max_lufs_st": round(float(v.max()), 2), "t_max_s": round(float(t_sub[sel][np.argmax(v)]), 1),
+             "mediana_lufs_st": round(float(np.median(v)), 2)}
+        if lv_fin is not None:
+            d["max_vs_voz_lu"] = round(float(v.max()) - lv_fin, 2)
+        if techo is not None:
+            d["techo_lufs_st"] = round(techo, 2)
+            d["cumple"] = bool(float(v.max()) <= techo + 0.5)
+        return d
 
-    out["cama_pausas_largas_lufs"] = lufs_regiones(pc, pausas)
-    out["cama_intro_lufs"] = lufs_regiones(pc, intro)
-    out["cama_final_lufs"] = lufs_regiones(pc, final)
-    out["pausas_largas"] = [[round(a, 2), round(b, 2)] for a, b in pausas]
-    lv_int = voz.lufs_mezcla
-    for k in ("cama_pausas_largas_lufs", "cama_intro_lufs", "cama_final_lufs", "cama_bajo_voz_lufs"):
-        if out[k] is not None and lv_int is not None:
-            out[k.replace("_lufs", "_vs_voz_lu")] = round(out[k] - lv_int, 2)
+    larga = pn["pausa_larga_s"]
+    en_pausa_larga = np.zeros(m, bool)
+    for a, b in voz.pausas():
+        if b - a >= larga:
+            en_pausa_larga |= (t_sub >= a) & (t_sub < b)
+    techo_p = None if lv_fin is None else lv_fin + pn["techo_pausas_lu"]
+    out["pausas"] = resumen((tipo == 1) & cola_libre, techo_p)
+    out["pausas_largas"] = resumen(en_pausa_larga, techo_p)
+    out["intro"] = resumen(tipo == 2, pn["techo_sin_voz_lufs"])
+    out["final"] = resumen(tipo == 3, pn["techo_sin_voz_lufs"])
+    vivo = st > -60
+    out["maximo_musica"] = resumen(vivo, pn["techo_sin_voz_lufs"])
     lcama = integrado(pc)
-    out["cama_integrado_lufs"] = None if lcama is None else round(lcama, 2)
-    # mezcla final: voz y música en la escala de la mezcla
+    out["musica_integrado_lufs"] = None if lcama is None else round(lcama + G, 2)
     lm = integrado(pm)
     out["mezcla_integrado_lufs"] = None if lm is None else round(lm, 2)
-    return out, (t, rel, lc, lv)
+    out["lista_pausas_largas"] = [[round(a, 2), round(b, 2)] for a, b in voz.pausas() if b - a >= larga]
+    return out
 
 
 def ducking(ctrl, voz, P):
@@ -244,6 +261,7 @@ def empalmes(edl, qa: QAStems | None, P):
                     "correlacion": e.r, "salto_nivel_db": salto,
                     "variacion_tipica_db": round(med, 2), "variacion_p90_db": round(p90, 2),
                     "ok_nivel": None if salto is None else bool(abs(salto) <= max(3.0, p90 + 1.5)),
+                    "salto_material_db": e.salto_fuente_db, "igualacion": e.igualacion,
                     "clicks_nuevos_cerca": cerca})
     return res
 

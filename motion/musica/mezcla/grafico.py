@@ -113,23 +113,43 @@ def dibujar(ruta, voz, R, ctrl, edl, plan, st, gr, resumen: dict):
     a.set_title("Ganancia de cada stem: nivel del bloque, fundidos, ducking guiado por la voz y realce",
                 loc="left", fontsize=10, color=TINTA)
 
-    # 3) sonoridad de corto plazo
+    # 3) sonoridad de corto plazo (escala de la mezcla final)
     a = ax[2]
     tt, lc, lv, lm = st
-    obj = plan.parametros["niveles"]["musica_bajo_voz_lu"]
-    w = plan.parametros["niveles"]["ventana_lu"]
+    techos = resumen.get("techos") or {}
+    obj, w = techos.get("bajo_voz", (plan.parametros["niveles"]["musica_bajo_voz_lu"],
+                                     plan.parametros["niveles"]["ventana_lu"]))
     habla = voz.mascara(tt) if len(tt) else np.zeros(0, bool)
     lo = np.where(habla, lv + obj - w, np.nan)
     hi = np.where(habla, lv + obj + w, np.nan)
-    a.fill_between(tt, lo, hi, color=GRILLA, alpha=0.9, lw=0, label=f"objetivo cama ({obj:+g} ± {w:g} LU de la voz)")
+    a.fill_between(tt, lo, hi, color=GRILLA, alpha=0.9, lw=0,
+                   label=f"objetivo música bajo la voz ({obj:+g} ± {w:g} LU)")
     a.plot(tt, np.where(lv > -60, lv, np.nan), color=TINTA_2, lw=1.2, label="voz")
-    a.plot(tt, np.where(lc > -70, lc, np.nan), color=CAMA, lw=1.4, label="cama")
+    a.plot(tt, np.where(lc > -70, lc, np.nan), color=CAMA, lw=1.4, label="música (cama)")
     a.plot(tt, np.where(lm > -70, lm, np.nan), color=TINTA, lw=0.9, label="mezcla final")
+    # techos sin voz: pausas (voz − 10 LU) e intro/final (tope absoluto)
+    if voz.frases:
+        regiones = [("pausa", b0, b1) for (_, b0), (b1, _) in zip(voz.frases[:-1], voz.frases[1:])
+                    if b1 - b0 >= 0.6]
+        regiones.insert(0, ("intro", 0.0, voz.frases[0][0]))
+        regiones.append(("final", voz.frases[-1][1], dur))
+    else:
+        regiones = [("intro", 0.0, dur)]
+    for (tipo, x0, x1) in regiones:
+        y = techos.get("pausas") if tipo == "pausa" else techos.get("sin_voz")
+        if y is None or x1 - x0 < 0.3:
+            continue
+        a.plot([x0, x1], [y, y], color=TINTA_2, lw=1.0, solid_capstyle="butt")
+    if techos.get("sin_voz") is not None:
+        a.text(0.3, techos["sin_voz"] + 0.6, f"tope sin voz {techos['sin_voz']:g} LUFS-S", fontsize=7, color=TINTA_2)
+    if techos.get("pausas") is not None and len(regiones) > 2:
+        x0 = regiones[1][1]
+        a.text(x0, techos["pausas"] + 0.6, "techo pausas (voz − 10 LU)", fontsize=7, color=TINTA_2)
     a.set_ylim(-60, -6)
     a.yaxis.set_major_locator(MultipleLocator(6))
     a.set_ylabel("LUFS (3 s)")
     a.legend(loc="lower left", fontsize=8, ncol=4, frameon=False, labelcolor=TINTA_2)
-    a.set_title("Sonoridad de corto plazo", loc="left", fontsize=10, color=TINTA)
+    a.set_title("Sonoridad de corto plazo, en la escala de la mezcla final", loc="left", fontsize=10, color=TINTA)
 
     # 4) limitador
     a = ax[3]

@@ -98,6 +98,16 @@ class Segmento:
     s_ini: float = 0.0             # tramo de fuente a leer (s)
     s_fin: float = 0.0
     natural: bool = False          # deja sonar la cola real de la canción (final de la canción)
+    rampas: list = field(default_factory=list)   # [(t0, t1, dB0, dB1)]: igualación de nivel en loops
+
+    def extra_db(self, t: np.ndarray) -> np.ndarray:
+        """Ganancia extra (dB) de las rampas de igualación: cada una vale dB0 antes de t0, dB1
+        después de t1 y una curva coseno en el medio."""
+        g = np.zeros(np.shape(t))
+        for (a, b, d0, d1) in self.rampas:
+            x = np.clip((t - a) / max(1e-6, b - a), 0.0, 1.0)
+            g = g + d0 + (d1 - d0) * (0.5 - 0.5 * np.cos(np.pi * x))
+        return g
 
 
 @dataclass
@@ -123,6 +133,8 @@ class Empalme:
     lag_ms: float = 0.0
     r: dict = field(default_factory=dict)
     cancion: str = ""
+    salto_fuente_db: float | None = None     # salto de nivel del material, antes de igualar
+    igualacion: str = ""
 
 
 @dataclass
@@ -489,6 +501,69 @@ class Armador:
             self.avisos.extend(av)
             self.reales.append(tre)
 
+    def _igualar_loops(self, empalmes, segs):
+        """Si una vuelta de loop salta de nivel más que la variación típica de la sección (el
+        final del loop y su comienzo no suenan igual: crescendo, decrescendo), el lado más fuerte
+        se compensa con una rampa de 2 compases: la entrada del loop arranca más suave y recupera
+        su nivel, o el final del loop baja hacia la vuelta. El salto queda en el p90 típico."""
+        por_corrida = {}
+        for tre in self.reales:
+            for A, B in zip(tre.corridas[:-1], tre.corridas[1:]):
+                if B.union == "loop":
+                    por_corrida[(round(B.t0 + B.lag, 4), B.c0)] = (tre, A, B)
+        for e in empalmes:
+            if e.tipo != "loop":
+                continue
+            par = por_corrida.get((round(e.t, 4), e.a))
+            if par is None:
+                continue
+            tre, A, B = par
+            c = A.cancion
+            pot = c.potencias_k()
+            amp = {s: 10 ** (o / 20) for s in STEMS
+                   if (o := tre.tramo.stems.get(s, 0.0)) is not None}
+            pul = A.pulso(A.c1)
+            a0 = e.ventana[0]
+
+            def nivel(cr, t0, t1):
+                i0 = int(np.floor((t0 - cr.off) / 0.1))
+                i1 = int(np.ceil((t1 - cr.off) / 0.1))
+                idx = np.arange(max(0, i0), max(max(0, i0) + 1, i1))
+                idx = idx[idx < len(pot["armonia"])]
+                if len(idx) == 0:
+                    return None
+                pm = float(c.potencia_mezcla(amp, idx).mean())
+                return 10 * np.log10(pm) if pm > 1e-14 else None
+
+            antes = nivel(A, a0 - pul, a0)
+            despues = nivel(B, e.t, e.t + pul)
+            if antes is None or despues is None:
+                continue
+            salto = despues - antes
+            sec = c.seccion_de(e.a)
+            ds = []
+            for cc in range(sec.c0 + 1, sec.c1 + 1):
+                t = c.t(cc)
+                pu = c.pulso_s(cc)
+                ia, ib = int((t - pu) / 0.1), int(t / 0.1)
+                ic = int((t + pu) / 0.1)
+                pa = c.potencia_mezcla(amp, np.arange(ia, ib)).mean()
+                pb = c.potencia_mezcla(amp, np.arange(ib, ic)).mean()
+                if pa > 1e-14 and pb > 1e-14:
+                    ds.append(abs(10 * np.log10(pb / pa)))
+            p90 = float(np.percentile(ds, 90)) if ds else 0.0
+            if abs(salto) <= max(3.0, p90 + 1.5):
+                continue
+            comp = abs(salto) - p90
+            dos = 2 * c.dur(e.a)
+            if salto > 0:          # la vuelta entra más fuerte: arranca más suave y recupera
+                segs[id(B)].rampas.append((e.t, e.t + dos, -comp, 0.0))
+                e.igualacion = f"entrada del loop −{comp:.1f} dB, recupera en 2 compases"
+            else:                  # el final del loop está más fuerte: baja hacia la vuelta
+                segs[id(A)].rampas.append((a0 - dos, a0, 0.0, -comp))
+                e.igualacion = f"final del loop −{comp:.1f} dB en 2 compases"
+            e.salto_fuente_db = round(salto, 2)
+
     def _medir_anclas(self):
         for tre in self.reales:
             tr = tre.tramo
@@ -613,6 +688,8 @@ class Armador:
                 segs[id(B)].entra.update(self._entrada(B, tre_b.tramo.entrada))
             empalmes_internos(tre_b)
         self._medir_anclas()
+        if self.leer_audio:
+            self._igualar_loops(empalmes, segs)
 
         # ---- rangos de lectura de cada segmento
         n_total = int(np.ceil(self.dur_voz * SR))

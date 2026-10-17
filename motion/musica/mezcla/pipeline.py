@@ -133,39 +133,51 @@ def mezclar(voz_path, plan_path, out_dir, extra=None, dir_canciones=None) -> dic
                 b.medido_lu = float(np.median(v)) if len(v) >= 3 else b.medido_lu
         t0 = marca("render_2_s", t0)
 
-    # ---- guardia de voz: excesos locales de la cama mientras se habla
+    # ---- techos (guardia): bajo la voz, en pausas y sin voz; la ganancia del master se prevé
+    # con la sonoridad de voz + cama (no están correlacionadas: las potencias se suman)
     guardia = {"activa": False, "max_db": 0.0, "segundos": 0.0}
-    if P["niveles"]["guardia_voz"] and voz.frases:
+    p_cama = niveles.potencia_k_bloques(cama)
+
+    def ganancia_prevista(pc):
+        m = min(len(pc), len(p_voz))
+        lp = niveles.integrado(pc[:m] + p_voz[:m])
+        return P["master"]["lufs"] - (lp if lp is not None else P["master"]["lufs"])
+
+    if P["niveles"]["guardia_voz"]:
         cama0 = None
         red = np.zeros(1)
-        for _ in range(4):        # la reducción se promedia en la ventana de 3 s: se itera
-            p_cama = niveles.potencia_k_bloques(cama)
-            extra = niveles.guardia_voz(p_cama, p_voz, mask, bloques, P)
-            if extra.max() <= 0.3:
+        ultimo = np.inf
+        for _ in range(5):        # la reducción se promedia en la ventana de 3 s: se itera
+            g_prev = ganancia_prevista(p_cama)
+            extra, exc = niveles.techos(p_cama, p_voz, mask, voz, bloques, P, voz.lufs_mezcla, g_prev)
+            if extra.max() <= 0.3 or extra.max() > 0.8 * ultimo:     # listo, o ya no converge
                 break
+            ultimo = extra.max()
             if cama0 is None:
                 cama0 = cama.copy()
             red = extra if len(red) == 1 else red[:len(extra)] + extra[:len(red)]
             red = np.minimum(red, P["niveles"]["guardia_max_db"])
             cama = R.aplicar_guardia(cama0.copy(), red)
+            p_cama = niveles.potencia_k_bloques(cama)
+        del cama0
         if red.max() > 0.05:
             guardia = {"activa": True, "max_db": round(float(red.max()), 2),
                        "segundos": round(float((red > 0.25).sum() * 0.1), 1),
                        "regiones": _regiones(red, 0.25)}
-            log(f"guardia de voz: hasta −{red.max():.1f} dB en {guardia['segundos']:.1f} s")
+            log(f"techos (guardia): hasta −{red.max():.1f} dB en {guardia['segundos']:.1f} s")
     t0 = marca("guardia_s", t0)
 
     # ---- master
     mask_voz = voz.mascara(np.arange(edl.n_total) / SR)
-    voz_x = np.zeros((edl.n_total, 2), np.float32)
-    voz_x[:voz.n] = voz.x
-    mezcla, info_master, gr = masterizar(voz_x, cama, P["master"], mask_voz)
+    mezcla, info_master, gr = masterizar(voz.x, cama, P["master"], mask_voz)
+    G = info_master["ganancia_master_db"]
     log(f"master: {info_master['lufs_integrado']} LUFS, {info_master['pico_dbtp']} dBTP, "
-        f"ganancia {info_master['ganancia_master_db']:+.2f} dB, limitador sobre la voz "
-        f"máx {info_master['limitador']['voz']['max_db']} dB")
+        f"ganancia {G:+.2f} dB, limitador sobre la voz máx {info_master['limitador']['voz']['max_db']} dB")
     t0 = marca("master_s", t0)
 
-    # ---- salidas de audio
+    # ---- salidas de audio: la cama en la escala de la mezcla final (sin limitador)
+    p_cama_pre = niveles.potencia_k_bloques(cama)
+    cama *= np.float32(10 ** (G / 20))
     nombre = Path(plan_path).stem
     escribir_wav(out / "mezcla_final.wav", mezcla, f"mezcla|{nombre}")
     escribir_wav(out / "musica_cama.wav", cama, f"cama|{nombre}")
@@ -173,7 +185,8 @@ def mezclar(voz_path, plan_path, out_dir, extra=None, dir_canciones=None) -> dic
 
     # ---- informe
     from . import informe as inf
-    niv, st_rel = inf.niveles(voz, cama, mezcla, mask, P, voz.frases)
+    p_mez = niveles.potencia_k_bloques(mezcla)
+    niv = inf.niveles(voz, p_voz, p_cama_pre, p_mez, mask, P, G, bloques)
     duck = inf.ducking(ctrl, voz, P)
     emp = inf.empalmes(edl, qa, P)
     grilla = inf.rejilla(edl)
@@ -185,12 +198,17 @@ def mezclar(voz_path, plan_path, out_dir, extra=None, dir_canciones=None) -> dic
     nuevos = sum(v["nuevos"] for v in clicks.values())
     if nuevos:
         avisos.append(f"{nuevos} clicks nuevos detectados en los stems armados (ver qa.clicks)")
-    rel = niv.get("relativo_bajo_voz_lu") or {}
+    bv = niv.get("musica_bajo_voz_lu") or {}
+    for clave, nombre_reg in (("pausas", "las pausas"), ("intro", "la intro"), ("final", "el final")):
+        r = niv.get(clave)
+        if r and r.get("cumple") is False:
+            avisos.append(f"la música en {nombre_reg} llega a {r['max_lufs_st']} LUFS-S (techo {r['techo_lufs_st']})")
     reporte = {
         "version": VERSION,
         "entrada": {"voz": str(voz_path), "plan": str(plan_path), "duracion_voz_s": round(voz.dur, 3),
                     "duracion_mezcla_s": round(edl.n_total / SR, 3)},
         "voz": {"lufs_archivo": _r(voz.lufs_archivo, 2), "lufs_en_mezcla_estereo": _r(voz.lufs_mezcla, 2),
+                "lufs_en_mezcla_final": _r(voz.lufs_mezcla + G if voz.lufs_mezcla is not None else None, 2),
                 "canales_origen": voz.canales_origen, "sr_origen": voz.sr_origen,
                 "nivel_activo_dbfs": _r(voz.nivel_activo_db, 1), "umbral_habla_dbfs": _r(voz.umbral_db, 1),
                 **voz_mod.resumen_pausas(voz, P["niveles"]["pausa_larga_s"])},
@@ -215,20 +233,25 @@ def mezclar(voz_path, plan_path, out_dir, extra=None, dir_canciones=None) -> dic
     t0 = marca("envolventes_s", t0)
     if P["salidas"]["png"]:
         from .grafico import dibujar
-        pm = niveles.potencia_k_bloques(mezcla)
-        pc = niveles.potencia_k_bloques(cama)
-        n = min(len(pm), len(pc), len(p_voz))
+        pc = niveles.potencia_k_bloques(cama)            # ya en la escala final
+        pv = p_voz * 10 ** (G / 10)
+        n = min(len(p_mez), len(pc), len(pv))
         tt, lc = niveles.corto_plazo(pc[:n], salto=1)
-        _, lv = niveles.corto_plazo(p_voz[:n], salto=1)
-        _, lm = niveles.corto_plazo(pm[:n], salto=1)
-        rh = niv.get("relativo_en_habla_lu") or {}
+        _, lv = niveles.corto_plazo(pv[:n], salto=1)
+        _, lm = niveles.corto_plazo(p_mez[:n], salto=1)
+        pa = niv.get("pausas") or {}
+        it = niv.get("intro") or {}
         sub = (f"mezcla {info_master['lufs_integrado']} LUFS · pico {info_master['pico_dbtp']} dBTP · "
-               f"música bajo la voz {rh.get('mediana', '—')} LU (p10 {rh.get('p10', '—')}, p90 {rh.get('p90', '—')}; "
-               f"{rh.get('dentro_18_22_pct', '—')} % en 18–22) · "
-               f"pausas largas {niv.get('cama_pausas_largas_vs_voz_lu', '—')} LU · limitador sobre la voz máx "
-               f"{lim['voz']['max_db']} dB · clicks nuevos {nuevos}")
+               f"música bajo la voz {bv.get('mediana', '—')} LU (p10 {bv.get('p10', '—')}, p90 {bv.get('p90', '—')}; "
+               f"{bv.get('dentro_ventana_pct', '—')} % en {bv.get('ventana_lu', '—')}) · "
+               f"pausas máx {pa.get('max_vs_voz_lu', '—')} LU de la voz · intro máx {it.get('max_lufs_st', '—')} LUFS-S · "
+               f"limitador sobre la voz máx {lim['voz']['max_db']} dB · clicks nuevos {nuevos}")
+        techos = {"bajo_voz": (P["niveles"]["musica_bajo_voz_lu"], P["niveles"]["ventana_lu"]),
+                  "pausas": None if voz.lufs_mezcla is None else voz.lufs_mezcla + G + P["niveles"]["techo_pausas_lu"],
+                  "sin_voz": P["niveles"]["techo_sin_voz_lufs"]}
         dibujar(out / "mezcla.png", voz, R, ctrl, edl, plan, (tt, lc, lv, lm), gr,
-                {"titulo": f"Mezcla de voz y música — {nombre}", "subtitulo": sub})
+                {"titulo": f"Mezcla de voz y música — {nombre}", "subtitulo": sub, "techos": techos,
+                 "ganancia_master_db": G})
         t0 = marca("grafico_s", t0)
     tiempos["total_s"] = round(time.time() - t_ini, 2)
     (out / "informe.json").write_text(json.dumps(reporte, indent=2, ensure_ascii=False, default=_json),
