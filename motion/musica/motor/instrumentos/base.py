@@ -10,8 +10,30 @@ import soxr
 
 from ..nucleo import SR, mezclar_en, rampa
 
-DIR_PROC = Path(__file__).resolve().parents[2] / "muestras" / "proc"
+RAIZ_MUSICA = Path(__file__).resolve().parents[2]
+DIR_PROC = RAIZ_MUSICA / "muestras" / "proc"
+# Versión de la nivelación que espera el motor (la escribe muestras.py en el manifiesto).
+# Si el manifiesto es de otra versión, se actualiza solo (mide lo que falte, sin bajar nada).
+VERSION_NIVEL = 1
 _MANIFIESTO = None
+
+
+def _actualizar_manifiesto(ruta: Path) -> dict:
+    """Corre muestras.procesar() (solo mide lo que falta) con un candado: dos renders a la vez
+    no lo hacen dos veces ni leen un manifiesto a medias."""
+    import fcntl
+    import importlib.util
+    print("[motor] el manifiesto de muestras es de otra versión de la nivelación: actualizándolo…",
+          flush=True)
+    with open(DIR_PROC / ".nivelacion.lock", "w") as candado:
+        fcntl.flock(candado, fcntl.LOCK_EX)
+        m = json.loads(ruta.read_text())
+        if m.get("version_nivel") != VERSION_NIVEL:
+            spec = importlib.util.spec_from_file_location("muestras", RAIZ_MUSICA / "muestras.py")
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            m = mod.procesar()
+    return m
 
 
 def manifiesto() -> dict:
@@ -21,7 +43,10 @@ def manifiesto() -> dict:
         if not ruta.exists():
             raise FileNotFoundError(
                 f"Faltan las muestras: corré `python3 motion/musica/muestras.py` ({ruta})")
-        _MANIFIESTO = json.loads(ruta.read_text())
+        m = json.loads(ruta.read_text())
+        if m.get("version_nivel") != VERSION_NIVEL:
+            m = _actualizar_manifiesto(ruta)
+        _MANIFIESTO = m
     return _MANIFIESTO
 
 
@@ -81,15 +106,24 @@ class Banco:
         self.capa = np.array([e.get("capa", 0) for e in self.muestras], dtype=int)
         self.rr = np.array([e.get("rr", 1) for e in self.muestras], dtype=int)
         self.dur = np.array([e["dur_s"] for e in self.muestras], dtype=float)
-        self.ajuste_db = self._nivelar()
+        # muestras defectuosas (catálogo de muestras.py): no se eligen; se transponen las vecinas
+        self.usable = np.array([bool(e.get("usable", True)) for e in self.muestras], dtype=bool)
+        if all("ajuste_db" in e for e in self.muestras):
+            # nivelación por muestra (loudness K medida en muestras.py, cacheada en el manifiesto)
+            self.ajuste_db = np.array([e["ajuste_db"] for e in self.muestras], dtype=float)
+            self.nivelado = True
+        else:
+            self.ajuste_db = self._nivelar()   # ruidos del piano: nivelación vieja (rms inicial)
+            self.nivelado = False
         self._audio = {}
+        self._caida = {}
 
     def _nivelar(self, ref_db: float = -20.0) -> np.ndarray:
-        """Iguala niveles entre muestras vecinas (las bibliotecas libres son desparejas).
+        """Nivelación vieja (solo para bancos sin `nivel` en el catálogo: los ruidos del piano).
 
-        Por capa se ajusta una recta rms(midi); se corrige el 85 % del residuo
-        y la mitad de la pendiente. Todas las capas quedan a un nivel común
-        (la velocidad controla el volumen; la capa, el timbre)."""
+        Por capa se ajusta una recta rms(midi) del rms de los primeros 200 ms; se corrige el
+        85 % del residuo y la mitad de la pendiente. Sirve para ruidos cortos; para notas con
+        ataque lento o capas de dinámica está mal (ver NIVELES.md)."""
         rms = np.array([e["rms_db"] for e in self.muestras], dtype=float)
         aj = np.zeros(len(rms))
         for c in np.unique(self.capa):
@@ -110,11 +144,27 @@ class Banco:
             self._audio[i] = np.load(DIR_PROC / self.muestras[i]["archivo"], mmap_mode="r")
         return self._audio[i]
 
+    def caida_s(self, i: int, db: float = 30.0) -> float:
+        """Segundos desde el pico (en el primer segundo) hasta que la muestra cae `db` dB
+        (envolvente de 50 ms). Lo usa revisar_grave para las notas que se dejan sonar."""
+        k = (i, db)
+        if k not in self._caida:
+            x = np.asarray(self.audio(i), dtype=np.float64)
+            m = x.mean(axis=1) if x.ndim == 2 else x
+            h = int(0.05 * SR)
+            nb = max(1, len(m) // h)
+            e = 10 * np.log10((m[: nb * h].reshape(nb, h) ** 2).mean(axis=1) + 1e-20)
+            j = int(np.argmax(e[: max(1, min(nb, 20))]))
+            baja = np.nonzero(e[j:] < e[j] - db)[0]
+            self._caida[k] = float((j + (int(baja[0]) if len(baja) else nb - j)) * h / SR)
+        return self._caida[k]
+
     def elegir(self, midi: float, capa: int = 0, clave: int = 0, excluir=()) -> int:
-        """Muestra más cercana en altura dentro de la capa (con round robin por `clave`)."""
-        m = self.capa == min(capa, self.n_capas - 1)
+        """Muestra más cercana en altura dentro de la capa (con round robin por `clave`).
+        Nunca elige una muestra marcada como defectuosa (`usable` falso)."""
+        m = (self.capa == min(capa, self.n_capas - 1)) & self.usable
         if not m.any():
-            m = np.ones(len(self.midi), dtype=bool)
+            m = self.usable.copy() if self.usable.any() else np.ones(len(self.midi), dtype=bool)
         idx = np.nonzero(m)[0]
         idx = np.array([i for i in idx if i not in excluir]) if excluir else idx
         if len(idx) == 0:
@@ -170,6 +220,11 @@ class Instrumento:
         raise NotImplementedError
 
     # utilidades comunes
+    def fin_sonoro(self, nt, tempo) -> float:
+        """Fin (en tiempos) de lo que suena de la nota, sin contar pedal ni cola de soltar.
+        Los instrumentos que dejan sonar (arpa, glock, pizzicato) lo alargan."""
+        return nt.t + nt.dur
+
     def fin_nota(self, nt, ctx, pista) -> int:
         """Muestra de fin de nota, extendida por el pedal de resonancia si corresponde."""
         t_fin = nt.t + nt.dur

@@ -50,6 +50,17 @@ class Seccion:
 # ------------------------------------------------------- notación textual --
 _RE_TOKEN = re.compile(r"^(?P<alt>\[[^\]]+\]|[A-Ga-g][#b]?-?\d|[rR\-])"
                        r"(?:/(?P<dur>[0-9.+]+))?(?P<mod>[!?_]*)(?:@(?P<vel>[0-9.]+))?$")
+# un acorde entre corchetes (con espacios adentro) es un solo token: "[D4 F#4 A4]/2!@0.6"
+_RE_PARTIR = re.compile(r"\[[^\[\]]*\]\S*|\S+")
+
+
+def tokens_melodia(texto: str) -> list[str]:
+    """Parte la mini-notación en tokens sin romper los acordes entre corchetes."""
+    toks = _RE_PARTIR.findall(texto)
+    for tok in toks:
+        if tok.startswith("[") and "]" not in tok:
+            raise ValueError(f"acorde sin cerrar en la melodía: {tok!r} ('{texto[:40]}…')")
+    return toks
 
 
 def melodia(texto: str, vel: float = 0.7, compas_t: float | None = None):
@@ -58,7 +69,8 @@ def melodia(texto: str, vel: float = 0.7, compas_t: float | None = None):
         "A5/0.5 E6 D6 G#5/1.5 A5/1 | F#5/3 r/1"
 
     * nota/duración (en tiempos); si se omite la duración se repite la anterior
-    * r o - = silencio; [D4 F#4 A4]/2 = acorde
+    * r o - = silencio; [D4 F#4 A4]/2 = acorde (las notas a la vez; el acorde lleva los
+      mismos sufijos que una nota: "[D4 F#4]/2!" o "[A3 E4]_")
     * sufijos: ! acento (×1.25), ? suave (×0.7), _ ligado a la siguiente (legato)
     * @0.8 velocidad explícita; "4+2" suma duraciones
     * | barra de compás: verifica que lo acumulado cierre el compás (si compas_t)
@@ -67,7 +79,7 @@ def melodia(texto: str, vel: float = 0.7, compas_t: float | None = None):
     t = 0.0
     dur = 1.0
     ligar = False
-    for tok in texto.replace("\n", " ").split():
+    for tok in tokens_melodia(texto):
         if tok == "|":
             if compas_t and abs((t / compas_t) - round(t / compas_t)) > 1e-6:
                 raise ValueError(f"la barra no cierra el compás en t={t} ('{texto[:40]}…')")
@@ -193,12 +205,15 @@ class Pista:
         return self
 
     def patron(self, golpe: str, texto: str, desde, hasta, vel: float = 0.7,
-               prob: float = 1.0, altura: int = 60, **x):
+               prob: float = 1.0, altura: int = 60, escala: float = 1.0, **x):
         """Patrón de batería por semicorcheas (16 pasos por compás en 4/4).
 
         x normal · X acento · o/g fantasma (×0.35) · 1–9 velocidad/9 · . silencio.
         Espacios y | se ignoran. Si el texto dura varios compases, se cicla.
         prob < 1 omite golpes al azar (determinista).
+        `vel` es la velocidad de x/X/o; los dígitos son velocidades absolutas (dígito/9) y
+        `vel` no los toca (así sonaban las canciones). `escala` multiplica TODAS las
+        velocidades del patrón, dígitos incluidos (para subir o bajar un groove entero).
         """
         pasos = [c for c in texto if c not in " |"]
         paso = 0.25
@@ -216,6 +231,8 @@ class Pista:
                 v = vel * 0.35
             elif c.isdigit() and c != "0":
                 v = int(c) / 9.0
+            if v is not None and escala != 1.0:
+                v = min(1.0, v * escala)
             if v is not None and (prob >= 1 or g.random() < prob):
                 e = dict(x)
                 e["golpe"] = golpe

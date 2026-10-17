@@ -321,10 +321,38 @@ class Dron(Instrumento):
 
 
 # ================================================================ bajo sub ==
+@nb.njit(cache=True, fastmath=True)
+def _seguidor_var(x, a):
+    """Seguidor de un polo con coeficiente por muestra (mismas cuentas que _seguidor con
+    ataque = relajación: con `a` constante da el mismo resultado)."""
+    n = x.shape[0]
+    y = np.empty(n)
+    e = 0.0
+    for i in range(n):
+        v = x[i]
+        if v > e:
+            e += a[i] * (v - e)
+        else:
+            e += a[i] * (v - e)
+            if e < 1e-30 and e > -1e-30:
+                e = 0.0
+        y[i] = e
+    return y
+
+
 class Sub(Instrumento):
     """Bajo sub monofónico: senoidal + octava opcional, saturación suave para que
     se escuche en parlantes chicos, deslizamiento opcional entre notas ligadas.
-    * drive_db, octava (nivel de la 8ª), glide_ms, ataque, soltar, pb (Hz)"""
+    * drive_db, octava (nivel de la 8ª), glide_ms, ataque, soltar, pb (Hz)
+    * glide_ms: desliza solo entre notas ligadas (legato=True, "_" en la mini-notación, o
+      una nota que empieza antes de que termine la anterior); el resto cambia de altura
+      en el acto (con 4 ms de suavizado, sin click)
+    * La velocidad se aplica después de saturar: el nivel sigue a la velocidad (dB =
+      20·log10(vel), con la saturación de cada nota según su velocidad). A vel 0,7 suena
+      exactamente como antes; más suave, más bajo (vel 0,5: −1,8 dB respecto de antes).
+    * Oscilador continuo (la fase sigue de nota en nota): con --desde se calculan todas sus notas."""
+    VEL_REF = 0.7
+    continuo = True
 
     def __init__(self, drive_db=7.0, octava=0.12, glide_ms=0.0, ataque=0.012, soltar=0.12,
                  pb=240.0, pa=28.0, ganancia_db=0.0):
@@ -340,27 +368,40 @@ class Sub(Instrumento):
         notas = sorted(notas, key=lambda z: z.t)
         logf = np.full(n, np.log(midi_a_hz(notas[0].midi)))
         gate = np.zeros(n)
+        velc = np.full(n, float(notas[0].vel))          # velocidad vigente (sigue en la cola)
+        a_rapido = coef(0.004)
+        a_frec = np.full(n, a_rapido)                    # coeficiente del seguidor de altura
+        a_glide = coef(self.glide_ms / 1000.0) if self.glide_ms > 0 else a_rapido
         prev_fin = -1
-        for k, nt in enumerate(notas):
+        primera = True
+        for nt in notas:
             i0 = max(0, ctx.muestra(nt.t))
             i1 = min(n, ctx.muestra(nt.t + nt.dur))
             if i0 >= n:
                 continue
             logf[i0:] = np.log(midi_a_hz(nt.midi))
-            legato = nt.x.get("legato") or (prev_fin >= i0 - int(0.002 * SR) and self.glide_ms > 0)
-            gate[i0:i1] = nt.vel
+            velc[i0:] = nt.vel
+            contigua = prev_fin >= i0 - int(0.002 * SR)
+            legato = bool(nt.x.get("legato")) or (contigua and self.glide_ms > 0)
+            gate[i0:i1] = 1.0
             if not legato and prev_fin >= i0 - int(0.004 * SR):
                 gap = int(0.009 * SR)
                 gate[max(0, i0 - gap):i0] = 0.0  # rearticular notas repetidas
+            # desliza solo hacia una nota ligada a la anterior (no en cada cambio de nota)
+            a_frec[i0:] = a_glide if (legato and not primera) else a_rapido
             prev_fin = i1
-        tau = (self.glide_ms if self.glide_ms > 0 else 4.0) / 1000.0
-        logf = _seguidor(logf, coef(tau), coef(tau))
+            primera = False
+        logf = _seguidor_var(logf, a_frec)
         env = _seguidor(gate, coef(self.ataque), coef(self.soltar))
+        vv = velc[0] + _seguidor(velc - velc[0], coef(0.005), coef(0.005))   # sin escalones
         fase = np.cumsum(np.exp(logf) * 2 * np.pi / SR)
         y = np.sin(fase) + self.octava * np.sin(2 * fase + 0.3)
         y *= env
+        # saturación con el empuje de la velocidad (más suave = más limpio), normalizada a su
+        # techo (tanh(d·v)) y escalada por la velocidad: el nivel conserva la dinámica
         d = float(desde_db(self.drive_db))
-        y = np.tanh(d * y) / np.tanh(d)
+        dv = d * np.maximum(vv, 1e-4)
+        y = np.tanh(dv * y) / np.tanh(dv) * vv * (np.tanh(d * self.VEL_REF) / (np.tanh(d) * self.VEL_REF))
         y = sosf(np.vstack([biquad("pb", self.pb, 0.7), biquad("pa", self.pa, 0.7)]), y)
         y *= desde_db(self.ganancia_db - 16.9) * 0.5
         return np.stack([y, y], axis=1).astype(np.float32)

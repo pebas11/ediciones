@@ -4,6 +4,7 @@
     python3 motion/musica/render.py umbral            # una (por nombre, número o archivo)
     python3 motion/musica/render.py todas             # todas, una tras otra
     python3 motion/musica/render.py 01 --hasta 17     # prueba rápida: corta en el compás 17
+    python3 motion/musica/render.py 02 --desde 41 --hasta 57   # una sección del medio (con preroll)
     python3 motion/musica/render.py 01 --solo piano,arpa --sin-mp3
     python3 motion/musica/render.py 01 --partitura    # imprime cifrado y melodías (sin audio)
     python3 motion/musica/render.py 01 --pianola      # solo la imagen del arreglo (sin audio)
@@ -86,6 +87,10 @@ def main():
     ap = argparse.ArgumentParser(description="Renderiza canciones del proyecto")
     ap.add_argument("cancion", help="nombre, número, archivo o 'todas'")
     ap.add_argument("--hasta", type=float, default=None, help="cortar en este compás (prueba)")
+    ap.add_argument("--desde", type=float, default=None,
+                    help="empezar en este compás (prueba; reverb, eco y pedal llegan cargados)")
+    ap.add_argument("--preroll", type=float, default=12.0,
+                    help="segundos antes de --desde cuyas notas se calculan igual (12 por defecto)")
     ap.add_argument("--solo", default=None, help="pistas a renderizar, separadas por coma")
     ap.add_argument("--sin-qa", action="store_true")
     ap.add_argument("--sin-mp3", action="store_true")
@@ -117,12 +122,15 @@ def main():
             continue
         solo = a.solo.split(",") if a.solo else None
         salida = a.salida
-        if salida is None and (a.hasta or solo):
+        prueba = bool(a.hasta or a.desde or solo)
+        if salida is None and prueba:
             from motor.mezcla import DIR_SALIDA
-            salida = DIR_SALIDA / "_pruebas" / (C.slug + ("_hasta%g" % a.hasta if a.hasta else "") +
+            salida = DIR_SALIDA / "_pruebas" / (C.slug + ("_desde%g" % a.desde if a.desde else "") +
+                                               ("_hasta%g" % a.hasta if a.hasta else "") +
                                                ("_" + "-".join(solo) if solo else ""))
-        C.render(salida=salida, solo=solo, hasta_compas=a.hasta, qa=not a.sin_qa,
-                 mp3=not a.sin_mp3 and not (a.hasta or solo), imagenes=not a.sin_imagenes)
+        C.render(salida=salida, solo=solo, hasta_compas=a.hasta, desde_compas=a.desde,
+                 preroll_s=a.preroll, qa=not a.sin_qa, mp3=not a.sin_mp3 and not prueba,
+                 imagenes=not a.sin_imagenes)
         print(f"[render] {st}: total {time.time() - t0:.1f} s")
 
 

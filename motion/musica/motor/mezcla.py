@@ -63,10 +63,28 @@ class Contexto:
 
 
 # ------------------------------------------------------------------ pistas --
+def _suena_desde(p, nt, ctx, t_min_s: float) -> bool:
+    """¿La nota (con su pedal) termina después de t_min_s? (render con --desde)."""
+    fin = nt.t + nt.dur
+    if getattr(p.instrumento, "usa_pedal", False) and p.pedales:
+        abajo, sube = p.pedal_abajo_en(fin - 1e-6)
+        if abajo:
+            fin = max(fin, sube)
+    return ctx.seg(fin) >= t_min_s
+
+
 def render_pista(p, ctx) -> np.ndarray:
     notas = [nt for nt in p.notas_humanizadas() if ctx.muestra(nt.t) < ctx.n]
+    t_min = getattr(ctx, "t_min_s", None)     # render con --desde: lo que ya se apagó no se calcula
+    if t_min is not None and not getattr(p.instrumento, "continuo", False):
+        notas = [nt for nt in notas if _suena_desde(p, nt, ctx, t_min)]
     buf = p.instrumento.render(notas, ctx, p)
     for c in p.clips:
+        if t_min is not None:
+            if c["fin"] is not None and ctx.seg(c["fin"]) < t_min:
+                continue
+            if c["pos"] is not None and ctx.seg(c["pos"]) < t_min - 150.0:
+                continue
         y = c["gen"](ctx)
         if c["fin"] is not None:
             ini = ctx.muestra(c["fin"]) - len(y)
@@ -106,12 +124,12 @@ def curva_hueco_voz(C, n: int) -> np.ndarray:
 
 
 # ------------------------------------------------------------------ render --
-def niveles_por_seccion(C, buf) -> dict:
-    """LUFS de una pista (seca, post-fader) en cada sección donde suena."""
+def niveles_por_seccion(C, buf, desde_s: float = 0.0) -> dict:
+    """LUFS de una pista (seca, post-fader) en cada sección donde suena (desde `desde_s`)."""
     from .analisis import lufs
     out = {}
     for s in C.secciones:
-        a = int(C.tempo.seg(C.tempo.pos(s.compas_ini)) * SR)
+        a = max(int(C.tempo.seg(C.tempo.pos(s.compas_ini)) * SR), int(desde_s * SR))
         b = min(len(buf), int(C.tempo.seg(C.tempo.pos(s.compas_fin)) * SR))
         seg = buf[a:b]
         if len(seg) < SR or np.abs(seg).max() < 1e-5:
@@ -123,11 +141,15 @@ def niveles_por_seccion(C, buf) -> dict:
 
 
 def render_cancion(C, salida=None, solo=None, hasta_compas=None, escribir=True, qa=True,
-                   mp3=True, imagenes=True, niveles=True):
+                   mp3=True, imagenes=True, niveles=True, desde_compas=None, preroll_s=12.0):
     """Renderiza la canción completa y escribe master, stems, cues, mp3 y QA.
 
     * solo         : lista de nombres de pista a renderizar (pruebas)
     * hasta_compas : corta la canción en ese compás (+ cola) para pruebas rápidas
+    * desde_compas : la salida empieza en ese compás. Se calcula sobre la línea de tiempo
+                     completa (automatizaciones, LFO, cinta y pedales iguales al render
+                     entero), pero solo las notas y clips que siguen sonando `preroll_s`
+                     antes del corte: la reverb, el eco y el pedal llegan "cargados".
     """
     t0 = time.time()
     carpeta = Path(salida) if salida else DIR_SALIDA / C.slug
@@ -135,7 +157,13 @@ def render_cancion(C, salida=None, solo=None, hasta_compas=None, escribir=True, 
     if hasta_compas is not None:
         dur = float(C.tempo.seg(C.tempo.pos(hasta_compas))) + C.cola_s
     n = int(dur * SR)
-    log(f"«{C.titulo}»: {dur:.1f} s, {len(C.pistas)} pistas, {C.compases_total} compases a {C.tempo.bpm} bpm")
+    fin_musica_s = float(C.tempo.seg(C.tempo.pos(hasta_compas) if hasta_compas is not None
+                                     else C.tiempos_total))
+    desde_s = float(C.tempo.seg(C.tempo.pos(desde_compas))) if desde_compas is not None else 0.0
+    if desde_s >= dur:
+        raise ValueError(f"--desde {desde_compas} queda después del final del render")
+    log(f"«{C.titulo}»: {dur:.1f} s, {len(C.pistas)} pistas, {C.compases_total} compases a {C.tempo.bpm} bpm"
+        + (f" · desde el compás {desde_compas:g} ({desde_s:.1f} s, preroll {preroll_s:g} s)" if desde_s else ""))
     rv = C.fx["reverb"]
     hall = fx.Convolver(fx.generar_ir(rv["dur"], rv["predelay_ms"], rv["brillo"], rv["ancho"],
                                       rv["tipo"], C.semilla))
@@ -143,6 +171,8 @@ def render_cancion(C, salida=None, solo=None, hasta_compas=None, escribir=True, 
     sala = fx.Convolver(fx.generar_ir(sl["dur"], sl["predelay_ms"], sl["brillo"], sl["ancho"],
                                       sl["tipo"], C.semilla))
     ctx = Contexto(C, n, C.semilla, hall)
+    if desde_s > 0:
+        ctx.t_min_s = desde_s - preroll_s
     cinta_cfg = C.fx["cinta"]
     mod = fx.modulacion_cinta(n, C.semilla, cinta_cfg["wow"], cinta_cfg["flutter"]) \
         if (cinta_cfg["wow"] or cinta_cfg["flutter"]) else None
@@ -160,7 +190,7 @@ def render_cancion(C, salida=None, solo=None, hasta_compas=None, escribir=True, 
             tp = time.time()
             buf = render_pista(p, ctx)
             if niveles:
-                niveles_pistas[p.nombre] = niveles_por_seccion(C, buf)
+                niveles_pistas[p.nombre] = niveles_por_seccion(C, buf, desde_s)
             seco += buf
             for bus, nivel in p.envios.items():
                 if nivel <= 0:
@@ -191,6 +221,13 @@ def render_cancion(C, salida=None, solo=None, hasta_compas=None, escribir=True, 
             seco += h
         stems[stem] = seco
         log(f"  stem {stem:8s} listo ({', '.join(f'{p.nombre} {tiempos[p.nombre]:.1f}s' for p in pistas) or 'vacío'})")
+    if desde_s > 0:     # la salida empieza en el compás pedido (fundido de 10 ms, sin click)
+        i_ini = int(round(desde_s * SR))
+        ni = int(0.01 * SR)
+        for k in stems:
+            stems[k] = np.ascontiguousarray(stems[k][i_ini:])
+            stems[k][:ni] *= rampa(ni)[:, None].astype(np.float32)
+        n = len(next(iter(stems.values())))
     # final en silencio (la cola de la canción ya está incluida)
     nf = int(min(1.5, C.cola_s * 0.5) * SR)
     for s in stems.values():
@@ -214,7 +251,8 @@ def render_cancion(C, salida=None, solo=None, hasta_compas=None, escribir=True, 
     niveles_pistas = {k: {s: round(v + off, 1) for s, v in d.items()} for k, d in niveles_pistas.items()}
     res = {"master": master, "stems": stems, "premaster": premaster, "info_master": info_master,
            "carpeta": carpeta, "segundos_render": dt, "tiempos_pistas": tiempos, "n": n,
-           "niveles_pistas": niveles_pistas}
+           "niveles_pistas": niveles_pistas, "t0_s": desde_s, "fin_musica_s": fin_musica_s,
+           "desde_compas": desde_compas, "ganancia_db": off}
     if niveles and niveles_pistas:
         imprimir_niveles(C, niveles_pistas)
     if escribir:
@@ -301,11 +339,12 @@ def construir_cues(C, res) -> dict:
     tempo = C.tempo
     from .analisis import lufs as lufs_rapido
     m = res["master"]
+    t0 = float(res.get("t0_s", 0.0))    # render con --desde: los tiempos se cuentan desde el corte
     secciones = []
     for s in C.secciones:
         a = float(tempo.seg(tempo.pos(s.compas_ini)))
         b = float(tempo.seg(tempo.pos(s.compas_fin)))
-        seg = m[int(a * SR): int(b * SR)]
+        seg = m[max(0, int((a - t0) * SR)): max(0, int((b - t0) * SR))]
         lufs = lufs_rapido(seg) if len(seg) > SR * 0.5 else None
         la, lb = s.loop
         secciones.append({
@@ -322,7 +361,19 @@ def construir_cues(C, res) -> dict:
     armonia = [{"inicio_s": round(float(tempo.seg(a)), 3), "fin_s": round(float(tempo.seg(b)), 3),
                 "acorde": s} for a, b, s in C.armonia]
     fin_musica = float(tempo.seg(C.tiempos_total))
-    return {
+    if t0 > 0:
+        def _mover(v):
+            return round(v - t0, 4)
+        for sc in secciones:
+            sc["inicio_s"], sc["fin_s"] = _mover(sc["inicio_s"]), _mover(sc["fin_s"])
+            sc["loop"]["inicio_s"], sc["loop"]["fin_s"] = _mover(sc["loop"]["inicio_s"]), _mover(sc["loop"]["fin_s"])
+        secciones = [sc for sc in secciones if sc["fin_s"] > 0]
+        downbeats = [_mover(x) for x in downbeats if x >= t0 - 1e-6]
+        armonia = [{"inicio_s": _mover(a["inicio_s"]), "fin_s": _mover(a["fin_s"]), "acorde": a["acorde"]}
+                   for a in armonia if a["fin_s"] > t0]
+        fin_musica -= t0
+    extra = {"recorte": {"desde_compas": res.get("desde_compas"), "desde_s": round(t0, 3)}} if t0 > 0 else {}
+    return {**extra,
         "titulo": C.titulo, "slug": C.slug, "bpm": C.tempo.bpm,
         "compas": f"{C.compas[0]}/{C.compas[1]}", "tonalidad": C.tonalidad,
         "duracion_s": round(res["n"] / SR, 3), "sr": SR,

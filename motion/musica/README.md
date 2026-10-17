@@ -16,6 +16,7 @@ espacio (reverb, sala, eco) y cinta.
 python3 motion/musica/muestras.py          # una vez: baja y prepara las muestras (~3,3 GB en disco, idempotente)
 python3 motion/musica/render.py umbral     # renderiza la canción 1 (≈ 3–4 min en total)
 python3 motion/musica/render.py 02 --hasta 17      # prueba rápida: corta en el compás 17
+python3 motion/musica/render.py 02 --desde 41 --hasta 49   # una sección del medio (con preroll)
 python3 motion/musica/render.py 02 --partitura     # imprime cifrado y melodías (sin audio)
 python3 motion/musica/render.py todas              # todas, una tras otra
 ```
@@ -41,17 +42,20 @@ Y `motion/renders/musica/<slug>.mp3` (320 kbps) para escuchar en el celular (sí
 ```
 musica/
   muestras.py          baja VSCO-2 CE y VCSL (git sparse) y arma muestras/proc/manifest.json
+                       (catálogo, afinación y nivelación de cada muestra: ver NIVELES.md)
+  NIVELES.md           niveles de cada instrumento antes y después de la nivelación nueva
   render.py            CLI de render
   canciones/NN_*.py    una canción por archivo; cada una define cancion() -> Cancion
   motor/
     nucleo.py          SR, conversiones, azar determinista, Tempo, Auto (automatizaciones)
     teoria.py          escalas, cifrado (acorde), conducción de voces (conducir, bajos)
     secuencia.py       Cancion, Seccion, Pista, Nota, mini-notación de melodías
-    instrumentos/      muestreados.py, sintes.py, bateria.py, texturas.py, base.py
+    instrumentos/      muestreados.py, sintes.py, bateria.py, mecanica.py, texturas.py, base.py
+    figuras.py         figuras reutilizables: espiral() (ostinato que gira), columna()
     efectos.py         efectos de pista + reverb (IR generada), eco, cinta, limitador
     mezcla.py          pistas → stems → master, cues.json, mp3
     analisis.py        QA: loudness, picos, clicks, balance espectral, imágenes
-    pruebas.py         demos cortas por instrumento: cd musica && python3 -m motor.pruebas
+    pruebas.py         demos por instrumento y pruebas con criterio (python3 -m motor.pruebas tests)
   muestras/            (ignorado por git) repos parciales + proc/*.npy
   salida/              (ignorado por git) renders
 ```
@@ -126,7 +130,9 @@ previo. Si el rango es muy estrecho, relaja de a poco en vez de fallar.
 
 La regla del grave vale también **entre instrumentos** (bajo del piano contra el pad,
 dron contra el arpa…): el QA y `render.py --partitura` corren `revisar_grave(C)`, que
-recorre toda la partitura (con pedales) y lista cada choque. «Umbral» tiene 0. Trucos:
+recorre toda la partitura (con pedales y con las notas que se dejan sonar) y lista cada
+choque. «Umbral» marca 1 (el Sol2 del gesto de Gm6 del arpa sigue sonando sobre el Re2 del
+compás 57: el arpista lo apagaría). Trucos:
 bajo del piano en A1–G#2, voicings desde E3, el arpa apaga su bajo al cambiar de acorde,
 y los pedales de Re (dron) se retiran cuando la armonía se mueve.
 
@@ -164,7 +170,8 @@ Extras por nota (`**x`): `legato=True` (cuerdas: sin golpe de arco, ataque lento
 
 **Mini-notación** (`p.melodia`, `melodia()`, `nube()`): tokens separados por espacio.
 `A5/0.5` nota/duración (sin duración repite la anterior) · `r/2` o `-/2` silencio ·
-`[D4 F#4 A4]/2` acorde · `!` acento ×1,25 · `?` suave ×0,7 · `@0.8` velocidad ·
+`[D4 F#4 A4]/2` acorde (las notas a la vez; lleva los mismos sufijos: `[D4 F#4]/2!`,
+`[A3 E4]_`) · `!` acento ×1,25 · `?` suave ×0,7 · `@0.8` velocidad ·
 `_` ligada a la siguiente (legato) · `4+2` suma duraciones · `|` barra que verifica
 que el compás cierre (si no cierra, error: atrapa errores de escritura).
 `p.melodia(..., transponer=-12)` transpone.
@@ -183,6 +190,30 @@ bat.golpe(40, "barrido", 0.55, dur=4)                           # barrido de esc
 `x` normal · `X` acento ×1,3 · `o`/`g` fantasma ×0,35 · `1`–`9` velocidad/9 · `.` silencio;
 espacios y `|` se ignoran; 16 pasos = un compás de 4/4 (12 en 6/8). `prob=0.9`
 omite golpes al azar (determinista). Ojo: un patrón de 4 pasos se repite cada tiempo.
+`vel` es la velocidad de `x`/`X`/`o`; los dígitos son velocidades absolutas y `vel` no los toca
+(así suenan las canciones). `escala=0.8` multiplica **todas** las velocidades del patrón,
+dígitos incluidos: para subir o bajar un groove entero.
+
+**Mecánica del piano** (`Mecanica()`, stem `bateria`): los apagadores y el pedal reales del
+vertical como percusión, con la misma interfaz que la batería:
+
+```python
+mec = C.pista("mecanica", Mecanica(pb_hz=3000), "bateria", vol=-8, envios={"sala": 0.2})
+mec.patron("apagador", "x.....x.....x...", 1, 9, vel=0.5, altura=73)   # la altura elige la tecla
+mec.golpe(1, "pedal", 0.6)                                             # también "pedal_baja"
+```
+
+**Ostinato que gira** (`espiral()`, de «Espiral»): una célula de índices recorre "columnas" de
+alturas por compás y corre continua a través de las barras (7 corcheas sobre compases de 8:
+cada compás empieza en otro punto del giro), con acento en cada vuelta y crescendo:
+
+```python
+cols = {9: columna(("F#", "G#", "A", "C#")), 25: columna(("B", "C#", "D", "F#"))}   # desde La3
+notas = espiral(piano, 9, 33, cols, patron="0 2 1 3 2 4 3", desplaz=1, vel=0.35)
+```
+
+`columnas` también puede ser una lista fija o una función compás → alturas; `filtro(k, compás)`
+elige qué pasos suenan; devuelve las notas agregadas `(t, compás, k, midi, vel)`.
 
 ### 3.8 Humanización (determinista)
 
@@ -224,7 +255,10 @@ tex.clip(nube_de_banco("vibrafono_arco", "A4", dur_s=24, estirar=14), pos=1, gan
   lo pasa por la reverb de la canción, lo invierte y lo ubica para que **termine
   exactamente en `fin`** (el downbeat), con un fundido de 12 ms que evita el click.
 * `nube(instr, melodía, dur_s, …)`: toca la melodía y la convierte en nube granular
-  estirada. `nube_de_banco(banco, altura, dur_s, …)`: igual, con una muestra real.
+  estirada (acepta acordes: `"[D3 A3 E4]/2 [D4 F#4 A4]/2"`). `nube_acordes(instr,
+  [(t, dur, alturas[, vel]), …], dur_s, …)`: igual, con acordes o notas armados en Python
+  (p. ej. la salida de `espiral`). `nube_de_banco(banco, altura, dur_s, …)`: igual, con una
+  muestra real cruda (sin nivelar; nunca una muestra excluida del catálogo).
   Parámetros: `estirar`, `densidad` (granos/s), `grano=(mín, máx)` s, `dispersion`,
   `tonos` + `pesos` (transposiciones), `pan`, `ataque`, `caida`, `desde/hasta` (tramo
   de la fuente 0..1), `brillo_hz`.
@@ -237,14 +271,22 @@ tex.clip(nube_de_banco("vibrafono_arco", "A4", dur_s=24, estirar=14), pos=1, gan
 Todos están **calibrados**: una nota a `vel=0.6` ronda **−26 LUFS** (sostenidos: medido en
 el tramo estable; percusivos: en sus primeros ~2 s) (batería:
 patrón de negras a 0,6 → bombo −24, caja −26, escobilla −28, aro −30, shaker/hat
-abierto/tic −36, hat −38). Mezclar con `vol` de la pista y `vel`.
+abierto/tic −36, hat −38; mecánica del piano: apagador −24 con altura 73, pedal −35).
+Mezclar con `vol` de la pista y `vel`. Tabla de niveles por altura y velocidad, y el cambio
+respecto de la versión anterior del motor, en `NIVELES.md`.
+
+**Curva de velocidad de los muestreados** (monótona): calibración + `rango_db`·(vel^curva − 1)
++ el cruce de capas en potencia. La capa suave está `capas_db` por debajo de la fuerte (catálogo
+de `muestras.py`: cuerdas, trémolos, pizzicatos y piano −8 dB, arpa −7, vibráfono −10, glock
+−10/−4), así que de vel 0,3 a 0,85 hay unos 18–22 dB (vibráfono con arco: 11 dB, una capa).
 
 | Instrumento | Fuente | Rango útil | Parámetros principales |
 |---|---|---|---|
 | `Piano()` | piano vertical real (VCSL Knight, 2 capas + ruidos de apagadores y pedal) | A0–C8 | `fieltro` 0–1 (oscurece y ablanda el ataque), `brillo`, `mecanica` 0–1 (ruidos reales), `rango_db` 26. Usa pedal. |
 | `Arpa()` | arpa de concierto real (VCSL, 2 capas) | E1–F7 | deja sonar (nota `apagar=True` para cortar), `largo_max` 6 s, `abrir` (paneo por altura), `tope_hz` |
 | `Glock()` | glockenspiel real (VCSL, 3 capas) | G5–C8 | deja sonar, `largo_max` 4,5 s, `tope_hz` 10 k |
-| `Vibrafono(motor_hz=5, motor_prof=0.35)` | vibráfono real, baquetas blandas (VCSL) + motor simulado | F3–F6 | motor = AM en la banda de la fundamental con fase global; usa pedal; `soltar` |
+| `Vibrafono(motor_hz=5, motor_prof=0.35)` | vibráfono real, baquetas blandas (VCSL) + motor simulado | F3–F6 | motor = AM en la banda de la fundamental con fase global; usa pedal; `soltar`; `domar` (ver abajo) |
+| `VibrafonoArco()` | vibráfono frotado con arco (VCSL), sin motor | C4–F6 | notas largas sin ataque (`ataque` 0,3, `soltar` 2,5; bucles si la nota es más larga que la muestra); `domar` |
 | `Celesta()` | síntesis modal (no hay celesta CC0) | C4–C8 | `brillo`, `golpe` (martillo), `decaimiento`, `dejar_sonar`. Usa pedal. |
 | `Violines()`, `Violas()`, `Chelos()`, `Contrabajo()` | secciones reales VSCO-2 CE (2 capas, vibrato) | violín G3–D6, viola C3–D6, chelo C2–F5, contrabajo E1–B3 | `doble=True` (sección más grande), `legato` por nota, `vel_fin`, automatización `expresion`; la dinámica cruza capas p→f, sube volumen y brillo. Notas largas: bucles con fundido alineado por correlación y nivel aplanado. |
 | `CuerdasTrem("violines"\|"violas"\|"chelos")` | trémolo real | ídem | tensión, misterio |
@@ -252,8 +294,9 @@ abierto/tic −36, hat −38). Mezclar con `vol` de la pista y `vel`.
 | `Rhodes()` | FM de dos pares (cuerpo 1:1 + púa 1:14) | E2–C7 | `brillo`, `campana`, `trem_hz`/`trem_prof` (trémolo estéreo), `drive`, `detune`. Usa pedal. |
 | `Pad()` | supersaw PolyBLEP + filtro 4 polos que respira + chorus | — | `voces`, `desafinar`, `sub`, `ataque`, `soltar`, `corte` (automatizable), `q`, `respira`, `respira_hz`, `chorus`, `ancho`, `pa`, `saturar` |
 | `Dron()` | parciales con deriva lenta + aire resonante | graves | `ataque`, `soltar`, `corte` (automatizable), `aire`, `brillo`, `respira` |
-| `Sub()` | senoidal + 8va, saturación suave | A1–A2 | `drive_db`, `octava`, `glide_ms`, `ataque`, `soltar`, `pb`, `pa` |
+| `Sub()` | senoidal + 8va, saturación suave | A1–A2 | `drive_db`, `octava`, `glide_ms` (solo entre notas ligadas), `ataque`, `soltar`, `pb`, `pa`; la velocidad se aplica después de saturar (conserva la dinámica; a vel 0,7, igual que antes) |
 | `Bateria()` | síntesis (sección 3.7) | — | `niveles={golpe: dB}`, `tono`, `color` |
+| `Mecanica()` | apagadores y pedal reales del piano (sección 3.7) | — | `ganancia_db`, `pb_hz`, `largo_s`, `pan`, `vecinas`; golpes `apagador`, `pedal`, `pedal_baja` |
 | `Textura()` | pista de clips (sección 3.10) | — | — |
 
 Golpes de batería: `bombo` (corto, ~50 Hz), `aro` (cross-stick de madera),
@@ -262,8 +305,33 @@ Golpes de batería: `bombo` (corto, ~50 Hz), `aro` (cross-stick de madera),
 poco de afinación, color y largo: no suena a ametralladora.
 
 Todos los muestreadores eligen la muestra más cercana, la transponen con soxr (HQ)
-y corrigen su afinación medida (cents en el manifiesto). Las capas se cruzan por
-velocidad con potencia constante; los niveles entre muestras vecinas se igualan.
+y corrigen su afinación medida (cents en el manifiesto).
+
+* **Nivelación** (`muestras.py`, cacheada en el manifiesto; se actualiza sola si cambia la
+  versión): cada muestra va a la referencia de su capa según su loudness K-ponderada
+  (BS.1770), medida con la cadena con que suena por defecto (paneo y cierre de las cuerdas,
+  `abrir`, `tope_hz`). Sostenidos: primeros 5 s del tramo estable (el mismo nivel al que los
+  bucles aplanan las notas largas). Percusivos: promedio de una ventana corta después del
+  ataque (0,4 s; pizzicato 0,3 s) y de los primeros 2 s. Residuo entre muestras vecinas ≤ 1,5 dB.
+* **Muestras excluidas** (defectuosas; se transponen las vecinas): vibráfono con arco La3,
+  vibráfono Fa3, arpa Re2, glock Sol5 suave, viola Sol5 suave (`excluir` en el catálogo).
+* **Cruce de capas sin cancelaciones**: las capas de una nota son la misma cuerda o lámina
+  grabada dos veces y quedan en fase fija; la suave se alinea con la fuerte (desfase de hasta
+  media onda y polaridad) y la mezcla se compensa en potencia K (en el contrabajo solista,
+  siguiendo el tiempo). `Cuerdas(doble=True)`: la copia pasa por `leer()` como la principal.
+* **Domado de los vibráfonos** (`domar=1`; 0 = timbre crudo, 2 = el doble): las láminas tienen
+  afinado el parcial de dos octavas (4·f0), que en el sostenido queda como un silbido fijo en
+  la banda de la voz (2,2–2,4 kHz en Do#5–Re5), y las graves tienen el 3er modo (10,4–10,9·f0)
+  muy fuerte en el ataque (2,2–2,9 kHz en Sol#3–Do#4). Cada muestra trae medidos esos dos
+  parciales y la nota los recorta con filtros que siguen la transposición: el 4·f0, −8 dB
+  después del ataque (con arco, −12 dB siempre); el 3er modo, hasta −30 dB de la fundamental.
+* **Pedal del piano**: al subir, caen juntos los apagadores de todas las notas que sostenía; el
+  ruido de cada uno baja √k (k = notas apagadas a la vez) y se reparte en 25 ms, así no hay
+  golpe. Igual se apagan todas: para que el último acorde se extinga solo, subí el pedal
+  después del final (`piano.pedal(83, 96)`, aunque la canción termine antes).
+* **Notas que se dejan sonar** (`Arpa`, `Glock`, `Pizzicato`; `apagar=True` las corta):
+  `fin_sonoro()` estima hasta dónde suenan (la muestra cae 30 dB, tope `largo_max`); lo usa
+  `revisar_grave`.
 
 ---
 
@@ -332,14 +400,26 @@ C.fx["master"]    = {"lufs": -14.0, "techo_dbtp": -1.0, "glue": 0.5}
 ## 8. Render y tiempos
 
 * `render.py <nombre|número|archivo|todas>`; opciones `--hasta N` (prueba rápida
-  hasta el compás N), `--solo pista1,pista2`, `--sin-qa`, `--sin-mp3`,
+  hasta el compás N), `--desde N` (empieza en el compás N: para probar secciones del medio),
+  `--preroll S`, `--solo pista1,pista2`, `--sin-qa`, `--sin-mp3`,
   `--sin-imagenes`, `--partitura`, `--pianola`, `--salida DIR`. Las pruebas van a
   `salida/_pruebas/` y no generan MP3.
+* `--desde N`: se calcula sobre la línea de tiempo completa (automatizaciones, LFO, cinta y
+  pedales iguales), pero solo las notas y clips que siguen sonando `--preroll` segundos (12 por
+  defecto) antes del compás N: la reverb, el eco y el pedal llegan "cargados". El tramo sale
+  idéntico al render entero (error < −98 dB en «Deriva» 41–49) en ~60 % del tiempo, salvo la
+  ganancia de margen común de stems y premaster, que sale del pico de lo renderizado (puede
+  diferir unas décimas de dB; queda en `ganancia_db` del resultado, y el master y los LUFS del
+  QA son los del tramo). El `Sub` (oscilador continuo) calcula siempre todas sus notas. En
+  `cues.json` los tiempos se cuentan desde el corte (`recorte.desde_s`).
 * Tiempo de «Umbral» (3:04, 14 pistas, ~2 400 notas): 2–2,5 min de render + ~1 min de
   QA e imágenes (≈ 3–3,5 min en total, 2 hilos, según la carga de la máquina). La
   primera ejecución compila numba (~20 s, queda en caché). `--hasta 17` tarda ~1 min.
 * `python3 -m motor.pruebas [nombres]` (desde `musica/`): demo de pocos segundos por
   instrumento + `salida/_pruebas/instrumentos/hoja.png`.
+* `python3 -m motor.pruebas tests [--rapido] [nombres]`: pruebas con criterio (nivelación,
+  parser de acordes, detector de clicks, glide y dinámica del Sub, domado de los vibráfonos,
+  `--desde`). ~4 min; `--rapido` mide la nivelación en 5 bancos (~1 min).
 * Correr los renders en segundo plano y no más de uno a la vez (la máquina es compartida).
 
 ---
@@ -349,14 +429,21 @@ C.fx["master"]    = {"lufs": -14.0, "techo_dbtp": -1.0, "glue": 0.5}
 El render imprime y guarda en `qa.json`:
 
 * **Integridad**: pico real (dBTP, ×4), DC, clicks (2ª diferencia vs. su entorno de 20 ms;
-  en la batería se ignoran sus propios golpes), ráfagas >9 kHz fuera de ataques de notas,
-  correlación estéreo (global y por segundo), mono − estéreo (LU), suma de stems vs.
-  premaster, largos iguales, silencio al inicio y al final.
+  en la batería se ignoran sus propios golpes; en los otros stems, dentro de la ventana de
+  ataque de cada nota o clip (−4…+40 ms) solo cuenta un pico impulsivo, concentrado en 1–2
+  muestras como un empalme roto, un escalón o un corte seco: los ataques de celesta, vibráfono
+  o piano reparten su 2ª diferencia y ya no dan falsos positivos), ráfagas >9 kHz fuera de
+  ataques de notas, correlación estéreo (global y por segundo: `correlacion_1s_min` cuenta solo
+  hasta el fin de la música y los segundos de más de −50 dBFS, sin la cola de hiss), mono −
+  estéreo (LU), suma de stems vs. premaster, largos iguales, silencio al inicio y al final.
 * **Balance**: LUFS por sección vs. energía pedida (y su correlación), LRA, bandas
   (sub, graves, barro 200–400, medios, presencia 2–5 k, brillo, aire) del master y de
   cada stem, "barro vs vecinas" y "presencia vs vecinas" (dB por octava), resonancias
   angostas >12 dB (las notas de la melodía aparecen ahí: es esperable).
-* **Clusters en el grave**: `revisar_grave` (sección 3.5).
+* **Clusters en el grave**: `revisar_grave` (sección 3.5). Cuenta lo que sigue sonando: el
+  pedal y las notas que se dejan sonar (arpa, glock, pizzicato: hasta que la muestra cae 30 dB,
+  con tope `largo_max`; `apagar=True` las corta). Por eso puede encontrar choques que antes no
+  veía (p. ej. un Sol2 de arpa sonando sobre el Re2 del compás siguiente).
 * **Tabla de LUFS por pista y sección** (al final del render, escala del premaster): la
   herramienta para mezclar sin oídos. Referencia de «Umbral»:
 
@@ -447,5 +534,20 @@ def cancion() -> Cancion:
 * El piano es un vertical (Knight) muestreado cada tono entero (transposición ±1 st).
 * Batería y pads: si se agregan muchas notas muy largas, el render tarda más (el pad
   sintetiza ~6 sierras por nota).
+* Nivelación (ver `NIVELES.md`): las muestras quedan parejas en su métrica (≤ 1,5 dB entre
+  vecinas), pero algunas tienen otra forma: en los percusivos, ataque y cola pesan distinto
+  (el pizzicato de Re2 del contrabajo es cuerda al aire y suena más largo; medido solo en 2 s
+  difiere hasta 2,7 dB); en las cuerdas suaves hay reguladores naturales dentro de la toma.
+  Transponer hacia arriba baja ~0,3 dB por semitono (la cola se acorta): donde las muestras
+  están lejos hay saltos de hasta 2,1 dB al cambiar de muestra (vibráfono con arco, que tiene
+  5 muestras útiles; el grave, desde Mi4 transpuesto).
+* La dinámica de los muestreados es más amplia que antes (las capas suaves ya no están
+  subidas al nivel de las fuertes): de vel 0,3 a 0,85 hay 18–22 dB. Las velocidades bajas
+  (≤ 0,3) suenan bastante menos que con el motor anterior (tabla 2 de `NIVELES.md`).
+* El domado de los vibráfonos está medido para `domar=1`: con `domar=0`, las láminas graves
+  (Sol#3–Do#4) suenan 1–2 dB más en el ataque que sus vecinas.
+* `nube_de_banco` usa la muestra cruda (sin nivelar): ajustá el nivel con `ganancia_db`.
+* Pedal del piano: al subir apaga todas las notas que sostenía (los apagadores ya no suman un
+  golpe). Si querés que un acorde se extinga solo, subí el pedal después del final.
 * `Bateria.patron` cicla el texto: un patrón de 4 pasos se repite en cada tiempo.
 * Si cambiás `muestras.py` (catálogo), corré `python3 motion/musica/muestras.py` de nuevo.

@@ -67,8 +67,16 @@ def corto_plazo(x: np.ndarray, ventana=3.0, salto=0.5):
     return (ini + n / 2) / SR, np.maximum(v, -70.0)
 
 
-def detectar_clicks(x: np.ndarray, umbral: float = 14.0, piso: float = 4e-4):
-    """Discontinuidades: picos de la 2ª diferencia muy por encima de su entorno (20 ms)."""
+def detectar_clicks(x: np.ndarray, umbral: float = 14.0, piso: float = 4e-4, ataques=None,
+                    ventana=(0.004, 0.04), impulso: float = 6.0):
+    """Discontinuidades: picos de la 2ª diferencia muy por encima de su entorno (20 ms).
+
+    ataques: inicios de notas y clips (s) del mismo audio. Un pico dentro de la ventana de
+    ataque de una nota (de −4 a +40 ms) solo cuenta si es impulsivo: |d2| ≥ `impulso` × la
+    RMS de d2 en ±1 ms (sin las ±2 muestras del pico). Un ataque (martillo, púa, baqueta,
+    ruido filtrado) reparte su 2ª diferencia en muchas muestras; un empalme roto, un escalón
+    o un corte seco la concentran en una o dos. Fuera de las ventanas, igual que siempre.
+    Sin `ataques` se comporta exactamente como antes (lo usa también el mezclador)."""
     m = x.astype(np.float64).mean(axis=1)
     d = np.abs(np.diff(m, 2))
     k = int(0.02 * SR)
@@ -81,6 +89,22 @@ def detectar_clicks(x: np.ndarray, umbral: float = 14.0, piso: float = 4e-4):
     base[a + len(med):] = med[-1]
     r = d / (base + 1e-6)
     idx = np.nonzero((r > umbral) & (d > piso))[0]
+    if ataques is not None and len(ataques) and len(idx):
+        ons = np.sort(np.asarray(ataques, dtype=np.float64))
+        t = (idx + 1) / SR
+        j = np.searchsorted(ons, t - ventana[1], side="left")
+        en_ataque = (j < len(ons)) & (ons[np.minimum(j, len(ons) - 1)] <= t + ventana[0])
+        w = int(0.001 * SR)
+        quedan = []
+        for i, dentro in zip(idx, en_ataque):
+            if not dentro:
+                quedan.append(i)
+                continue
+            vec = np.concatenate([d[max(0, i - w): max(0, i - 2)], d[i + 3: i + w + 1]])
+            rms = np.sqrt(np.mean(vec ** 2)) if len(vec) else 0.0
+            if d[i] >= impulso * (rms + 1e-12):
+                quedan.append(i)
+        idx = np.asarray(quedan, dtype=np.int64)
     eventos = []
     ult = -10 ** 9
     for i in idx:
@@ -90,17 +114,18 @@ def detectar_clicks(x: np.ndarray, umbral: float = 14.0, piso: float = 4e-4):
     return eventos
 
 
-def onsets_por_stem(C, n: int) -> dict:
-    """Inicios de notas (s) por stem, para no confundir ataques musicales con clicks."""
+def onsets_por_stem(C, n: int, t0_s: float = 0.0) -> dict:
+    """Inicios de notas (s) por stem, para no confundir ataques musicales con clicks.
+    `t0_s`: segundo de la canción donde empieza el audio analizado (render con --desde)."""
     out = {k: [] for k in STEMS}
     for p in C.pistas.values():
         for nt in p.notas_humanizadas():
-            out[p.stem].append(float(C.tempo.seg(nt.t)))
+            out[p.stem].append(float(C.tempo.seg(nt.t)) - t0_s)
         for c in p.clips:
             if c["pos"] is not None:
-                out[p.stem].append(float(C.tempo.seg(c["pos"])))
+                out[p.stem].append(float(C.tempo.seg(c["pos"])) - t0_s)
             if c["fin"] is not None:
-                out[p.stem].append(float(C.tempo.seg(c["fin"])))
+                out[p.stem].append(float(C.tempo.seg(c["fin"])) - t0_s)
     return {k: np.array(sorted(v)) for k, v in out.items()}
 
 
@@ -192,13 +217,17 @@ def analizar(C, res, imagenes=True) -> dict:
     ts, st = corto_plazo(m)
     vivos = st[st > -60]
     q["lra_lu"] = round(float(np.percentile(vivos, 95) - np.percentile(vivos, 10)), 1) if len(vivos) else 0
+    t0 = float(res.get("t0_s", 0.0))          # render con --desde: el audio empieza en t0
+    fin_musica = float(res.get("fin_musica_s", C.tempo.seg(C.tiempos_total))) - t0
     L, R = m[:, 0].astype(np.float64), m[:, 1].astype(np.float64)
     q["correlacion_estereo"] = round(float(np.corrcoef(L, R)[0, 1]), 3)
     w = SR
     cs = []
     for a in range(0, len(L) - w, w):
+        if a / SR >= fin_musica:      # la cola (reverb que se apaga + hiss) no cuenta
+            break
         l, r = L[a:a + w], R[a:a + w]
-        if np.sqrt(np.mean(l ** 2)) > 1e-3:
+        if np.sqrt(0.5 * np.mean(l ** 2 + r ** 2)) > 10 ** (-50 / 20):   # sin tramos de solo hiss
             cs.append(np.corrcoef(l, r)[0, 1])
     q["correlacion_1s_min"] = round(float(np.min(cs)), 3) if cs else None
     q["correlacion_1s_mediana"] = round(float(np.median(cs)), 3) if cs else None
@@ -212,14 +241,14 @@ def analizar(C, res, imagenes=True) -> dict:
     q["fin_rms_dbfs"] = round(float(20 * np.log10(np.sqrt(np.mean(m[-int(0.1 * SR):] ** 2)) + 1e-12)), 1)
     clicks = {}
     agudos = {}
-    ons = onsets_por_stem(C, len(m))
+    ons = onsets_por_stem(C, len(m), t0)
     for k, s in stems.items():
         if np.abs(s).max() < 1e-6:
             continue
         if k == "bateria":  # los golpes son transitorios a propósito: solo lo que cae lejos de ellos
             clicks[k] = fuera_de_onsets(detectar_clicks(s, umbral=40.0), ons[k], 0.006, 0.25)
-        else:
-            clicks[k] = detectar_clicks(s, umbral=14.0)
+        else:               # en los ataques de las notas solo cuenta lo impulsivo (ver detectar_clicks)
+            clicks[k] = detectar_clicks(s, umbral=14.0, ataques=ons[k])
         # ráfagas >9 kHz que NO coinciden con el ataque de una nota o un clip
         agudos[k] = fuera_de_onsets(saltos_agudos(s), ons[k]) if k != "bateria" else []
     todos = np.sort(np.concatenate([ons[k] for k in ons]))
@@ -229,10 +258,10 @@ def analizar(C, res, imagenes=True) -> dict:
     # ---------------------------------------------------------- balance
     secs = []
     for s in C.secciones:
-        a = float(C.tempo.seg(C.tempo.pos(s.compas_ini)))
-        b = float(C.tempo.seg(C.tempo.pos(s.compas_fin)))
-        v = _lufs(med, m[int(a * SR): int(b * SR)])
-        secs.append({"nombre": s.nombre, "inicio_s": round(a, 1), "fin_s": round(b, 1),
+        a = float(C.tempo.seg(C.tempo.pos(s.compas_ini))) - t0
+        b = float(C.tempo.seg(C.tempo.pos(s.compas_fin))) - t0
+        v = _lufs(med, m[max(0, int(a * SR)): max(0, int(b * SR))]) if b > 0 else None
+        secs.append({"nombre": s.nombre, "inicio_s": round(a + t0, 1), "fin_s": round(b + t0, 1),
                      "energia": s.energia, "lufs": None if v is None else round(v, 1)})
     q["secciones"] = secs
     e = np.array([s["energia"] for s in secs if s["lufs"] is not None])
@@ -283,8 +312,10 @@ def graficar(C, res, ts, st, f, p, carpeta: Path, esp_stems=None):
 
     m = res["master"]
     dur = len(m) / SR
-    secs = [(s.nombre, float(C.tempo.seg(C.tempo.pos(s.compas_ini))),
-             float(C.tempo.seg(C.tempo.pos(s.compas_fin))), s.energia, s.voz) for s in C.secciones]
+    t0 = float(res.get("t0_s", 0.0))
+    secs = [(s.nombre, float(C.tempo.seg(C.tempo.pos(s.compas_ini))) - t0,
+             float(C.tempo.seg(C.tempo.pos(s.compas_fin))) - t0, s.energia, s.voz) for s in C.secciones]
+    secs = [z for z in secs if z[2] > 0 and z[1] < dur]
 
     def marcar(ax, texto=True, y=None):
         for (nom, a, b, e, voz) in secs:
@@ -360,7 +391,7 @@ def graficar(C, res, ts, st, f, p, carpeta: Path, esp_stems=None):
     fig.savefig(carpeta / "espectro.png")
     plt.close(fig)
 
-    pianola(C, carpeta / "pianola.png", dur)
+    pianola(C, carpeta / "pianola.png", None if t0 else dur)
 
 
 def pianola(C, ruta, dur=None):
@@ -433,7 +464,8 @@ def pianola(C, ruta, dur=None):
 # ============================================================ revisión musical ==
 def revisar_grave(C, limite: int = 50, paso: float = 0.5, min_intervalo: int = 7):
     """Busca 'clusters' en el grave en toda la partitura (todas las pistas con altura,
-    con el pedal de resonancia): si la nota de abajo está bajo ~Mi3 (Re3, MIDI 50) la
+    con el pedal de resonancia y con lo que sigue sonando en los instrumentos que dejan
+    sonar: arpa, pizzicato, glock): si la nota de abajo está bajo ~Mi3 (Re3, MIDI 50) la
     siguiente debe estar a una 5ª justa o más; entre Re3 y Mi3, nada de segundas.
     Devuelve [(compás, [notas], [pistas]), …]."""
     from .nucleo import nombre_nota
@@ -442,10 +474,16 @@ def revisar_grave(C, limite: int = 50, paso: float = 0.5, min_intervalo: int = 7
         if p.stem == "bateria" or p.instrumento.__class__.__name__ in ("Textura", "Bateria"):
             continue
         usa_pedal = getattr(p.instrumento, "usa_pedal", False)
+        fin_sonoro = getattr(p.instrumento, "fin_sonoro", None)
         for n in p.notas:
             fin = n.t + n.dur
+            if fin_sonoro is not None:
+                try:
+                    fin = max(fin, float(fin_sonoro(n, C.tempo)))
+                except Exception:       # instrumentos de las canciones con otra interfaz
+                    pass
             if usa_pedal and p.pedales:
-                abajo, sube = p.pedal_abajo_en(fin - 1e-6)
+                abajo, sube = p.pedal_abajo_en(n.t + n.dur - 1e-6)
                 if abajo:
                     fin = max(fin, sube)
             eventos.append((n.t, fin, int(n.midi), p.nombre))

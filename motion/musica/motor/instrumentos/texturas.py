@@ -6,6 +6,7 @@ Se usan como clips de una pista con instrumento `Textura()`:
     tex.clip(swell(Piano(), ["D3", "A3", "E4", "F#4"], largo_tiempos=4), fin=9)
     tex.clip(nube(Celesta(), "A5/0.5 E6 D6 G#5/1.5 A5/1", dur_s=20), pos=57)
     tex.clip(nube_de_banco("vibrafono_arco", "A4", dur_s=30), pos=1)
+    tex.clip(nube_acordes(Piano(), [(0, 2, ["D3", "A3", "E4"]), (2, 2, ["D4", "F#4"])], dur_s=18), pos=81)
 """
 from __future__ import annotations
 
@@ -146,9 +147,32 @@ def nube(instrumento, texto_melodia: str, dur_s: float, vel: float = 0.6, **kw):
     return gen
 
 
+def nube_acordes(instrumento, acordes, dur_s: float, vel: float = 0.55, **kw):
+    """Generador de clip: toca acordes [(t_tiempos, dur, alturas[, vel])] con `instrumento` y
+    los convierte en nube granular (los mismos parámetros que `nube`). `alturas` es una lista
+    o una sola nota: sirve también para notas sueltas (p. ej. la salida de `espiral`).
+    (Con la mini-notación también se puede: nube(instr, "[D3 A3 E4]/2 [D4 F#4 A4]/2", …).)"""
+    from ..secuencia import Nota
+
+    def gen(ctx):
+        notas = []
+        for item in acordes:
+            t, d, alts = item[0], item[1], item[2]
+            v = float(item[3]) if len(item) > 3 else vel
+            if isinstance(alts, (str, int, float, np.integer, np.floating)):
+                alts = [alts]
+            notas += [Nota(float(t), float(d), float(_nota(a)), v) for a in alts]
+        src = ctx.aislado(instrumento, notas, cola_s=2.5)
+        kw.setdefault("semilla", (ctx.semilla, "nube_acordes", repr(acordes)))
+        return nube_granular(src, dur_s, **kw)
+    return gen
+
+
 def nube_de_banco(banco: str, altura, dur_s: float, **kw):
     """Generador de clip: nube granular a partir de una muestra real del banco
-    (p. ej. "vibrafono_arco", "chelos", "piano") en la altura más cercana."""
+    (p. ej. "vibrafono_arco", "chelos", "piano") en la altura más cercana. Usa la muestra
+    cruda (sin nivelar: el nivel se ajusta con `ganancia_db` del clip) y nunca una muestra
+    marcada como defectuosa en el catálogo."""
     def gen(ctx):
         b = Banco.de(banco)
         m = _nota(altura)

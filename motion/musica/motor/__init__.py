@@ -20,6 +20,7 @@ from .teoria import (Acorde, acorde, escala, conducir, voicing_abierto,  # noqa:
                      MODOS)
 from .secuencia import Cancion, Pista, Nota, melodia  # noqa: E402,F401
 from .instrumentos import *  # noqa: E402,F401,F403
+from .figuras import espiral, columna  # noqa: E402,F401
 from .efectos import (EQ, Filtro, Saturacion, Chorus, Tremolo, Ducking,  # noqa: E402,F401
                       Compresor, Ancho, Paneo)
 
