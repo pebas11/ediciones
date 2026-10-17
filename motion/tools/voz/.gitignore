@@ -1,0 +1,9 @@
+# Salidas pesadas del pipeline de voz (no se commitean)
+salida/
+modelos/
+pruebas/fixtures/
+pruebas/librivox/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/

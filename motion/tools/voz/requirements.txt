@@ -1,0 +1,19 @@
+# Pipeline de voz (motion/tools/voz) — Python 3.13, Linux / macOS / Windows.
+# Instalación: ver README.md. Lo mínimo para correr procesar.py y aplicar.py:
+numpy>=2.1
+scipy>=1.14
+soundfile>=0.12
+pyloudnorm>=0.1.1
+faster-whisper>=1.1.0
+rapidfuzz>=3.9
+matplotlib>=3.9        # espectrogramas PNG
+imageio-ffmpeg>=0.5    # ffmpeg de respaldo si no hay uno en el PATH
+
+# Respaldo de reducción de ruido sin torch (el preferido es DeepFilterNet3: requirements-dfn.txt;
+# si no está, el pipeline usa el ejecutable deep-filter o RNNoise de ffmpeg, que se bajan solos)
+noisereduce>=3.0
+
+# Solo para las pruebas (fixture con TTS y test)
+edge-tts>=6.1
+gTTS>=2.5
+pytest>=8

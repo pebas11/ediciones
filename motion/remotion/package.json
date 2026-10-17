@@ -1,0 +1,53 @@
+{
+  "name": "ediciones-remotion",
+  "version": "0.1.0",
+  "description": "Base de render con Remotion para videos largos (3D Three.js + capas 2D + audio sincronizado)",
+  "private": true,
+  "license": "UNLICENSED",
+  "engines": {
+    "node": "^20.19.0 || ^22.13.0 || >=24"
+  },
+  "scripts": {
+    "dev": "remotion studio",
+    "estudio": "remotion studio --no-open",
+    "build": "remotion bundle",
+    "lint": "eslint src && tsc",
+    "tipos": "tsc",
+    "diagnostico-gl": "node scripts/diagnostico-gl.mjs",
+    "bench": "node scripts/bench.mjs",
+    "tramos": "node scripts/render-tramos.mjs",
+    "envolventes": "python3 scripts/envolventes.py",
+    "verificar": "python3 scripts/verificar-sync.py"
+  },
+  "dependencies": {
+    "@react-three/drei": "10.7.9",
+    "@react-three/fiber": "9.8.1",
+    "@remotion/bundler": "4.0.528",
+    "@remotion/cli": "4.0.528",
+    "@remotion/fonts": "4.0.528",
+    "@remotion/google-fonts": "4.0.528",
+    "@remotion/media": "4.0.528",
+    "@remotion/media-utils": "4.0.528",
+    "@remotion/noise": "4.0.528",
+    "@remotion/paths": "4.0.528",
+    "@remotion/renderer": "4.0.528",
+    "@remotion/three": "4.0.528",
+    "@remotion/transitions": "4.0.528",
+    "mediabunny": "1.56.1",
+    "postprocessing": "6.39.5",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "remotion": "4.0.528",
+    "three": "0.186.1",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "@remotion/eslint-config-flat": "4.0.528",
+    "@types/react": "19.2.7",
+    "@types/three": "0.186.0",
+    "@types/web": "0.0.166",
+    "eslint": "9.39.4",
+    "prettier": "3.8.1",
+    "typescript": "5.9.3"
+  }
+}
