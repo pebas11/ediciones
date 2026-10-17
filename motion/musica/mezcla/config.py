@@ -49,6 +49,8 @@ DEFECTOS: dict = {
         "rampa_bloque_tiempos": 2.0,  # cambio de nivel entre secciones: rampa que termina en el downbeat
         "corregir": True,             # segunda pasada: mide la cama real y corrige cada bloque
         "tolerancia_lu": 0.5,
+        "guardia_voz": True,          # baja la cama donde, mientras se habla, supera objetivo + ventana
+        "guardia_max_db": 6.0,
     },
     "empalmes": {
         "loop_tiempos": 1.0,          # fundido en cada vuelta de loop
@@ -194,6 +196,7 @@ def validar_rangos(p: dict, errores: list):
     rango("niveles.realce_pausas_db", 0, 18)
     rango("niveles.realce_intro_db", 0, 24)
     rango("niveles.pausa_larga_s", 0.5, 60)
+    rango("niveles.guardia_max_db", 0, 18)
     rango("empalmes.loop_tiempos", 0.125, 8)
     rango("empalmes.empalme_tiempos", 0.0625, 8)
     rango("empalmes.guarda_ms", 0, 100)

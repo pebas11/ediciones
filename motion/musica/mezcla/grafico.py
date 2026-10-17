@@ -88,8 +88,18 @@ def dibujar(ruta, voz, R, ctrl, edl, plan, st, gr, resumen: dict):
     # etiquetas directas a la derecha, escalonadas (alivio de contraste: la identidad no queda
     # solo en el color)
     finales.sort()
+    sep, y_min, y_max = 3.6, -40.0, 12.0
     for i in range(1, len(finales)):
-        finales[i][0] = max(finales[i][0], finales[i - 1][0] + 3.6)
+        finales[i][0] = max(finales[i][0], finales[i - 1][0] + sep)
+    if finales:                              # la pila no se sale del panel
+        exceso = finales[-1][0] - y_max
+        if exceso > 0:
+            for f in finales:
+                f[0] -= exceso
+        falta = y_min - finales[0][0]
+        if falta > 0:
+            for f in finales:
+                f[0] += falta
     for y, s in finales:
         a.text(1.004, y, s, transform=a.get_yaxis_transform(), fontsize=7.5, color=TINTA_2,
                va="center", clip_on=False)

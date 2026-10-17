@@ -53,8 +53,9 @@ class Seccion:
 class Cancion:
     """Una canción renderizada: mapa de compases y acceso a sus stems."""
 
-    def __init__(self, carpeta: Path):
+    def __init__(self, carpeta: Path, cache: Path | None = None):
         self.carpeta = Path(carpeta)
+        self.dir_cache = Path(cache) if cache else None
         ruta = self.carpeta / "cues.json"
         try:
             c = json.loads(ruta.read_text(encoding="utf-8"))
@@ -114,6 +115,7 @@ class Cancion:
                                f"{self.duracion_s:.2f} s: ¿render incompleto?")
         self._potencias = None
         self._factor_eq: dict = {}
+        self._clicks: dict = {}
 
     # ------------------------------------------------------------ compases
     def __repr__(self):
@@ -192,6 +194,8 @@ class Cancion:
         Las cruzadas importan: el dron y el pad comparten fundamentales y suman más que sus
         potencias por separado."""
         if self._potencias is None:
+            self._potencias = self._leer_cache("potencias")
+        if self._potencias is None:
             from scipy.signal import sosfilt, sosfilt_zi
             from .niveles import K_SOS, SUB
             trozo = SUB * 200                       # 20 s
@@ -216,7 +220,59 @@ class Cancion:
             for k in claves:
                 acc[k] /= np.maximum(cuenta, 1)
             self._potencias = acc
+            self._escribir_cache("potencias", acc)
         return self._potencias
+
+    # ------------------------------------------------------------ caché en disco
+    def _clave(self) -> str:
+        import hashlib
+        h = hashlib.blake2b(digest_size=8)
+        h.update(self.slug.encode())
+        for s in STEMS:
+            st = self.rutas[s].stat()
+            h.update(f"{s}:{st.st_size}:{st.st_mtime_ns}".encode())
+        return h.hexdigest()
+
+    def _ruta_cache(self, nombre: str) -> Path | None:
+        if self.dir_cache is None:
+            return None
+        return self.dir_cache / f"{self.slug}-{self._clave()}-{nombre}.npz"
+
+    def _leer_cache(self, nombre: str):
+        r = self._ruta_cache(nombre)
+        if r is None or not r.exists():
+            return None
+        try:
+            with np.load(r, allow_pickle=False) as z:
+                out = {}
+                for k in z.files:
+                    out[tuple(k.split("|")) if "|" in k else k] = z[k]
+                return out
+        except Exception:
+            return None
+
+    def _escribir_cache(self, nombre: str, datos: dict):
+        r = self._ruta_cache(nombre)
+        if r is None:
+            return
+        try:
+            r.parent.mkdir(parents=True, exist_ok=True)
+            tmp = r.with_suffix(".tmp.npz")
+            np.savez(tmp, **{("|".join(k) if isinstance(k, tuple) else k): v for k, v in datos.items()})
+            tmp.replace(r)
+        except Exception:
+            pass
+
+    def clicks_fuente(self, stem: str, umbral: float, detector) -> np.ndarray:
+        """Clicks que el detector del motor encuentra en el stem original (para no confundirlos
+        con clicks de la edición)."""
+        clave = f"{stem}@{umbral:g}"
+        if not self._clicks:
+            self._clicks = self._leer_cache("clicks") or {}
+        if clave not in self._clicks:
+            self._clicks[clave] = np.asarray(detector(self.leer(stem, 0, self.n), umbral), np.float64)
+            self._escribir_cache("clicks", self._clicks)
+        return self._clicks[clave]
 
     def potencia_mezcla(self, amp: dict, idx) -> np.ndarray:
         """Potencia K por sub-bloque (índices `idx` de la fuente) de Σ amp_s · stem_s, con amp_s
@@ -299,5 +355,5 @@ class Catalogo:
     def cargar(self, nombre) -> Cancion:
         slug = self.resolver(nombre)
         if slug not in self._cargadas:
-            self._cargadas[slug] = Cancion(self.rutas[slug])
+            self._cargadas[slug] = Cancion(self.rutas[slug], self.dir / "_mezcla_cache")
         return self._cargadas[slug]

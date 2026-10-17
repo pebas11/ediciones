@@ -200,7 +200,7 @@ def potencias_control(ctrl, n_sub: int, plan) -> dict:
 
 
 def estimar(bloques: list[Bloque], plan, voz, p_voz_sub: np.ndarray | None, mask_sub: np.ndarray | None,
-            pot_ctrl: dict | None = None):
+            pot_ctrl: dict | None = None, excluir=()):
     """Ganancia inicial de cada bloque: lleva la sonoridad de la sección (con el ducking pleno)
     a voz + objetivo, donde objetivo = musica_bajo_voz_lu + nivel_db del tramo + una parte de
     la diferencia natural de la sección respecto del resto del tramo (conservar_dinamica),
@@ -260,7 +260,11 @@ def estimar(bloques: list[Bloque], plan, voz, p_voz_sub: np.ndarray | None, mask
                 ini = np.arange(0, T - CORTO + 1, 5)
                 dentro = (cs_n[ini + CORTO] - cs_n[ini]) == CORTO
                 habla = (cs_m[ini + CORTO] - cs_m[ini]) / CORTO >= 0.7
-                ok = dentro & habla
+                centros = (ini + CORTO / 2) * 0.1
+                libre = np.ones(len(ini), bool)       # las mismas ventanas que mide `corregir`
+                for (ea, eb) in excluir:
+                    libre &= ~((centros + 1.5 > ea) & (centros - 1.5 < eb))
+                ok = dentro & habla & libre
                 if ok.sum() >= 3:
                     ld = _lk((cs_d[ini + CORTO] - cs_d[ini])[ok] / CORTO)
                     lv = _lk((cs_v[ini + CORTO] - cs_v[ini])[ok] / CORTO)
@@ -332,6 +336,43 @@ def corregir(bloques: list[Bloque], t, rel, tol: float, excluir=()) -> bool:
                 bl.ganancia_db += d
                 cambio = True
     return cambio
+
+
+def relativo_en_habla(p_cama: np.ndarray, p_voz: np.ndarray, mask_sub: np.ndarray, ancho: int = CORTO,
+                      min_habla: int = 10):
+    """Cama − voz (LU) en ventanas de 3 s centradas en cada sub-bloque, contando SOLO los
+    sub-bloques con habla (compuerta de habla): mide la música bajo la voz sin mezclar la subida
+    de las pausas. NaN donde hay menos de `min_habla` sub-bloques (1 s) de habla en la ventana."""
+    n = min(len(p_cama), len(p_voz), len(mask_sub))
+    m = (np.asarray(mask_sub[:n]) >= 0.5).astype(np.float64)
+    k = np.ones(ancho)
+    num_c = np.convolve(m * p_cama[:n], k, mode="same")
+    num_v = np.convolve(m * p_voz[:n], k, mode="same")
+    den = np.convolve(m, k, mode="same")
+    with np.errstate(divide="ignore", invalid="ignore"):
+        rel = 10 * np.log10(num_c / num_v)
+    rel[(den < min_habla) | (num_v <= 0) | (num_c <= 0)] = np.nan
+    return rel
+
+
+def guardia_voz(p_cama, p_voz, mask_sub, bloques: list, P: dict) -> np.ndarray:
+    """Reducción (dB, por sub-bloque de 100 ms) donde la cama bajo la voz supera el objetivo del
+    bloque + ventana_lu. Se sostiene 1 s y se suaviza (rampas de ~0,5 s); tope `guardia_max_db`."""
+    pn = P["niveles"]
+    n = min(len(p_cama), len(p_voz), len(mask_sub))
+    rel = relativo_en_habla(p_cama, p_voz, mask_sub)
+    techo = np.full(n, pn["musica_bajo_voz_lu"] + pn["ventana_lu"])
+    for bl in bloques:
+        for (a, b) in bl.rangos:
+            techo[max(0, int(a / 0.1)):max(0, int(b / 0.1))] = bl.objetivo_lu + pn["ventana_lu"]
+    exceso = np.nan_to_num(rel - techo, nan=0.0)
+    exceso = np.clip(exceso, 0.0, pn["guardia_max_db"])
+    if exceso.max() <= 0.05:
+        return np.zeros(n)
+    from scipy.ndimage import maximum_filter1d, uniform_filter1d
+    red = maximum_filter1d(exceso, size=11, mode="constant")
+    red = uniform_filter1d(uniform_filter1d(red, size=7, mode="constant"), size=7, mode="constant")
+    return np.clip(red, 0.0, pn["guardia_max_db"])
 
 
 class CurvaTramo:

@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "notas": "Prueba entre canciones distintas sobre voz_prueba.wav: Umbral (88, 4/4) → Deriva (104) → Marea (72, 6/8) → Aurora (112) → Umbral. Cubre fundido entre canciones con material previo, cola, fundido de 6/8 a 4/4, pausa, dos anclas y final natural. Correr con --canciones salida/_mezcla_pruebas/canciones (copia fija).",
+  "tramos": [
+    {"id": "apertura", "cancion": "umbral", "secciones": ["umbral"], "inicio": 0.0, "fin": 21.0,
+     "transicion": {"tipo": "fundido", "tiempos": 2}},
+    {"id": "explicacion", "cancion": "deriva", "secciones": ["corriente", "deriva"], "inicio": 21.0, "fin": 66.5,
+     "transicion": {"tipo": "cola", "segundos": 3}},
+    {"id": "giro", "cancion": "marea", "secciones": ["resaca", "giro", "claridad"],
+     "ancla": {"seccion": "giro", "en": 72.2}, "inicio": 66.5, "fin": 95.0,
+     "transicion": {"tipo": "fundido", "tiempos": 4}},
+    {"id": "climax", "cancion": "aurora", "secciones": ["impulso", "cumbre"],
+     "ancla": {"seccion": "cumbre", "en": 103.6}, "inicio": 95.0, "fin": 125.8, "nivel_db": 1,
+     "transicion": {"tipo": "pausa"}},
+    {"id": "cierre", "cancion": "umbral", "secciones": ["cierre"], "inicio": 127.4, "fin": 150.0,
+     "transicion": {"tipo": "final"}}
+  ]
+}

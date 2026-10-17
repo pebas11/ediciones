@@ -128,7 +128,7 @@ VIB = [
     (51, "A5", 6.0, 0.50), (53, "F#5", 6.0, 0.48), (55, "C#6", 6.0, 0.50), (57, "B5", 3.0, 0.48),
     (58, "E6", 3.0, 0.44),
     # reflujo: la novena queda sonando
-    (59, "F#5", 6.0, 0.34), (63, "F#5", 6.0, 0.26), (65, "E5", 6.0, 0.26), (67, "E5", 6.0, 0.25),
+    (59, "F#5", 6.0, 0.3), (63, "F#5", 6.0, 0.22), (65, "E5", 6.0, 0.22), (67, "E5", 6.0, 0.22),
 ]
 
 # ---- Filtro del piano (Hz): la marea entera y, adentro, olas de 4 compases (cresta al 40 %).
@@ -594,15 +594,15 @@ def cancion() -> Cancion:
     pulso.patron("bombo", PULSO, 51, 59, vel=0.36)
 
     # ---------------------------------------------------------------- 59–68 reflujo
-    violines.nota(59, "F#5", 5.0, vel=0.36, vel_fin=0.06, legato=True)
-    violas.nota(59, "A4", 5.0, vel=0.34, vel_fin=0.06).nota(59, "D5", 5.0, vel=0.3, vel_fin=0.05)
-    chelo.nota(59, "D4", 6.0, vel=0.44, vel_fin=0.16)
-    cbajo.nota(59, "D2", 12.0, vel=0.4, vel_fin=0.22).nota(63, "B1", 3.0, vel=0.26)
-    cbajo.nota(64, "G1", 3.0, vel=0.26).nota(65, "A1", 6.0, vel=0.26, vel_fin=0.3)
-    cbajo.nota(67, "D2", 6.0, vel=0.28, vel_fin=0.08)
-    respira(piano, C, 59, 67, vel=0.21, melodicas=[chelo, violines])
-    chelo.melodia(63, "A3/1.5_ D4/1_ E4/0.5_ | F#4/3 | E4/1.5_ D4/1.5_ | C#4/3 | D4/6", vel=0.35)
-    piano.acorde(67, ["D2", "A2", "E3", "F#3", "B3", "E4", "A4"], 6.0, vel=0.25, rasgueo=0.06)
+    violines.nota(59, "F#5", 5.0, vel=0.32, vel_fin=0.05, legato=True)
+    violas.nota(59, "A4", 5.0, vel=0.3, vel_fin=0.05).nota(59, "D5", 5.0, vel=0.26, vel_fin=0.04)
+    chelo.nota(59, "D4", 6.0, vel=0.38, vel_fin=0.14)
+    cbajo.nota(59, "D2", 12.0, vel=0.36, vel_fin=0.2).nota(63, "B1", 3.0, vel=0.23)
+    cbajo.nota(64, "G1", 3.0, vel=0.23).nota(65, "A1", 6.0, vel=0.23, vel_fin=0.26)
+    cbajo.nota(67, "D2", 6.0, vel=0.25, vel_fin=0.07)
+    respira(piano, C, 59, 67, vel=0.19, melodicas=[chelo, violines])
+    chelo.melodia(63, "A3/1.5_ D4/1_ E4/0.5_ | F#4/3 | E4/1.5_ D4/1.5_ | C#4/3 | D4/6", vel=0.3)
+    piano.acorde(67, ["D2", "A2", "E3", "F#3", "B3", "E4", "A4"], 6.0, vel=0.23, rasgueo=0.06)
     piano.pedal(67, 69.9)
     piano.melodia("68:2.5", "F#5/1.5", vel=0.26)
 
@@ -614,7 +614,8 @@ def cancion() -> Cancion:
     # (sin escalones: cada cambio es una rampa, para que no haya clicks)
     chelo.auto("expresion", olas_auto(15, 31, 0.8, 1.0) +
                [(33.5, 1.0, "suave"), (34.9, 0.8, "suave")] + olas_auto(35, 51, 0.8, 1.0)[1:] +
-               [(52, 0.95, "suave"), (58.5, 1.0), (60, 0.85, "suave")])
+               [(52.4, 1.0, "suave"), (54.5, 0.9, "suave"), (56.2, 1.0, "suave"),
+                (58.9, 0.95, "suave"), (60, 0.85, "suave")])
     violas.auto("expresion", [(11, 0.8), (15, 0.6)] + olas_auto(15, 31, 0.6, 0.95)[1:] +
                 [(33.5, 1.0, "suave"), (34.9, 0.6, "suave"), (37, 0.55)] +
                 olas_auto(37, 51, 0.55, 0.95, periodo=7.0)[1:] + [(52, 0.85, "suave"), (58.5, 1.0),
@@ -622,8 +623,8 @@ def cancion() -> Cancion:
     violines.auto("expresion", [(27, 0.6), (31, 0.9, "suave"), (33.5, 1.0, "suave"),
                                 (34.9, 0.55, "suave"), (43, 0.55)] +
                   olas_auto(43, 47, 0.55, 0.85)[1:] +
-                  [(50.9, 0.95, "suave"), (53.2, 1.0, "suave"), (55, 0.9, "suave"),
-                   (57.2, 1.0, "suave"), (58.9, 0.95, "suave"), (60, 0.8, "suave")])
+                  [(50.9, 0.92, "suave"), (52.4, 1.0, "suave"), (54.5, 0.9, "suave"),
+                   (56.2, 1.0, "suave"), (58.9, 0.92, "suave"), (60, 0.8, "suave")])
     chelos2.auto("expresion", [(31, 0.6), (33.5, 1.0, "suave"), (34.9, 0.6, "suave"),
                                (51, 0.85), (59, 0.8)])
     cbajo.auto("expresion", [(7, 0.9), (31, 0.9), (33.5, 1.0, "suave"), (35, 0.85, "suave")])

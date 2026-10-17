@@ -37,13 +37,9 @@ class QAStems:
         self.R = renderizador
         self.clicks: dict = {}
         self.p_pre: np.ndarray | None = None
-        self._fuente: dict = {}
 
     def _clicks_fuente(self, cancion, s, umbral):
-        k = (cancion.slug, s)
-        if k not in self._fuente:
-            self._fuente[k] = np.array(detectar_clicks(cancion.leer(s, 0, cancion.n), umbral))
-        return self._fuente[k]
+        return cancion.clicks_fuente(s, umbral, detectar_clicks)
 
     def __call__(self, s: str, buf: np.ndarray):
         p = potencia_k_bloques(buf)

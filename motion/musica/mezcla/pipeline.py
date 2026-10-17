@@ -92,7 +92,10 @@ def mezclar(voz_path, plan_path, out_dir, extra=None, dir_canciones=None) -> dic
     rangos = [(tre.t_entrada, trs[k + 1].t_entrada if k + 1 < len(trs) else 1e9, tre.tramo.ducking)
               for k, tre in enumerate(trs)]
     ctrl = Control(voz, edl.n_total, P, rangos)
-    niveles.estimar(bloques, plan, voz, p_voz, mask, niveles.potencias_control(ctrl, len(p_voz), plan))
+    # ventanas que no se usan para medir ni estimar: donde conviven dos tramos
+    excluir = [tr.ventana for tr in edl.transiciones if tr.tipo != "continuo" and tr.a is not None]
+    niveles.estimar(bloques, plan, voz, p_voz, mask, niveles.potencias_control(ctrl, len(p_voz), plan),
+                    excluir)
     t0 = marca("niveles_s", t0)
     guarda = P["empalmes"]["guarda_ms"] / 1000
 
@@ -110,7 +113,6 @@ def mezclar(voz_path, plan_path, out_dir, extra=None, dir_canciones=None) -> dic
     if P["niveles"]["corregir"]:
         p_cama = niveles.potencia_k_bloques(cama)
         t_st, rel, *_ = niveles.medir_relativo(p_cama, p_voz, mask)
-        excluir = [tr.ventana for tr in edl.transiciones if tr.tipo != "continuo" and tr.a is not None]
         if niveles.corregir(bloques, t_st, rel, P["niveles"]["tolerancia_lu"], excluir):
             log("corrección de niveles: " + ", ".join(
                 f"{plan.tramos[b.tramo].id}/{b.seccion} {b.correccion_db:+.1f} dB" for b in bloques

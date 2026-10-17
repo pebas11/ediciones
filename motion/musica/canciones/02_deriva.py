@@ -1,7 +1,8 @@
 """«Deriva» — canción 2: la cama principal de las explicaciones.
 Movimiento constante y curiosidad luminosa: fluida, nunca quieta, nunca invasiva.
 
-La mayor / Fa# menor, 104 bpm, 4/4, 80 compases + cola ≈ 3:15.
+La mayor / Fa# menor, 104 bpm, 4/4, 80 compases (ritardando en los 4 últimos) + 9 s de
+cola ≈ 3:14. El 70 % (c9–56 y c65–72) va bajo voz.
 
 Todo "rueda" en grupos de 3 contra el 4/4:
   * el arpegio en semicorcheas acentúa cada 3 (polirritmo 3:4); cada frase de
@@ -41,7 +42,7 @@ import os
 
 from motor import (Cancion, Piano, Arpa, Vibrafono, Rhodes, Pad, Sub, Chelos, Violas,
                    Violines, Pizzicato, Bateria, Textura, swell, nube, nube_de_banco,
-                   EQ, Filtro, Tremolo, Ducking, Compresor, Saturacion, Auto, acorde,
+                   EQ, Filtro, Tremolo, Ducking, Compresor, Saturacion, Ancho, Auto, acorde,
                    escala, rng, nota)
 from motor.teoria import bajo_de
 
@@ -420,7 +421,9 @@ def s_orilla(A, c):
     rodar(A.vibra, C, c, c + 4, "ola", vel=lambda q: 0.36 + 0.02 * (q - c), frase=8)
     rodar(A.vibra, C, c + 4, c + 8, "remolino", vel=0.45, frase=4)
     A.auto("vibrafono", "vol", [(c, -18.0), (c + 2.5, 0.0, "suave")])
-    A.auto("vibrafono", "filtro", [(c, 650.0), (c + 3, 2200.0, "exp"), (c + 8, 7500.0, "exp")])
+    # tibio mientras está solo; la luz se abre del todo cuando entran el Rhodes y el sub (c9)
+    A.auto("vibrafono", "filtro", [(c, 650.0), (c + 3, 1800.0, "exp"), (c + 8, 3000.0, "exp"),
+                                   (c + 9, 7500.0, "exp")])
     # agua: nube granular con notas que caben en los cuatro acordes (A B C# E)
     A.tex.clip(nube(Vibrafono(motor_hz=0), "A4/0.25 C#5 E5 B5 A5 E5 C#5 B4 A4 E5 C#6 B5 E5 A5 C#5 B4",
                     dur_s=16.0, estirar=6.0, densidad=11, grano=(0.08, 0.24), tonos=(0, 12),
@@ -627,7 +630,7 @@ def s_bruma(A, c):
     A.bat.patron("shaker", "2323 2324 1212 1213", c, c + 2)
     A.tex.clip(nube(Vibrafono(motor_hz=MOTOR_CORCHEAS), "E5/0.5 A5 B5 E6 B5 A5 E5 B4 A4 E5 B5 A5",
                     dur_s=22.0, estirar=4.0, densidad=12, grano=(0.1, 0.3), tonos=(0, 12, -12),
-                    pesos=(4, 1, 1), ataque=4.0, caida=10.0), pos=c + 3, ganancia_db=-12)
+                    pesos=(4, 1, 1), ataque=4.0, caida=10.0, pan=0.45), pos=c + 3, ganancia_db=-12)
     A.piano.acorde(c + 6, ["A2", "E3", "B3", "G#4", "C#5"], 8, vel=0.22, rasgueo=0.05)
     A.piano.pedal(c + 6, c + 8.9)
 
@@ -662,16 +665,17 @@ def cancion() -> Cancion:
     A.vibra = C.pista("vibrafono", Vibrafono(motor_hz=MOTOR_CORCHEAS, motor_prof=0.25, tope_hz=7000.0,
                                                 abrir=0.3, ataque=0.003),
                       "armonia", vol=-3.0, envios={"reverb": 0.22, "eco": 0.12})
-    A.arpa = C.pista("arpa", Arpa(largo_max=3.0), "armonia", vol=-12.0,
+    A.arpa = C.pista("arpa", Arpa(largo_max=3.0, abrir=0.4), "armonia", vol=-12.0,
                      envios={"reverb": 0.28, "eco": 0.06}, efectos=[EQ(("pa", 110))])
-    A.piano = C.pista("piano", Piano(fieltro=0.7, mecanica=0.3, abrir=0.2), "armonia", vol=-3.0,
+    A.piano = C.pista("piano", Piano(fieltro=0.7, mecanica=0.3, abrir=0.3), "armonia", vol=-3.0,
                       envios={"reverb": 0.24, "eco": 0.04},
                       efectos=[EQ(("pa", 60), ("campana", 320, -2.0, 0.8))])
     A.rhodes = C.pista("rhodes", Rhodes(brillo=0.42, campana=0.3, trem_prof=0.0, drive=0.3, tope_hz=6000.0),
                        "armonia", vol=-6.5, envios={"reverb": 0.18, "eco": 0.08})
     A.pad = C.pista("pad", Pad(voces=6, desafinar=12, sub=0.0, ataque=2.0, soltar=3.0, pa=150, corte=900),
                     "armonia", vol=-11.0, envios={"reverb": 0.15},
-                    efectos=[EQ(("campana", 300, -2.0, 0.9)), Ducking(prof_db=2.5, relaj_ms=200)])
+                    efectos=[EQ(("campana", 300, -2.0, 0.9)), Ancho(1.2, mono_hz=250),
+                             Ducking(prof_db=2.5, relaj_ms=200)])
     A.sub = C.pista("sub", Sub(drive_db=6, octava=0.15, glide_ms=22), "bajo", vol=-7.0,
                     efectos=[Ducking(prof_db=3.0, relaj_ms=170)])
     A.bat = C.pista("bateria", Bateria(color=0.4), "bateria", vol=-8.0,
@@ -681,9 +685,9 @@ def cancion() -> Cancion:
     A.chelos = C.pista("chelos", Chelos(), "armonia", vol=-4.0, envios={"reverb": 0.3},
                        efectos=[EQ(("pa", 55))])
     A.violas = C.pista("violas", Violas(), "armonia", vol=-5.0, envios={"reverb": 0.32},
-                       efectos=[EQ(("pa", 120))])
+                       efectos=[EQ(("pa", 120), ("campana", 3000, -3.0, 0.9))])
     A.violines = C.pista("violines", Violines(), "armonia", vol=-2.0, envios={"reverb": 0.36},
-                         efectos=[EQ(("pa", 180))])
+                         efectos=[EQ(("pa", 180), ("campana", 3000, -3.0, 0.9))])
     A.pizz = C.pista("pizz", Pizzicato("violines"), "armonia", vol=-8.0,
                      envios={"reverb": 0.25, "sala": 0.1, "eco": 0.1},
                      efectos=[EQ(("pa", 160), ("campana", 3000, -2.0, 0.8))])
