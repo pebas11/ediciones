@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "notas": "Prueba con «01-umbral» sobre salida/_mezcla_pruebas/voz_prueba.wav (144,9 s). Cubre: varias secciones, loop largo (despertar ×2,4), acorte (umbral 21,8 → 15 s), ancla (downbeat de 'apertura' en «Y acá aparece…», 72,2 s), cola, fundido, pausa y final natural.",
+  "tramos": [
+    {
+      "id": "intro",
+      "cancion": "01-umbral",
+      "secciones": ["umbral"],
+      "inicio": 0.0,
+      "fin": 15.0,
+      "transicion": {"tipo": "fundido", "tiempos": 2}
+    },
+    {
+      "id": "exposicion",
+      "cancion": "umbral",
+      "secciones": ["despertar"],
+      "repetir": "despertar",
+      "inicio": 15.0,
+      "fin": 66.5,
+      "stems": {"melodia": -3},
+      "transicion": {"tipo": "cola", "segundos": 3}
+    },
+    {
+      "id": "revelacion",
+      "cancion": "umbral",
+      "secciones": ["pulso", "apertura"],
+      "ancla": {"seccion": "apertura", "en": 72.2},
+      "inicio": 66.5,
+      "fin": 103.6,
+      "transicion": {"tipo": "fundido", "tiempos": 2}
+    },
+    {
+      "id": "cumbre",
+      "cancion": "umbral",
+      "secciones": ["cumbre"],
+      "inicio": 103.6,
+      "fin": 125.8,
+      "nivel_db": 1,
+      "ducking": {"profundidad_db": {"melodia": -12}},
+      "transicion": {"tipo": "pausa"}
+    },
+    {
+      "id": "cierre",
+      "cancion": "umbral",
+      "secciones": ["cierre"],
+      "inicio": 127.4,
+      "fin": 150.0,
+      "transicion": {"tipo": "final"}
+    }
+  ]
+}
