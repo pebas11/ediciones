@@ -429,7 +429,7 @@ def cancion() -> Cancion:
     # chelos suben otra vez; violas en décimas encima
     linea_ligada(chelos, 49, ["E3", "F#3", "G3", "A3", "B3", "C#4", "D4", "A3"], vel=0.3, vel_fin=0.47)
     linea_ligada(violas, 49, ["G4", "A4", "B4", "C#5", "D5", "E5", "F#5", "E5"], vel=0.22, vel_fin=0.4)
-    violines.melodia(56, "r/2 A4/0.5 B4/0.5 C#5/1", vel=0.5)            # anacrusa del tema
+    violines.melodia(56, "r/2 A4/0.5 B4/0.5 C#5/1", vel=0.46)           # anacrusa del tema
     for t0, t1, _s, b in bajos_unidos(C, 53, 57):
         cbajo.nota(C.c(t0), b, t1 - t0, vel=0.42)
     cielo.acordes_ligados(C.voicings(53, 73, voces=3, rango=("A4", "E6")), vel=0.55)
@@ -445,7 +445,7 @@ def cancion() -> Cancion:
         bat.golpe(f"{c}:4.5", "hat_abierto", 0.45)
     bat.patron("caja", ".... .... .... oxxX", 64, 65, vel=0.45)
     violines.melodia(57, TEMA_2, vel=0.68)
-    violas.melodia(57, TEMA_2, vel=0.45, transponer=-12)
+    violas.melodia(57, TEMA_2, vel=0.42, transponer=-12)
     chelos.melodia(57, CONTRA_2, vel=0.29)
     for t0, t1, _s, b in bajos_unidos(C, 57, 65):
         cbajo.nota(C.c(t0), b, t1 - t0, vel=0.56)
@@ -506,7 +506,7 @@ def cancion() -> Cancion:
     violas.nota(81, "B4", 4, vel=0.26).nota(82, "A4", 12, vel=0.26, vel_fin=0.04, legato=True)
     violines.melodia(81, "F#5/4_ | G5/4_ | F#5/8", vel=0.28, legato=True)   # 4–3 arriba de todo
     celesta_voz.melodia(82, CITA_FINAL, vel=0.36)
-    glock.nota("83:3", "A5", 2, vel=0.36)
+    glock.nota("83:3", "A5", 2, vel=0.39)
     cielo.acordes_ligados(C.voicings(81, 85, voces=3, rango=("A4", "D6")), vel=0.4)
     tex.clip(nube_acordes(Piano(fieltro=0.55), [(0, 2, ["D3", "A3", "E4", "F#4", "A4"]),
                                                  (2, 2, ["D4", "F#4", "A4", "E5"])],
