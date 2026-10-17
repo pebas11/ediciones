@@ -15,6 +15,16 @@ Pedido del 17/10/2026. Este proyecto **no sigue las series anteriores de la bit�
 - **Herramientas:** Remotion primero, y después cualquier otra disponible. Nada genérico: la mejor calidad posible.
 - **Entrega:** el video completo, en buena calidad, en el Escritorio del usuario (`C:\Users\pebas\Desktop`).
 
+## Preferencias del usuario sobre la música (17/10)
+- Las canciones quedan a criterio: tienen que encajar con lo que dice, con el momento y con el ritmo de la narración.
+- **Bajito: "no me pongas la música a tope".** Mientras habla, la música va ~24 dB por debajo de la voz. En las pausas sube poco: ~10 dB por debajo de la voz. En intro y outro, como máximo ≈ −20 LUFS de corto plazo.
+- Uso previsto de las canciones:
+  - «Umbral»: apertura y gancho.
+  - «Deriva»: explicaciones, la cama principal.
+  - «Espiral»: problemas, preguntas y tensión.
+  - «Marea»: momentos emotivos o reflexivos.
+  - «Aurora»: clímax y cierre.
+
 ## Dónde se puede hacer cada parte
 - `C:\`, `E:\` y el Escritorio existen solo en la PC del usuario. Una sesión en la nube no los ve.
 - **Este repo es público.** No subir el audio crudo, `1001.mp4` (es de terceros) ni ningún archivo de entrada. Para eso está `motion/input/`, que está en `.gitignore`.
