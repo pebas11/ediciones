@@ -171,8 +171,8 @@ def quitar_zumbido(x: np.ndarray, sr: int, f0: float, armonicos: list[int],
     ti = np.arange(B) / sr
     centros = (np.arange(nb) * B + B / 2) / sr
     y = x.astype(np.float64).copy()
-    estimados = 0
-    for k in armonicos:
+    fasores = {}
+    for k in sorted(set(armonicos)):
         fk = f0 * k
         if fk >= sr / 2 - 100:
             continue
@@ -185,17 +185,27 @@ def quitar_zumbido(x: np.ndarray, sr: int, f0: float, armonicos: list[int],
             if hi - lo >= 3:
                 sel = c[iq[lo:hi]]
                 cs[b] = np.median(sel.real) + 1j * np.median(sel.imag)
-        if not np.any(cs):
-            continue
-        estimados += 1
-        # síntesis por tramos (memoria acotada), fasor interpolado entre centros de bloque
-        paso = sr * 10
-        for a in range(0, n, paso):
-            t = np.arange(a, min(n, a + paso)) / sr
+        if np.any(cs):
+            fasores[k] = cs
+    del X
+    # síntesis por tramos de 10 s; los armónicos salen de potencias del fasor fundamental
+    # (dos senos/cosenos por muestra en lugar de dos por armónico)
+    paso = sr * 10
+    for a in range(0, n, paso):
+        t = np.arange(a, min(n, a + paso)) / sr
+        z1 = np.exp(1j * 2 * np.pi * f0 * t)
+        zk = np.ones_like(z1)
+        kprev = 0
+        hum = np.zeros(len(t))
+        for k, cs in sorted(fasores.items()):
+            for _ in range(k - kprev):
+                zk *= z1
+            kprev = k
             cr = np.interp(t, centros, cs.real)
             ci = np.interp(t, centros, cs.imag)
-            y[a : a + len(t)] -= cr * np.cos(w * t) - ci * np.sin(w * t)
-    return y.astype(np.float32), {"metodo": "resta de fasores", "armonicos_restados": estimados,
+            hum += cr * zk.real - ci * zk.imag
+        y[a : a + len(t)] -= hum
+    return y.astype(np.float32), {"metodo": "resta de fasores", "armonicos_restados": len(fasores),
                                    "bloques_sin_voz": int(quietos.sum()), "bloques": int(nb)}
 
 

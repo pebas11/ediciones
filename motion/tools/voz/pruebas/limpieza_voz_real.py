@@ -56,7 +56,7 @@ def main():
                     help="solo ruido + zumbido + recorte + AAC (para medir el ruido sin la cola de la sala)")
     a = ap.parse_args()
     import generar_fixture as gf
-    from vozlib import analisis, espectro, limpieza, dsp
+    from vozlib import analisis, espectro, limpieza
 
     if a.out is None:
         a.out = AQUI.parent / "salida" / ("voz_real_degradada" + ("_sin_reverb" if a.sin_reverb else ""))

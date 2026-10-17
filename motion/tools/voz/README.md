@@ -232,7 +232,8 @@ proceso por **minuto de audio**:
 |---|---|---|
 | extracción | 0,8 | 0,5 |
 | análisis (original + resultado) | 2,9 | 1,9 |
-| limpieza sin la red (pasos 0–2 y 4–8) | 5,4 | 4,2 |
+| limpieza sin la red (pasos 0, 1 y 4–8) | 5,4 | 4,2 |
+| resta de zumbido (solo si hay zumbido) | — (no tenía) | 3,7 |
 | reducción de ruido DeepFilterNet3 | 14,1 (5,5 con la máquina libre) | 8,3 |
 | espectrogramas | 1,7 | 4,1 |
 | transcripción `large-v3-turbo` int8 | 55,0 | 85,6 |
@@ -261,7 +262,7 @@ de transcripción; `large-v3` ≈ 1 hora o más.
 ## Pruebas
 
 ```bash
-python -m pytest pruebas/test_unidades.py -q  # 14 pruebas rápidas sin Whisper (EDL, cortes, DSP)
+python -m pytest pruebas/test_unidades.py -q  # 15 pruebas rápidas sin Whisper (EDL, cortes, DSP)
 python pruebas/generar_fixture.py             # fixture sintético (TTS es-AR + problemas conocidos)
 python -m pytest pruebas/test_pipeline.py -q  # procesa, aplica y compara EDL esperada vs obtenida
 python pruebas/test_pipeline.py               # lo mismo, imprimiendo el reporte completo
@@ -271,7 +272,8 @@ python pruebas/benchmark_modelos.py salida/X/voz_limpia.wav --dur 180  # compara
 ```
 
 El fixture (`pruebas/fixtures/`, ignorado por git; `generar_fixture.py` lo rehace con el mismo
-guion y semillas; edge-tts necesita internet y su caché queda en `fixtures/tts_cache/`) tiene: silencios de 1,5–2,8 s; un arranque en falso repetido; un blooper ("Ay, perdón,
+guion y semillas; edge-tts necesita internet y su caché queda en `fixtures/tts_cache/`)
+tiene: silencios de 1,5–2,8 s; un arranque en falso repetido; un blooper ("Ay, perdón,
 de nuevo.") seguido de la toma buena; muletillas ("Eh…", "este…", "mmm"); trampas que no hay que
 cortar ("Bienvenidos *de nuevo* al canal", "*Este* intercambio"); ruido rosa a −56 dBFS;
 zumbido de 50 Hz con 9 armónicos; reverb de habitación (RT60 0,5 s); 3 clics de boca; 3 golpes
@@ -279,53 +281,69 @@ de plosiva y un grito que clipea 3,7 dB. Se codifica a MP4 (AAC estéreo + video
 30 fps). `esperado.json` guarda la verdad: tiempos de cada palabra (calibrados contra el
 audio), rol (mantener/quitar) y cortes esperados.
 
-**Resultado (fixture, `large-v3-turbo`, 23 pruebas en verde):**
+**Resultado (fixture, `large-v3-turbo`; 24 pruebas en verde: 9 de punta a punta + 15 unitarias):**
 
 | esperado | t (s) | obtenido | detalle |
 |---|---|---|---|
-| silencio 2,23 s | 4,9 | `silencio` | queda 0,47 s |
+| silencio 2,23 s | 4,9 | `silencio` | queda 0,44 s |
 | arranque en falso «Los hongos no son…» | 9,1 | `arranque_falso` 0,97 | cubre 100 % de las palabras, no pisa vecinas |
 | muletilla «Eh…» | 15,2 | `muletilla` 0,96 | 100 % |
 | blooper «Puede crecer kilómetros bajo el… Ay, perdón, de nuevo.» | 19,0 | `blooper` 0,98 | 100 %, se queda la toma buena |
-| silencio 2,83 s | 26,2 | `silencio` | queda 0,50 s |
+| silencio 2,83 s | 26,2 | `silencio` | queda 0,47 s |
 | muletillas «este… mmm» | 30,4 | 2 × `muletilla` 0,80 / 0,96 | 100 % |
-| silencio 1,93 s | 35,4 | `silencio` | queda 0,50 s |
-| silencio 1,54 s | 44,8 | `silencio` | queda 0,52 s |
+| silencio 1,93 s | 35,4 | `silencio` | queda 0,53 s |
+| silencio 1,54 s | 44,8 | `silencio` | queda 0,48 s |
 
 Sin cortes de contenido extra: "Bienvenidos de nuevo al canal" y "Este intercambio" quedan.
 Texto final contra el guion sin tomas fallidas: WER 2 % (solo "micelio" → "miserio", ×2).
-Pausa máxima final 0,51 s. Duración 53,5 s → 33,6 s. El video cortado dura lo mismo que la voz
-(1008 cuadros a 30 fps = 33,600 s).
+Pausa máxima final 0,48 s. Duración 53,5 s → 33,3 s. El video cortado dura lo mismo que la voz
+(1000 cuadros a 30 fps = 33,33 s).
 
-Limpieza medida en el fixture: SNR en las pausas 28,5 → 42,7 dB (+14 dB, con límite de 15 dB);
-zumbido: f0 estimada 49,9998 Hz (real 50), residuo < −100 dBFS; clipping detectado en el AAC y
-ausente en el resultado (de-clip aislado: 20,3 → 24,9 dB de SNR); clics 9,6 / 16,4 / 16,9 dB
-sobre el fondo → −2,0 / 3,1 / 5,9 dB; graves de las plosivas −2,2 / −6,3 / −7,5 dB → −12,7 /
-−14,0 / −9,7 dB (la referencia seca tiene −16 / −13 / −15); −16,0 LUFS y −1,65 dBTP; RT60
-aparente 0,46 → 0,34 s (DeepFilterNet reduce algo la reverb, no la saca).
+Limpieza medida en el fixture: SNR en las pausas 28,5 → 44,3 dB (+15,8 dB, límite de 15 dB
+más el zumbido quitado); zumbido: f0 estimada 49,9998 Hz (real 50), en los silencios queda a
+0–3 dB del ruido de fondo (antes, 19–24 dB por encima); clipping detectado en el AAC y ausente
+en el resultado (de-clip aislado: 20,3 → 24,9 dB de SNR); clics 9,6 / 16,4 / 16,9 dB sobre el
+fondo → −1,4 / 2,6 / 5,3 dB; graves de las plosivas −2,2 / −6,3 / −7,5 dB → −12,7 / −13,6 /
+−10,0 dB (la referencia seca tiene −16 / −13 / −15); −16,0 LUFS y −1,65 dBTP; RT60 aparente
+0,46 → 0,31 s (DeepFilterNet baja algo la reverb, no la saca).
 
-Bordes de palabra contra la verdad del TTS: inicio, mediana 38 ms (Whisper solo: 98 ms), p90
-107 ms; final antes de pausa, mediana 19 ms, p90 43 ms.
+Bordes de palabra contra la verdad del TTS (varía un poco entre corridas): inicio, mediana
+40–51 ms (Whisper solo: ~100 ms), p90 ~105 ms; final antes de pausa, mediana ~20 ms, p90 45–67 ms.
+
+**Voz real con degradación conocida** (`limpieza_voz_real.py`: 2 min de LibriVox con el mismo
+ruido rosa, zumbido, recorte y AAC del fixture; se compara contra el original limpio):
+
+| | voz sobre pausas | distancia espectral (LSD) en voz |
+|---|---|---|
+| original limpio | 54,7 dB | — |
+| degradada (sin reverb) | 23,5 dB | 5,89 dB |
+| **limpiada** | **40,8 dB** (+17 dB) | **3,77 dB** |
+| degradada con reverb de sala | 23,7 dB | 7,33 dB |
+| limpiada | 29,2 dB (+5,5 dB) | 7,25 dB |
+
+El ruido y el zumbido se van; la reverb de una sala bastante viva (RT60 0,5 s, DRR +4 dB) no:
+en las pausas cortas de la lectura continua queda la cola de la sala.
 
 **Grabación real (LibriVox, "El escuerzo", 8:20):** la grabación ya venía limpia (−27 LUFS,
 piso −70 dBFS, seca, sin zumbido ni recorte). Resultado −16,0 LUFS / −1,65 dBTP sin artefactos
 visibles en los espectrogramas (ni ruido musical ni pre-eco); EQ −1,7 dB en 300 Hz, +1 dB de
-presencia, +1,5 dB de aire. Transcripción: 1474 palabras, probabilidad media 0,97; los errores
-están en palabras raras o pegadas ("atraviliario" por "atrabiliario", "despansurrado" por
-"despanzurrado", "la afinada Antonia" por "la finada Antonia") y en algún tramo sin
-puntuación. Propuesta: 26 silencios, una repetición pegada ("de que que yo") y un "Aumentó.
-Aumentó de una manera…" que puede ser recurso del texto o un reinicio del lector: queda con
-confianza 0,65 y sin aplicar (decide el orquestador). Las 9 respiraciones fuertes entre frases
-no se proponen como cortes.
+presencia, +1,5 dB de aire; de-esser actuando el 5 % del tiempo; 16 clics de boca reparados
+(de 455 candidatos: los otros 439 eran explosiones de "p/t/k" y no se tocaron).
+Transcripción: 1453 palabras, probabilidad media 0,975; los errores están en palabras raras
+o pegadas ("atraviliario" por "atrabiliario", "despansurrado" por "despanzurrado", "la afinada
+Antonia" por "la finada Antonia") y en algún tramo sin puntuación. Propuesta: 23 silencios
+(pausas p95 0,67 → 0,48 s), 2 sonidos sin transcribir y un "Aumentó, aumentó de una manera…"
+(recurso del texto) que queda con confianza 0,65 y sin aplicar. Las respiraciones fuertes
+entre frases no se proponen como cortes.
 
 ## Decisiones y hallazgos
 
 - **Zumbido por resta, no por notches.** Un notch de 1,5 Hz "suena" ~0,5 s. Con `filtfilt`
-  aparecía un pre-eco de −37 dBFS 70 ms antes de cada palabra (y Whisper adelantaba las
-  palabras); causal, el sonido quedaba después de cada frase cuando un armónico de la voz pasa
-  por un múltiplo de 50 Hz (en voz masculina real, la pausa siguiente subía a −10 dB respecto
-  de la voz) y en los silencios del fixture quedaban armónicos 7–14 dB sobre el ruido. Con la
-  resta de fasores quedan 0–3 dB (inaudible) y la voz no se toca: no está en fase con la red.
+  aparecía un pre-eco de −37 dBFS 70 ms antes de cada palabra; causal, el sonido quedaba
+  después de cada frase cuando un armónico de la voz pasa por un múltiplo de 50 Hz (en voz
+  masculina real, la pausa siguiente subía a −10 dB respecto de la voz) y en los silencios del
+  fixture quedaban armónicos 7–14 dB sobre el ruido. Con la resta de fasores quedan 0–3 dB
+  (inaudible) y la voz no se toca: no está en fase con la red.
 - **Frecuencia exacta de la red.** Un error de 0,03 Hz deja pasar el zumbido 20–30 dB más
   fuerte; se refina con la suma coherente de los armónicos (error < 0,001 Hz en el fixture).
 - **De-click antes de la red neuronal.** DeepFilterNet conserva los clics pero los desparrama
@@ -340,7 +358,7 @@ no se proponen como cortes.
 
 ## Limitaciones
 
-- **Bordes de palabra**: Whisper + energía da ~40 ms de mediana y ~110 ms en el percentil 90
+- **Bordes de palabra**: Whisper + energía da ~50 ms de mediana y ~105 ms en el percentil 90
   para el inicio. Dentro del habla continua la energía no separa palabras: ahí solo se corrige
   el corrimiento global. Para precisión de cuadro, el paso siguiente sería un alineador
   forzado CTC (p. ej. `torchaudio.pipelines.MMS_FA`, 1,2 GB, también en CPU) sobre el texto ya
@@ -355,8 +373,12 @@ no se proponen como cortes.
   detectan; con marcador pero sin retoma clara se proponen con confianza baja.
 - **De-clip después del AAC**: mejora la forma de onda (+0,7 a +3,6 dB de SNR medido) pero no
   hace milagros con un recorte fuerte; lo que sí se garantiza es que la salida no recorte.
-- **Reverb**: DeepFilterNet la baja un poco (RT60 aparente 0,46 → 0,34 s en el fixture); no hay
-  de-reverberación dedicada.
+- **Reverb**: DeepFilterNet la baja un poco (RT60 aparente 0,46 → 0,31 s en el fixture); no hay
+  de-reverberación dedicada. Con voz real en una sala viva, las pausas cortas siguen llenas de
+  cola (+5,5 dB de mejora contra +17 dB sin reverb).
+- **Zumbido con mucha deriva** (generadores, inversores): la resta usa una frecuencia de red
+  por archivo y fasores con mediana en ±4 s; si la red se corre más de ~0,05 Hz, los armónicos
+  altos se restan peor (DeepFilterNet se lleva parte del resto).
 - **Tiempo**: la transcripción manda (~1 min de proceso por minuto de audio con la máquina
   cargada). `--beam 1` ahorra ~20 %; `large-v3` es mucho más lento.
 - **DeepFilterNet en Python 3.13**: `deepfilterlib` no publica ruedas para 3.13 (hay que
