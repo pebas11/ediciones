@@ -42,6 +42,11 @@ Se suben a la rama a medida que se terminan. Hacé `git pull` antes de cada etap
    - Codificación H.264 1080p60 de alta calidad.
 6. **Entrega.** Copiar el MP4 final a `C:\Users\pebas\Desktop\`.
 
+## Dónde conviene renderizar
+- **Contenedor en la nube, sin GPU:** Remotion en calidad final va a ~0,25 fps, con WebGL por CPU (`swangle`). Un video de 10 min a 60 fps son ~43 h. Sirve solo para borradores (~1 fps) y cuadros sueltos.
+- **PC del usuario, con GPU:** estimado en 25–60 min para 10 min de video, sin medir. Hay que correr `npm run bench` en `motion/remotion` para confirmarlo.
+- Detalles en `motion/remotion/README.md`: `--gl=angle` en Windows y render por tramos reanudable.
+
 ## Para una sesión de Claude Code en la PC del usuario
 1. Bajar el repo: `git clone https://github.com/pebas11/ediciones`, o `git pull` si ya está. Después, `git checkout ccr-1c1089b6-6o0jmz`.
 2. Instalar lo que falte: Node 20+, Python 3.11+ y ffmpeg (`winget install Gyan.FFmpeg`).
