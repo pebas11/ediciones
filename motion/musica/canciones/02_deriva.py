@@ -34,12 +34,9 @@ Lugar para la voz: en las secciones [bajo voz] la melodía son ecos de 2–3 not
 y el motor les aplica el hueco de 3 dB en 2,4 kHz. La batería lleva un valle
 fijo en 3 kHz (transitorios suaves en 1–4 kHz).
 
-Prueba de una parte sin tocar render.py:
-    DERIVA_SECCIONES=respiro,regreso python3 motion/musica/render.py 02 --hasta 17
-arma solo esas secciones, una tras otra, desde el compás 1.
+Prueba de una parte: python3 motion/musica/render.py 02 --desde 41 --hasta 57
+(respiro y regreso, con la reverb y el eco ya cargados).
 """
-import os
-
 from motor import (Cancion, Piano, Arpa, Vibrafono, Rhodes, Pad, Sub, Chelos, Violas,
                    Violines, Pizzicato, Bateria, Textura, swell, nube, nube_de_banco,
                    EQ, Filtro, Tremolo, Ducking, Compresor, Saturacion, Ancho, Auto, acorde,
@@ -420,7 +417,7 @@ def s_orilla(A, c):
     # el arpegio solo; deriva de verdad: la frase dura 8 compases (se realinea cada 3)
     rodar(A.vibra, C, c, c + 4, "ola", vel=lambda q: 0.36 + 0.02 * (q - c), frase=8)
     rodar(A.vibra, C, c + 4, c + 8, "remolino", vel=0.45, frase=4)
-    A.auto("vibrafono", "vol", [(c, -18.0), (c + 2.5, 0.0, "suave")])
+    A.auto("vibrafono", "vol", [(c, -20.0), (c + 2.5, -2.2, "suave"), (c + 8, -2.2), (c + 8.5, 0.0, "suave")])
     # tibio mientras está solo; la luz se abre del todo cuando entran el Rhodes y el sub (c9)
     A.auto("vibrafono", "filtro", [(c, 650.0), (c + 3, 1800.0, "exp"), (c + 8, 3000.0, "exp"),
                                    (c + 9, 7500.0, "exp")])
@@ -440,7 +437,7 @@ def s_corriente(A, c):
     sub_camina(A.sub, C, c, c + 4, "blancas", vel=0.66)
     sub_camina(A.sub, C, c + 4, c + 8, "tresillo", vel=0.70)
     A.bat.patron("shaker", SH, c + 4, c + 8)
-    A.vibmel.melodia(P(c + 7, 3), "E5/0.75 A5/0.75 B5/0.5", vel=0.26)   # la cabeza del motivo
+    A.vibmel.melodia(P(c + 7, 3), "E5/0.75 A5/0.75 B5/0.5", vel=0.42)   # la cabeza del motivo
 
 
 def s_deriva(A, c):
@@ -452,10 +449,10 @@ def s_deriva(A, c):
     sub_camina(A.sub, C, c, c + 8, "tresillo", vel=0.72)
     rhodes_toca(A.rhodes, C, c, c + 8, "tresillo", vel=0.37)
     A.auto("rhodes", "trem", [(c, 0.38), (c + 8, 0.36)])
-    A.vibmel.melodia(P(c + 3, 3), "C#5/0.75 E5/0.75 F#5/0.5", vel=0.26)   # sobre Dmaj9
-    A.vibmel.melodia(P(c + 7, 3), "E5/0.75 A5/0.75 B5/0.5", vel=0.26)     # sobre E6sus4
+    A.vibmel.melodia(P(c + 3, 3), "C#5/0.75 E5/0.75 F#5/0.5", vel=0.39)   # sobre Dmaj9
+    A.vibmel.melodia(P(c + 7, 3), "E5/0.75 A5/0.75 B5/0.5", vel=0.39)     # sobre E6sus4
     A.tex.clip(swell(Arpa(), ["F#2", "C#3", "A3", "E4", "G#4"], largo_tiempos=4, vel=0.55),
-               fin=c + 8, ganancia_db=-18)
+               fin=c + 8, ganancia_db=-15.7)
 
 
 def s_cardumen(A, c):
@@ -481,6 +478,7 @@ def s_altamar(A, c):
     rodar(A.piano, C, c, c + 8, "espejo", vel=0.28, dur=0.6)
     rodar(A.arpa, C, c, c + 8, "alta", vel=0.29, dur=1.5, apagar=True, solo_acentos=True)
     A.chelos.melodia(c, CONTRA_ALTAMAR, vel=0.35)
+    A.auto("chelos", "vol", [(c - 0.5, 7.9), (c + 8, 7.9)])
     A.auto("chelos", "expresion", [(c, 0.55), (c + 1.9, 0.9, "suave"), (c + 2, 0.7), (c + 3.9, 0.95, "suave"),
                                    (c + 4, 0.75), (c + 5.9, 1.0, "suave"), (c + 6, 0.8), (c + 7.9, 0.6, "suave")])
     rhodes_toca(A.rhodes, C, c, c + 8, "tresillo", vel=0.36)
@@ -500,21 +498,22 @@ def s_respiro(A, c):
     A.auto("rhodes", "trem", [(c, 0.40), (c + 1, 0.55, "suave"), (c + 7, 0.55), (c + 8, 0.36, "suave")])
     A.pad.acordes_ligados(C.voicings(c, c + 8, voces=5, rango=("E3", "F5")), vel=0.34)
     A.auto("pad", "corte", [(c, 1400.0), (c + 4, 2100.0, "exp"), (c + 8, 1500.0, "exp")])
-    sub_camina(A.sub, C, c, c + 8, "largo", vel=0.36)
+    sub_camina(A.sub, C, c, c + 8, "largo", vel=0.45)
     for t0, t1, _s, b in fusionar(C.bajos(c, c + 8, rango=("G#1", "G#2"))):
         A.chelos.nota(C.c(t0), b, t1 - t0 - 0.12, vel=0.24, vel_fin=0.34)
     A.violas.acordes_ligados(C.voicings(c + 2, c + 8, voces=2, rango=("C#4", "A4")), vel=0.17)
-    A.auto("violas", "vol", [(c, -4.0), (c + 8, -4.0), (c + 8.5, 0.0, "suave")])
-    A.auto("chelos", "vol", [(c, 0.0), (c + 0.5, -3.0, "suave"), (c + 8, -3.0), (c + 8.5, 0.0, "suave")])
+    # cuerdas suaves (capa piano) con el nivel de la mezcla: el volumen compensa la curva nueva
+    A.auto("violas", "vol", [(c, 7.3), (c + 8, 7.3), (c + 8.5, 0.0, "suave")])
+    A.auto("chelos", "vol", [(c, 7.9), (c + 0.5, 5.9, "suave"), (c + 8, 5.9), (c + 9.5, 0.0, "suave")])
     A.auto("violas", "expresion", [(c, 0.5), (c + 3.5, 0.9, "suave"), (c + 4, 0.75), (c + 7.5, 0.95, "suave"),
                                    (c + 8, 0.6, "suave")])
     A.violines.melodia(c + 4, "C#5/4_ | E5/4_ | D5/4_ | C#5/4", vel=0.24)
     A.auto("violines", "expresion", [(c + 4, 0.45), (c + 6, 0.95, "suave"), (c + 8, 0.4, "suave")])
     # la cabeza del motivo, respirando sobre cada color del puente
-    A.piano.melodia(P(c + 1, 3), "A4/0.75 D5/0.75 E5/0.5", vel=0.30)
-    A.piano.melodia(P(c + 3, 3), "C5/0.75 F5/0.75 G5/0.5", vel=0.30)
-    A.piano.melodia(P(c + 5, 3), "E5/0.75 A5/0.75 B5/0.5", vel=0.29)
-    A.piano.melodia(P(c + 7, 2), "B4/1 C#5/2", vel=0.28)
+    A.piano.melodia(P(c + 1, 3), "A4/0.75 D5/0.75 E5/0.5", vel=0.27)
+    A.piano.melodia(P(c + 3, 3), "C5/0.75 F5/0.75 G5/0.5", vel=0.27)
+    A.piano.melodia(P(c + 5, 3), "E5/0.75 A5/0.75 B5/0.5", vel=0.26)
+    A.piano.melodia(P(c + 7, 2), "B4/1 C#5/2", vel=0.25)
     A.piano.pedal(P(c + 1, 3), P(c + 2, 4.9))
     A.piano.pedal(P(c + 3, 3), P(c + 4, 4.9))
     A.piano.pedal(P(c + 5, 3), P(c + 6, 4.9))
@@ -527,7 +526,7 @@ def s_respiro(A, c):
                              tonos=(0, 12, 7), pesos=(4, 1, 1), ataque=2.5, caida=2.5), pos=c + 4,
                ganancia_db=-25)
     A.tex.clip(swell(Piano(fieltro=0.45), ["A2", "E3", "B3", "C#4", "G#4", "E5"], largo_tiempos=8,
-                     vel=0.6, curva=2.2), fin=c + 8, ganancia_db=-21)
+                     vel=0.6, curva=2.2), fin=c + 8, ganancia_db=-25)
 
 
 def s_regreso(A, c):
@@ -550,15 +549,15 @@ def s_regreso(A, c):
     A.auto("rhodes", "trem", [(c, 0.36), (c + 8, 0.36)])
     A.pad.acordes_ligados(C.voicings(c, c + 8, voces=5, rango=("E3", "E5")), vel=0.44)
     A.auto("pad", "corte", [(c, 1000.0), (c + 8, 2000.0, "exp")])
-    A.vibmel.melodia(P(c + 1, 3), "B4/0.75 E5/0.75 G#5/0.5", vel=0.26)   # sobre C#m7
-    A.vibmel.melodia(P(c + 5, 3), "C#5/0.75 F#5/0.75 A5/0.5", vel=0.26)  # sobre Dmaj9
+    A.vibmel.melodia(P(c + 1, 3), "B4/0.75 E5/0.75 G#5/0.5", vel=0.42)   # sobre C#m7
+    A.vibmel.melodia(P(c + 5, 3), "C#5/0.75 F#5/0.75 A5/0.5", vel=0.42)  # sobre Dmaj9
     A.tex.clip(swell(Piano(fieltro=0.45), ["A2", "E3", "B3", "C#4", "G#4", "E5", "B5"], largo_tiempos=8,
-                     vel=0.62, curva=2.2), fin=c + 8, ganancia_db=-17)
+                     vel=0.62, curva=2.2), fin=c + 8, ganancia_db=-21.5)
 
 
 def s_plenitud(A, c):
     C = A.C
-    A.vibmel.melodia(c, TEMA, vel=0.56)
+    A.vibmel.melodia(c, TEMA, vel=0.51)
     A.vibmel.pedal_por_compas(c, c + 8)
     A.violas.melodia(c, TEMA, vel=0.6, transponer=-12)
     A.auto("violas", "expresion", [(c, 0.8), (c + 1.9, 1.0, "suave"), (c + 2, 0.85), (c + 3.9, 1.0, "suave"),
@@ -568,7 +567,7 @@ def s_plenitud(A, c):
     acentos = []
     rodar(A.arpa, C, c, c + 8, "abierta", vel=0.44, dur=0.75, apagar=True, recolectar=acentos)
     rodar(A.piano, C, c, c + 8, "espejo", vel=0.30, dur=0.6)
-    doblar_pizz(A.pizz, C, acentos, c, c + 8, vel=0.32, prob=0.4, octava=1)
+    doblar_pizz(A.pizz, C, acentos, c, c + 8, vel=0.40, prob=0.4, octava=1)
     rhodes_toca(A.rhodes, C, c, c + 8, "tresillo", vel=0.38)
     A.auto("rhodes", "trem", [(c, 0.32), (c + 8, 0.32)])
     A.pad.acordes_ligados(C.voicings(c, c + 8, voces=5, rango=("E3", "E5")), vel=0.58)
@@ -587,7 +586,7 @@ def s_estela(A, c):
     rodar(A.vibra, C, c + 4, c + 8, "remolino", vel=0.36)
     acentos = []
     rodar(A.fantasma, C, c, c + 4, "ola", vel=0.0, recolectar=acentos)
-    doblar_pizz(A.pizz, C, acentos, c, c + 4, vel=0.28, prob=0.45)
+    doblar_pizz(A.pizz, C, acentos, c, c + 4, vel=0.23, prob=0.45)
     rhodes_toca(A.rhodes, C, c, c + 4, "largo", vel=0.35)
     rhodes_toca(A.rhodes, C, c + 4, c + 8, "tresillo", vel=0.35)
     A.auto("rhodes", "trem", [(c, 0.38), (c + 8, 0.42)])
@@ -597,12 +596,13 @@ def s_estela(A, c):
     for t0, t1, _s, v in C.voicings(c, c + 4, voces=1, rango=("E3", "B3")):
         A.chelos.nota(C.c(t0), v[0], t1 - t0 - 0.1, vel=0.28)
     A.auto("chelos", "expresion", [(c, 0.8), (c + 4, 0.3, "suave")])
+    A.auto("chelos", "vol", [(c, 0.0), (c + 0.5, 8.8, "suave")])
     sub_camina(A.sub, C, c, c + 4, "negras", vel=0.70)
     sub_camina(A.sub, C, c + 4, c + 8, "tresillo", vel=0.70)
     groove(A.bat, "estela", c, c + 6)
     A.bat.patron("bombo", GROOVE["estela"]["bombo"], c + 6, c + 8)
     A.bat.patron("shaker", SH, c + 6, c + 8)
-    A.vibmel.melodia(P(c + 7, 3), "E5/0.75 A5/0.75 B5/0.5", vel=0.26)     # sobre E6sus4
+    A.vibmel.melodia(P(c + 7, 3), "E5/0.75 A5/0.75 B5/0.5", vel=0.38)     # sobre E6sus4
 
 
 def s_bruma(A, c):
@@ -616,23 +616,23 @@ def s_bruma(A, c):
     A.auto("vibrafono", "vol", [(c - 0.1, 0.0), (c + 1, -2.5, "suave")])
     A.auto("vib_melodia", "vol", [(c - 0.1, 0.0), (c + 0.2, -3.0, "suave")])
     # el tema, por última vez: se apaga sobre el bVI (Do natural) y vuelve la 3ª mayor (piano)
-    A.vibmel.melodia(c, MOTIVO, vel=0.25)
-    A.vibmel.melodia(c + 2, RESPUESTA, vel=0.23)
-    A.vibmel.melodia(c + 4, "r/1 C5/1.5 B4/1.5 | A4/4", vel=0.21)
+    A.vibmel.melodia(c, MOTIVO, vel=0.41)
+    A.vibmel.melodia(c + 2, RESPUESTA, vel=0.39)
+    A.vibmel.melodia(c + 4, "r/1 C5/1.5 B4/1.5 | A4/4", vel=0.37)
     A.vibmel.pedal_por_compas(c, c + 6)
     rhodes_toca(A.rhodes, C, c, c + 4, "largo", vel=0.22)
     A.auto("rhodes", "trem", [(c, 0.42), (c + 4, 0.5)])
     A.pad.acordes_ligados(C.voicings(c, c + 8, voces=5, rango=("E3", "E5")), vel=0.52)
     A.auto("pad", "corte", [(c, 1400.0), (c + 8, 520.0, "exp")])
     A.auto("pad", "vol", [(c, -6.0), (c + 1, -8.0, "suave"), (c + 8, -10.0)])
-    A.sub.nota(c, "A1", 4 * 4 - 0.2, vel=0.36)
+    A.sub.nota(c, "A1", 4 * 4 - 0.2, vel=0.45)
     A.auto("sub", "vol", [(c, 0.0), (c + 2, 0.0), (c + 4, -10.0, "suave")])
     A.bat.patron("shaker", "2323 2324 1212 1213", c, c + 2)
     A.tex.clip(nube(Vibrafono(motor_hz=MOTOR_CORCHEAS), "E5/0.5 A5 B5 E6 B5 A5 E5 B4 A4 E5 B5 A5",
                     dur_s=22.0, estirar=4.0, densidad=12, grano=(0.1, 0.3), tonos=(0, 12, -12),
                     pesos=(4, 1, 1), ataque=4.0, caida=10.0, pan=0.45), pos=c + 3, ganancia_db=-12)
     A.piano.acorde(c + 6, ["A2", "E3", "B3", "G#4", "C#5"], 8, vel=0.22, rasgueo=0.05)
-    A.piano.pedal(c + 6, c + 8.9)
+    A.piano.pedal(c + 6, c + 12)        # sube después del final: el acorde se extingue solo
 
 
 ARREGLO = {"orilla": s_orilla, "corriente": s_corriente, "deriva": s_deriva,
@@ -646,13 +646,9 @@ def cancion() -> Cancion:
                 tonalidad="La mayor / Fa# menor", semilla=SEMILLA, cola_s=9.0)
     C.fx["eco"].update(division=0.75, realim=0.34, corte=3000.0)
 
-    sel = os.environ.get("DERIVA_SECCIONES")
-    nombres = [n.strip() for n in sel.split(",")] if sel else [s[0] for s in SECCIONES]
-    spec = {s[0]: s for s in SECCIONES}
     c = 1
     plan = []
-    for nom in nombres:
-        _, comp, e, emo, voz, loop, notas = spec[nom]
+    for nom, comp, e, emo, voz, loop, notas in SECCIONES:
         lp = (c + loop[0], c + loop[1]) if loop else None
         C.seccion(nom, comp, energia=e, emocion=emo, voz=voz, loop=lp, notas=notas)
         C.progresion(c, ARMONIA[nom])
@@ -664,10 +660,10 @@ def cancion() -> Cancion:
     A.tex = C.pista("textura", Textura(), "textura", vol=0.0, envios={"reverb": 0.14})
     A.vibra = C.pista("vibrafono", Vibrafono(motor_hz=MOTOR_CORCHEAS, motor_prof=0.25, tope_hz=7000.0,
                                                 abrir=0.3, ataque=0.003),
-                      "armonia", vol=-3.0, envios={"reverb": 0.22, "eco": 0.12})
-    A.arpa = C.pista("arpa", Arpa(largo_max=3.0, abrir=0.4), "armonia", vol=-12.0,
+                      "armonia", vol=2.0, envios={"reverb": 0.22, "eco": 0.12})
+    A.arpa = C.pista("arpa", Arpa(largo_max=3.0, abrir=0.4), "armonia", vol=-6.0,
                      envios={"reverb": 0.28, "eco": 0.06}, efectos=[EQ(("pa", 110))])
-    A.piano = C.pista("piano", Piano(fieltro=0.7, mecanica=0.3, abrir=0.3), "armonia", vol=-3.0,
+    A.piano = C.pista("piano", Piano(fieltro=0.7, mecanica=0.3, abrir=0.3), "armonia", vol=-1.5,
                       envios={"reverb": 0.24, "eco": 0.04},
                       efectos=[EQ(("pa", 60), ("campana", 320, -2.0, 0.8))])
     A.rhodes = C.pista("rhodes", Rhodes(brillo=0.42, campana=0.3, trem_prof=0.0, drive=0.3, tope_hz=6000.0),
@@ -676,7 +672,7 @@ def cancion() -> Cancion:
                     "armonia", vol=-11.0, envios={"reverb": 0.15},
                     efectos=[EQ(("campana", 300, -2.0, 0.9)), Ancho(1.2, mono_hz=250),
                              Ducking(prof_db=2.5, relaj_ms=200)])
-    A.sub = C.pista("sub", Sub(drive_db=6, octava=0.15, glide_ms=22), "bajo", vol=-7.0,
+    A.sub = C.pista("sub", Sub(drive_db=6, octava=0.15), "bajo", vol=-6.5,
                     efectos=[Ducking(prof_db=3.0, relaj_ms=170)])
     A.bat = C.pista("bateria", Bateria(color=0.4), "bateria", vol=-8.0,
                     envios={"sala": 0.18, "reverb": 0.05},
@@ -686,13 +682,13 @@ def cancion() -> Cancion:
                        efectos=[EQ(("pa", 55))])
     A.violas = C.pista("violas", Violas(), "armonia", vol=-5.0, envios={"reverb": 0.32},
                        efectos=[EQ(("pa", 120), ("campana", 3000, -3.0, 0.9))])
-    A.violines = C.pista("violines", Violines(), "armonia", vol=-2.0, envios={"reverb": 0.36},
+    A.violines = C.pista("violines", Violines(), "armonia", vol=8.0, envios={"reverb": 0.36},
                          efectos=[EQ(("pa", 180), ("campana", 3000, -3.0, 0.9))])
-    A.pizz = C.pista("pizz", Pizzicato("violines"), "armonia", vol=-8.0,
+    A.pizz = C.pista("pizz", Pizzicato("violines"), "armonia", vol=0.0,
                      envios={"reverb": 0.25, "sala": 0.1, "eco": 0.1},
                      efectos=[EQ(("pa", 160), ("campana", 3000, -2.0, 0.8))])
-    A.vibmel = C.pista("vib_melodia", Vibrafono(motor_hz=MOTOR_CORCHEAS, motor_prof=0.3, tope_hz=4500.0,
-                                                  ataque=0.010),
+    A.vibmel = C.pista("vib_melodia", Vibrafono(motor_hz=MOTOR_CORCHEAS, motor_prof=0.3, tope_hz=7500.0,
+                                                  ataque=0.003),
                        "melodia", vol=-1.0, envios={"reverb": 0.32, "eco": 0.18})
 
     class _Fantasma:     # pista muda: solo para calcular acentos de un arpegio
@@ -723,9 +719,7 @@ def cancion() -> Cancion:
         if param in ("vol", "corte", "expresion"):
             C.pistas[pista].auto(param, sorted(pts, key=lambda q: q[0]))
     A.vibra.efectos.insert(0, Filtro("pasabajos", corte=A.curva("vibrafono", "filtro", 7500.0), q=0.7))
-    # las láminas graves (Sol#3–Do#4) tienen el 3er modo en 10,7× (2,2–2,9 kHz): justo donde va la voz
-    A.vibra.efectos.append(EQ(("pa", 150), ("campana", 290, -2.0, 1.0), ("campana", 2400, -9.0, 1.1),
-                              ("campana", 4800, -4.0, 1.4)))
+    A.vibra.efectos.append(EQ(("pa", 150), ("campana", 290, -2.0, 1.0)))   # menos barro
     A.rhodes.efectos[:0] = [EQ(("pa", 90), ("campana", 330, -2.5, 0.9)),
                             Tremolo(division=1 / 3, prof=A.curva("rhodes", "trem", 0.4), estereo=True),
                             Ducking(prof_db=1.5)]
