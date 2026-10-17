@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "notas": "Prueba larga con voz humana real (voz_librivox.wav, 8:44) y las cinco canciones. Anclas dentro de las dos pausas largas insertadas (177,7 s y 330,9 s). Correr con --canciones salida/_mezcla_pruebas/canciones.",
+  "tramos": [
+    {"id": "apertura", "cancion": "umbral", "secciones": ["umbral", "despertar"], "inicio": 0.0, "fin": 48.0,
+     "transicion": {"tipo": "fundido", "tiempos": 4}},
+    {"id": "relato", "cancion": "deriva", "secciones": ["corriente", "deriva", "cardumen"], "repetir": "deriva",
+     "inicio": 48.0, "fin": 140.0, "transicion": {"tipo": "cola", "segundos": 3}},
+    {"id": "tension", "cancion": "espiral", "secciones": ["vuelta_1", "vuelta_2", "vuelta_3"],
+     "inicio": 140.0, "fin": 178.0, "transicion": {"tipo": "pausa"}},
+    {"id": "giro", "cancion": "marea", "secciones": ["giro", "claridad", "crecida"],
+     "ancla": {"seccion": "giro", "en": 179.5}, "inicio": 179.0, "fin": 270.0,
+     "transicion": {"tipo": "fundido", "tiempos": 4}},
+    {"id": "climax", "cancion": "aurora", "secciones": ["luz", "ascenso", "impulso", "cumbre"],
+     "ancla": {"seccion": "cumbre", "en": 333.0}, "inicio": 270.0, "fin": 360.0, "nivel_db": 1,
+     "transicion": {"tipo": "cola", "segundos": 4}},
+    {"id": "regreso", "cancion": "deriva", "secciones": ["respiro", "regreso", "estela"],
+     "inicio": 360.0, "fin": 470.0, "stems": {"bateria": -3},
+     "transicion": {"tipo": "fundido", "tiempos": 2}},
+    {"id": "final", "cancion": "aurora", "secciones": ["resolucion", "ultimo_acorde"],
+     "inicio": 470.0, "fin": 520.0, "transicion": {"tipo": "final"}}
+  ]
+}

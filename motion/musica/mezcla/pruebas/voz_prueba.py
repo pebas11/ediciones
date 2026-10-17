@@ -201,5 +201,86 @@ def main():
     print(f"[voz] {dest}: {len(voz) / SR:.1f} s, {l:.2f} LUFS, {tp:.2f} dBTP, {len(frases)} frases")
 
 
+LIBRIVOX_URL = ("https://archive.org/download/antologia_de_cuentos_fantasticos_1905_librivox/"
+                "antologiacuentosfantasticos_11_various.mp3")   # «El escuerzo», L. Lugones (dominio público)
+
+
+def librivox(pausas_s=(3.5, 6.0), intro_s=6.0, final_s=8.0):
+    """Voz humana real: lectura de LibriVox con dos pausas largas insertadas (a 1/3 y 2/3) para
+    simular momentos musicales; misma entrega que la herramienta de voz."""
+    carpeta = SALIDA / "librivox"
+    carpeta.mkdir(parents=True, exist_ok=True)
+    mp3 = carpeta / "escuerzo.mp3"
+    if not mp3.exists():
+        local = MUSICA.parent / "tools" / "voz" / "pruebas" / "librivox" / "escuerzo.mp3"
+        if local.exists():
+            shutil.copy2(local, mp3)
+        else:
+            import urllib.request
+            print(f"[voz] bajando {LIBRIVOX_URL}")
+            with urllib.request.urlopen(LIBRIVOX_URL, timeout=180) as r, open(mp3, "wb") as f:
+                shutil.copyfileobj(r, f)
+    x = decodificar(mp3)
+    # pausas naturales (energía en cuadros de 10 ms, umbral relativo)
+    h = int(0.01 * SR)
+    n = len(x) // h
+    e = 20 * np.log10(np.sqrt((x[: n * h].reshape(n, h) ** 2).mean(axis=1)) + 1e-9)
+    piso = float(np.percentile(e, 8))
+    activo = e > max(piso + 12, np.percentile(e, 95) - 35)
+    huecos = []
+    k = 0
+    while k < n:
+        if not activo[k]:
+            j = k
+            while j < n and not activo[j]:
+                j += 1
+            if (j - k) * 0.01 >= 0.35:
+                huecos.append(((k + j) / 2 * 0.01, (j - k) * 0.01))
+            k = j
+        else:
+            k += 1
+    dur = len(x) / SR
+    insertos = []
+    for frac, largo in zip((1 / 3, 2 / 3), pausas_s):
+        cand = min(huecos, key=lambda hh: abs(hh[0] - frac * dur) - 0.5 * hh[1])
+        insertos.append((cand[0], largo))
+    insertos.sort()
+    nivel_piso = piso
+    partes, t_prev, info = [], 0.0, []
+    partes.append(ruido_sala(int(intro_s * SR), nivel_piso, 3))
+    t_out = intro_s
+    for (tc, largo) in insertos:
+        i = int(tc * SR)
+        seg = x[int(t_prev * SR):i]
+        partes.append(seg)
+        t_out += len(seg) / SR
+        partes.append(ruido_sala(int(largo * SR), nivel_piso, int(tc)))
+        info.append({"t_pausa_s": round(t_out, 3), "largo_s": largo})
+        t_out += largo
+        t_prev = tc
+    partes.append(x[int(t_prev * SR):])
+    partes.append(ruido_sala(int(final_s * SR), nivel_piso, 5))
+    voz = np.concatenate(partes).astype(np.float32)
+    from mezcla.niveles import lufs
+    from mezcla.master import picos_reales, ganancia_limitador, pico_real_db
+    for _ in range(4):
+        voz *= np.float32(10 ** ((-16.0 - lufs(voz)) / 20))
+        pk = picos_reales(np.stack([voz, voz], axis=1))
+        voz = voz * ganancia_limitador(pk, 10 ** (-1.6 / 20), int(0.005 * SR), 0.06)
+        if abs(lufs(voz) + 16.0) < 0.03:
+            break
+    tp = pico_real_db(np.stack([voz, voz], axis=1))
+    dest = SALIDA / "voz_librivox.wav"
+    sf.write(str(dest), voz, SR, subtype="PCM_24")
+    meta = {"fuente": LIBRIVOX_URL, "obra": "«El escuerzo», Leopoldo Lugones (LibriVox, dominio público)",
+            "duracion_s": round(len(voz) / SR, 3), "lufs": round(lufs(voz), 2), "pico_dbtp": round(tp, 2),
+            "intro_s": intro_s, "final_s": final_s, "pausas_insertadas": info}
+    (SALIDA / "voz_librivox.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
+    print(f"[voz] {dest}: {len(voz) / SR:.1f} s, {meta['lufs']} LUFS, {tp:.2f} dBTP, pausas {info}")
+
+
 if __name__ == "__main__":
-    main()
+    if "--librivox" in sys.argv:
+        librivox()
+    else:
+        main()

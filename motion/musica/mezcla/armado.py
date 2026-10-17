@@ -187,14 +187,24 @@ def _loop_en(c: Cancion, barras: list[int], preferida: str | None) -> tuple[int,
         s = c.seccion(preferida)
         if entero(s.loop):
             return s.loop
-    vistas = []
+    vistas, candidatas = [], []
     for b in reversed(barras):
         s = c.seccion_de(b)
         if s.nombre in vistas:
             continue
         vistas.append(s.nombre)
         if entero(s.loop):
+            candidatas.append(s)
+    # la sección que cierra la canción (su último compás) no se repite si hay otra: repetir el
+    # acorde final suena a error; se repite la anterior y el final queda una sola vez
+    for s in candidatas:
+        if s.c1 < c.n_compases:
             return s.loop
+    if candidatas:
+        return candidatas[0].loop
+    # sin loop recomendado entero en el material: el propio material contiguo como loop
+    if barras and barras == list(range(barras[0], barras[-1] + 1)) and len(barras) >= 2:
+        return (barras[0], barras[-1])
     return None
 
 
@@ -211,8 +221,9 @@ def ajustar_adelante(c: Cancion, barras: list[int], t0: float, regla: str, X: fl
     """Extiende con loops y recorta el final para cumplir la regla sobre el último límite de
     compás: 'primera>=' X, 'ultima<=' X o 'cercana' a X."""
     barras = list(barras)
-    falta = X + (max(c.dur(b) for b in barras) if regla != "ultima<=" else 0.0) - (t0 + _dur(c, barras))
-    if falta > 0:
+    margen = 0.5 * max(c.dur(b) for b in barras) if regla == "cercana" else 0.0
+    falta = X + margen - (t0 + _dur(c, barras))
+    if falta > EPS:
         if loop is None:
             avisos.append(f"{nombre}: falta material ({falta:.1f} s) y no hay loop para repetir: "
                           "la música termina antes")
@@ -241,7 +252,7 @@ def ajustar_atras(c: Cancion, pre: list[int], x: int, R: float, loop_pre, avisos
     if _dur(c, pre) < R - EPS:
         if pre and loop_pre is not None:
             d_loop = sum(c.dur(b) for b in range(loop_pre[0], loop_pre[1] + 1))
-            veces = int(np.ceil((R - _dur(c, pre)) / d_loop)) + 1
+            veces = int(np.ceil((R - _dur(c, pre)) / d_loop))
             pre = _insertar_loop(pre, loop_pre, veces)
         else:
             b = (pre[0] if pre else x) - 1
@@ -252,7 +263,7 @@ def ajustar_atras(c: Cancion, pre: list[int], x: int, R: float, loop_pre, avisos
                 lp = _loop_en(c, pre, None) if pre else None
                 if lp is not None:
                     d_loop = sum(c.dur(bb) for bb in range(lp[0], lp[1] + 1))
-                    veces = int(np.ceil((R - _dur(c, pre)) / d_loop)) + 1
+                    veces = int(np.ceil((R - _dur(c, pre)) / d_loop))
                     pre = _insertar_loop(pre, lp, veces)
         if _dur(c, pre) < R - c.dur(x) / 2:
             avisos.append(f"{nombre}: no hay material suficiente antes del ancla; el tramo empieza "
@@ -342,7 +353,7 @@ class Armador:
                     lp = _loop_en(c, ruta, tr.repetir)
                     if lp is not None:
                         d_loop = sum(c.dur(b) for b in range(lp[0], lp[1] + 1))
-                        ruta = _insertar_loop(ruta, lp, int(np.ceil((R - _dur(c, ruta)) / d_loop)) + 1)
+                        ruta = _insertar_loop(ruta, lp, int(np.ceil((R - _dur(c, ruta)) / d_loop)))
                     else:
                         self.avisos.append(f"{nombre}: falta material y no hay loop: entra tarde")
                 durs = [c.dur(b) for b in ruta]

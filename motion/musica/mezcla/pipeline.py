@@ -136,10 +136,19 @@ def mezclar(voz_path, plan_path, out_dir, extra=None, dir_canciones=None) -> dic
     # ---- guardia de voz: excesos locales de la cama mientras se habla
     guardia = {"activa": False, "max_db": 0.0, "segundos": 0.0}
     if P["niveles"]["guardia_voz"] and voz.frases:
-        p_cama = niveles.potencia_k_bloques(cama)
-        red = niveles.guardia_voz(p_cama, p_voz, mask, bloques, P)
+        cama0 = None
+        red = np.zeros(1)
+        for _ in range(4):        # la reducción se promedia en la ventana de 3 s: se itera
+            p_cama = niveles.potencia_k_bloques(cama)
+            extra = niveles.guardia_voz(p_cama, p_voz, mask, bloques, P)
+            if extra.max() <= 0.3:
+                break
+            if cama0 is None:
+                cama0 = cama.copy()
+            red = extra if len(red) == 1 else red[:len(extra)] + extra[:len(red)]
+            red = np.minimum(red, P["niveles"]["guardia_max_db"])
+            cama = R.aplicar_guardia(cama0.copy(), red)
         if red.max() > 0.05:
-            R.aplicar_guardia(cama, red)
             guardia = {"activa": True, "max_db": round(float(red.max()), 2),
                        "segundos": round(float((red > 0.25).sum() * 0.1), 1),
                        "regiones": _regiones(red, 0.25)}
@@ -212,8 +221,10 @@ def mezclar(voz_path, plan_path, out_dir, extra=None, dir_canciones=None) -> dic
         tt, lc = niveles.corto_plazo(pc[:n], salto=1)
         _, lv = niveles.corto_plazo(p_voz[:n], salto=1)
         _, lm = niveles.corto_plazo(pm[:n], salto=1)
+        rh = niv.get("relativo_en_habla_lu") or {}
         sub = (f"mezcla {info_master['lufs_integrado']} LUFS · pico {info_master['pico_dbtp']} dBTP · "
-               f"cama bajo voz {rel.get('mediana', '—')} LU (p10 {rel.get('p10', '—')}, p90 {rel.get('p90', '—')}) · "
+               f"música bajo la voz {rh.get('mediana', '—')} LU (p10 {rh.get('p10', '—')}, p90 {rh.get('p90', '—')}; "
+               f"{rh.get('dentro_18_22_pct', '—')} % en 18–22) · "
                f"pausas largas {niv.get('cama_pausas_largas_vs_voz_lu', '—')} LU · limitador sobre la voz máx "
                f"{lim['voz']['max_db']} dB · clicks nuevos {nuevos}")
         dibujar(out / "mezcla.png", voz, R, ctrl, edl, plan, (tt, lc, lv, lm), gr,
