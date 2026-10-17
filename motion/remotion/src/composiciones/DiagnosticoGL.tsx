@@ -64,7 +64,6 @@ export const DiagnosticoGL: React.FC = () => {
   const [info] = useState(leerInfoGL);
 
   useEffect(() => {
-    // eslint-disable-next-line no-console
     console.log('DIAG_GL ' + JSON.stringify(info));
   }, [info]);
 

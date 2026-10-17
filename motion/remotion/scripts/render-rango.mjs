@@ -22,7 +22,15 @@ export const PERFILES = {
   // Directo a calidad de entrega: x264 slow trabaja mientras el navegador renderiza (sin
   // GPU el encoder espera cuadros, así que no suma tiempo). GOP de 30 = recomendación de
   // YouTube. Después: codificar-youtube.mjs --copiar-video (solo audio a AAC).
-  final: {codec: 'h264-ts', crf: 17, x264Preset: 'slow', gopSize: 30, ext: 'ts'},
+  // -sc_threshold 0: sin keyframes extra por "cortes" (el grano los dispara cada 4 cuadros).
+  final: {
+    codec: 'h264-ts',
+    crf: 17,
+    x264Preset: 'slow',
+    gopSize: 30,
+    x264Extra: ['-sc_threshold', '0', '-bf', '2'],
+    ext: 'ts',
+  },
   // ProRes 422 HQ: intra-frame, ideal para editar; ~3 GB por minuto a 1080p60.
   prores: {codec: 'prores', proResProfile: 'hq', ext: 'mov'},
 };
@@ -78,6 +86,11 @@ const main = async () => {
       x264Preset: perfil.x264Preset,
       proResProfile: perfil.proResProfile,
       gopSize: perfil.gopSize,
+      // Opciones de x264 que Remotion no expone: se agregan antes del archivo de salida,
+      // solo en el comando de ffmpeg que codifica con libx264.
+      ffmpegOverride: perfil.x264Extra
+        ? ({args}) => (args.includes('libx264') ? [...args.slice(0, -1), ...perfil.x264Extra, args.at(-1)] : args)
+        : undefined,
       pixelFormat: perfil.codec === 'prores' ? 'yuv422p10le' : 'yuv420p',
       colorSpace: 'bt709',
       imageFormat: a.imagen ?? 'jpeg',

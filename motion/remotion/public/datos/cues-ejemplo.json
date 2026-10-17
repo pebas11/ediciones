@@ -7,7 +7,12 @@
   "transcripcion": "datos/transcripcion-prueba.json",
   "envolventes": "datos/envolventes-prueba.json",
   "audio": [
-    {"id": "voz", "src": "audio/prueba-voz.wav", "inicio": 0, "volumen": 1},
+    {
+      "id": "voz",
+      "src": "audio/prueba-voz.wav",
+      "inicio": 0,
+      "volumen": 1
+    },
     {
       "id": "musica",
       "src": "audio/prueba-musica.wav",
@@ -15,34 +20,63 @@
       "volumen": 0.8,
       "fundidoEntrada": 0.5,
       "fundidoSalida": 1.5,
-      "ducking": {"fuente": "voz", "reduccion": 0.5}
+      "ducking": {
+        "fuente": "voz",
+        "reduccion": 0.5
+      }
     }
   ],
   "escenas": [
-    {"id": "apertura", "tipo": "mundo3d", "inicio": 0, "fin": 4.0, "params": {"orbita": 30, "angulo": 40}},
+    {
+      "id": "apertura",
+      "tipo": "mundo3d",
+      "inicio": 0,
+      "fin": 4.0,
+      "params": {
+        "orbita": 30,
+        "angulo": 40
+      }
+    },
     {
       "id": "idea",
       "tipo": "titulo",
       "inicio": 4.0,
       "fin": 6.6,
-      "transicion": {"tipo": "difuso", "duracion": 1.0},
-      "params": {"texto": "Sueño lúcido"}
+      "transicion": {
+        "tipo": "difuso",
+        "duracion": 1.0
+      },
+      "params": {
+        "texto": "Sueño lúcido"
+      }
     },
     {
       "id": "red",
       "tipo": "trazos",
       "inicio": 6.6,
       "fin": 9.2,
-      "transicion": {"tipo": "zoomOnirico", "duracion": 0.8},
-      "params": {"cantidad": 11}
+      "transicion": {
+        "tipo": "fundido",
+        "duracion": 0.8
+      },
+      "params": {
+        "cantidad": 11
+      }
     },
     {
       "id": "cierre",
       "tipo": "mundo3d",
       "inicio": 9.2,
       "fin": 12.0,
-      "transicion": {"tipo": "fundido", "duracion": 1.0},
-      "params": {"orbita": -25, "angulo": -20, "distancia": 7}
+      "transicion": {
+        "tipo": "zoomOnirico",
+        "duracion": 1.0
+      },
+      "params": {
+        "orbita": -30,
+        "angulo": 50,
+        "distancia": 8.5
+      }
     }
   ]
 }

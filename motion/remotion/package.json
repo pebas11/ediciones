@@ -17,7 +17,11 @@
     "bench": "node scripts/bench.mjs",
     "tramos": "node scripts/render-tramos.mjs",
     "envolventes": "python3 scripts/envolventes.py",
-    "verificar": "python3 scripts/verificar-sync.py"
+    "verificar": "python3 scripts/verificar-sync.py",
+    "determinismo": "node scripts/determinismo.mjs",
+    "youtube": "node scripts/codificar-youtube.mjs",
+    "unir": "node scripts/unir.mjs",
+    "generar-prueba": "python3 scripts/generar-prueba.py"
   },
   "dependencies": {
     "@react-three/drei": "10.7.9",

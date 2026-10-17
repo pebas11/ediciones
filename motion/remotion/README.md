@@ -105,7 +105,7 @@ No hay GPU: el único backend real es **SwiftShader** (Vulkan por CPU) detrás d
 | `vulkan` | sin WebGL | funciona (SwiftShader) |
 | `angle-egl` | sin WebGL | funciona (SwiftShader) |
 
-**Elegido para Linux sin GPU: `swangle`** (`--use-gl=angle --use-angle=swiftshader`). Es explícito, funciona en los dos navegadores y no depende del fallback automático que Chrome ya marcó como obsoleto. Rinde igual que el modo por defecto porque usan el mismo backend.
+**Elegido para Linux sin GPU: `swangle`** (`--use-gl=angle --use-angle=swiftshader`). Es explícito, funciona en los dos navegadores y no depende del fallback automático que Chrome ya marcó como obsoleto. Usa el mismo backend que el modo por defecto (ver la medición en §5).
 
 ### Windows con GPU
 - `scripts/entorno.mjs` elige **`angle`** en Windows y macOS: ANGLE sobre Direct3D 11 (Metal en Mac) usa la placa.
@@ -118,18 +118,24 @@ No hay GPU: el único backend real es **SwiftShader** (Vulkan por CPU) detrás d
 
 Máquina: 4 núcleos, 15 GB, **sin GPU** (SwiftShader). Composición `PruebaTecnica` en calidad final, 1920×1080, capturas JPEG 95 y tramos H.264 CRF 10 veryfast. Medido con `scripts/bench.mjs`.
 
-Ojo: la máquina se comparte con otros agentes. Hubo momentos con un benchmark de whisper (~1,5 núcleos) y un render de música (~1 núcleo) corriendo a la vez, y las cifras de pared varían ±25 % según la carga. Por eso cada número lleva su contexto, y `bench.mjs` también informa los segundos de CPU por cuadro.
+Ojo: la máquina se comparte con otros agentes. Hubo momentos con un benchmark de whisper (~1,5 núcleos) y un render de música (~1 núcleo) corriendo a la vez, y las cifras de pared varían ±25 % según la carga. Por eso se dan rangos y las comparaciones son entre casos corridos uno detrás del otro. (Medir tiempo de CPU con `cutime` no sirve: los procesos de Chrome quedan huérfanos al cerrar y no se suman.)
 
 ### Concurrencia (lo más importante)
 | Configuración | fps estable | s por cuadro |
 |---|---|---|
-| 1 proceso × 1 pestaña (`final-c1`) | 0,23–0,26 | 3,8–4,3 |
-| 1 proceso × 2 pestañas (`final-c2`) | 0,23 | 4,3 |
+| 1 proceso × 1 pestaña (`final-c1`) | 0,20–0,26 | 3,8–5,0 |
+| 1 proceso × 2 pestañas (`final-c2`) | 0,22–0,23 | 4,3–4,5 |
 | 2 procesos × 1 pestaña (`final-p2`) | 0,24 | 4,2 |
-| Ajustes rápidos, 2 procesos (`rapido-p2`) | 0,28 | 3,6 |
-| Calidad borrador, 2 pestañas (`borrador-c2`) | 0,93–1,03 | ~1,0 |
+| Render completo por tramos, 2 procesos (600 cuadros, con otros agentes corriendo) | 0,26 | 3,8 |
+| Calidad borrador, 1 y 2 pestañas | 1,03–1,14 | ~0,9 |
+| Solo 2D, 1 pestaña / 2 pestañas (`solo-2d-c1`/`c2`) | 1,88 / 1,82 | ~0,53 |
 
-**Más pestañas o procesos NO aceleran el 3D en esta máquina.** SwiftShader ya reparte el rasterizado en ~2,5 núcleos con UNA pestaña (el proceso GPU de Chrome llega a 240 % de CPU), y las pestañas de un mismo navegador comparten ese proceso. Con 2 procesos hay dos procesos GPU que compiten por los mismos 4 núcleos. Por eso, dentro del límite de 2 que se pidió, da lo mismo: `render-tramos.mjs` usa 1 proceso × 2 pestañas por defecto.
+**Más pestañas o procesos NO aceleran en esta máquina, ni en 3D ni en 2D.**
+- SwiftShader ya reparte el rasterizado en ~2,5 núcleos con UNA pestaña: el proceso GPU de Chrome llega a 240 % de CPU.
+- Las pestañas de un mismo navegador comparten ese proceso, que además hace la composición por software de todas.
+- Con 2 procesos hay dos procesos GPU que compiten por los mismos 4 núcleos.
+- Dentro del límite de 2 que se pidió da lo mismo: `render-tramos.mjs` usa 1 proceso × 2 pestañas por defecto.
+- Con GPU es distinto: ahí la concurrencia sí escala (ver estimación).
 
 ### Costo de cada parte (s por cuadro, 1 pestaña)
 | Parte | Costo | Cómo se midió |
@@ -138,12 +144,14 @@ Ojo: la máquina se comparte con otros agentes. Hubo momentos con un benchmark d
 | Postproceso completo (composer HalfFloat + MSAA 4× + DOF + tone mapping + capa) | ~1,8 | `final` 3,8 → `sin-post` 2,0 |
 | DOF (bokeh a media resolución) | ~0,9 | `sin-dof` 2,9 |
 | MSAA 4× | ~0,4 | `sin-msaa` 3,4 |
+| MSAA 2× + DOF a 0,35 + buffers de 8 bits juntos | sin mejora medible | `rapido-c1` 0,20 contra `final-c1` 0,20, corridos seguidos |
+| Resolución del 3D a 0,75 (1440×810, escalado) | **−30 % de tiempo** | `dpr075-c1` 0,28 contra 0,20 |
 | Escena 3D sin postproceso (sombras 2048, PBR, niebla, 50k partículas) | ~1,2 | `sin-post` − capas 2D |
 | 50k partículas / shadow map 1024 en vez de 2048 | < 0,1 (dentro del ruido) | `sin-particulas`, `sombra1024` |
 | Viñeta CSS `radial-gradient` a pantalla completa | 0,23, o 0,04 con `will-change` | capas 2D sueltas, 60 cuadros |
 | Trazos SVG a pantalla completa (capa de parallax) | ~0,2 | ídem |
 | Texto (titular + frase) | ~0,03 | ídem |
-| Grano CSS | 0,13 (fusión normal) a 0,45 (`mix-blend-mode`) | ídem |
+| Grano CSS (canvas con patrón, fusión normal) | 0,13–0,18; con `mix-blend-mode`, ~0,45 | ídem |
 | Grano + viñeta en WebGL (`EfectoGrano`) | ~0 | van en el pase del tone mapping |
 | Capturas PNG en vez de JPEG | +0,6 | `solo-2d-png` |
 
@@ -152,10 +160,10 @@ Un minuto de video a 60 fps son 3.600 cuadros.
 
 | Contenido | fps | 1 minuto | Video de 10 minutos |
 |---|---|---|---|
-| 3D completo como `PruebaTecnica` final (este contenedor) | ~0,23 | **~4,3 h** | **~43 h** |
-| Ídem con ajustes rápidos (MSAA 2×, DOF 0,35, buffers de 8 bits) | ~0,28 | ~3,6 h | ~36 h |
-| Borrador (3D a media resolución, sin postproceso) | ~1,0 | ~1 h | ~10 h |
-| Escenas solo 2D (texto, SVG, grano) | 2,5–4 | 15–25 min | 2,5–4 h |
+| 3D completo como `PruebaTecnica` final (este contenedor) | 0,20–0,26 (~0,23) | **~4,3 h** (3,8–5) | **~43 h** (38–50) |
+| Ídem con el 3D a dpr 0,75 (más blando, puede servir para un look onírico) | ~0,28 | ~3,6 h | ~36 h |
+| Borrador (3D a media resolución, sin postproceso) | ~1,0–1,1 | ~1 h | ~10 h |
+| Escenas solo 2D (texto, trazos SVG, grano CSS) | 1,9–4 | 15–30 min | 2,5–5 h |
 | 3D completo en una PC con GPU (Windows, **estimado, sin medir**) | 10–25 | 2,5–6 min | 25–60 min |
 
 La estimación con GPU sale de esto:
@@ -171,8 +179,9 @@ La estimación con GPU sale de esto:
 ### Para que rinda (sobre todo sin GPU)
 - Grano y viñeta en WebGL (`EfectoGrano`), no en CSS.
 - Capas DOM estáticas con `will-change: transform`. Nunca en capas que se mueven (ver §10).
-- DOF solo donde aporte (es lo más caro). Para previsualizar: `perfil.dofEscala` 0,35 o sin DOF.
-- MSAA 2× o 0× con grano: el grano tapa el aliasing.
+- DOF solo donde aporte (es lo más caro). Bajarle la resolución no alcanza: hay que sacarlo.
+- Si el look lo permite, el 3D a `dpr` 0,75 ahorra ~30 %.
+- Sacar MSAA ahorra ~10 %; el grano tapa el aliasing.
 - `calidad: "borrador"` para revisar timing.
 
 ## 6. Render por tramos (reanudable)
@@ -191,7 +200,7 @@ node scripts/render-tramos.mjs VideoEjemplo --por-escena --solo 3,7 --conservar
 ```
 
 Cómo funciona:
-1. Empaqueta una vez (`build/`) y lee la composición: duración, fps y la hoja de cues si existe.
+1. Empaqueta una vez en `build/<Composición>` (cada script usa su propia carpeta: un render no pisa el bundle de otro que corre en paralelo) y lee la composición: duración, fps y la hoja de cues si existe.
 2. Arma el plan de tramos:
    - Por tamaño: `--tramo` en segundos.
    - Por escena: `--por-escena` corta en cada `inicio` de la hoja y une los restos menores a `--min-tramo`.
@@ -221,7 +230,7 @@ Perfiles (`--perfil`):
 
 Disco:
 - El intermedio CRF 10 con grano midió **~120 Mbps**: ~900 MB por minuto, ~9 GB para 10 minutos.
-- Si falta espacio, `--perfil final` (CRF 17) ocupa varias veces menos y evita la segunda codificación.
+- Si falta espacio, `--perfil final` (CRF 17, ~51 Mbps medidos: ~2,4 veces menos) evita además la segunda codificación.
 - Para ajustar el CRF del intermedio: `PERFILES` en `scripts/render-rango.mjs`.
 
 ## 7. Salida maestra para YouTube
@@ -282,6 +291,16 @@ Corrida: `node scripts/render-tramos.mjs PruebaTecnica --props '{"calidad":"fina
 - `youtube.mp4`: H.264 High 4.2, yuv420p, BT.709, 2 B-frames, 60/1, ~51 Mbps; AAC-LC 48 kHz estéreo; `moov` al principio.
 - Tiempos con la máquina compartida: render 37,7 min (0,26 fps); unión, segundos; x264 slow, 168 s (3,6 fps). Total 41 min por 10 s de video.
 
+Otras pruebas del pipeline:
+- **Reanudación** (`VideoEjemplo`, `--por-escena`, 5 tramos):
+  - Se mató todo el grupo de procesos con 2 tramos listos; no quedaron archivos con nombre final a medias ni Chrome huérfanos.
+  - El mismo comando rindió solo los 3 que faltaban ("pendientes 3"), unió 480 cuadros con 384.000 muestras exactas y armó `youtube.mp4` con `--copiar-video` en 1,2 s.
+- **Perfil `final`**: GOP 30 con `I B B P B B P…` y un IDR al inicio de cada tramo (para poder unir). La sincronía queda en 0,27 ms.
+- **Perfil `prores`**: ProRes 422 HQ yuv422p10le + PCM exacto, unido con el demuxer concat.
+- **Mezcla de la hoja** (`VideoEjemplo`):
+  - El fundido de entrada de la música sube de −44 a −29 dB en 0,5 s.
+  - Con la voz sonando, la música baja ~3,5–4,5 dB (ducking con reducción 0,5).
+
 ## 9. Utilidades (independientes del estilo)
 
 ### 9.1 Transcripción (`src/lib/transcripcion.ts`)
@@ -299,6 +318,7 @@ segundosACuadro(12.34, 60);                                      // 740
 Los hooks usan el **cuadro absoluto**:
 - Envolver la composición maestra en `<ProveedorTiempoAbsoluto>`. `LineaDeTiempo` ya lo hace.
 - Dentro de una `<Sequence>`, `useCurrentFrame()` es local; `useCuadroAbsoluto()` no.
+- Dentro de la línea de tiempo, las escenas leen la transcripción de la hoja con `useTranscripcionDelVideo()` y las envolventes con `useDatosAudio()`, sin cargarlas de nuevo.
 
 ### 9.2 Hoja de cues → línea de tiempo (`src/lib/cues.ts`, `LineaDeTiempo.tsx`)
 Toda la estructura del video sale de un JSON. Ejemplo: `public/datos/cues-ejemplo.json`.
@@ -317,8 +337,15 @@ Toda la estructura del video sale de un JSON. Ejemplo: `public/datos/cues-ejempl
 - La transición queda **centrada en el corte**, así las escenas siguen alineadas con la voz aunque `TransitionSeries` solape escenas.
 - Los huecos se rellenan con `fondo`. Si una transición no entra, se recorta con aviso.
 - Tipos de transición:
-  - `corte`, `fundido`, `difuso` (CSS: blur + fundido) y `barrido`/`deslizar` (con `direccion`).
-  - `zoomOnirico`, `disolucion` y `desenfoque`: shaders de Remotion (HTML-in-canvas).
+  - Verificados en el contenedor:
+    - `corte` y `fundido`.
+    - `difuso`: CSS, blur + fundido + escala.
+    - `zoomOnirico`: CSS, acercamiento + giro + destello, como DreamyZoom.
+    - `barrido` y `deslizar`, con `direccion`.
+  - **Experimentales**: `zoomShader`, `disolucionShader` y `desenfoqueShader`.
+    - Son shaders HTML-in-canvas de Remotion.
+    - En Chrome headless sin GPU `HtmlInCanvas.isSupported()` da verdadero pero el shader nunca se dibuja: la escena nueva tapa a la vieja como un corte, **sin error**.
+    - Probarlos en la máquina de render antes de usarlos.
 - La duración del video sale de la hoja (`calculateMetadata`).
 - Cada video registra su composición con su propio registro de escenas (ver `src/escenas/registro.tsx`):
 ```tsx
@@ -431,6 +458,9 @@ Verificado con la prueba: los onsets de la voz caen en el cuadro de inicio de ca
 | PNG suma ~0,6 s por cuadro | Codificar PNG 1080p en Chrome | JPEG 95 por defecto |
 | Texto 3D faltaba en el primer cuadro | troika genera glifos en un worker, sin Suspense | `<Texto3D>` retiene el render hasta `onSync` |
 | Google Fonts no carga en el contenedor | TLS interceptado: `net::ERR_CERT_AUTHORITY_INVALID` | Fuentes locales en `public/fuentes`; Google Fonts funciona con `--ignore-certificate-errors` |
+| Transiciones con shader de Remotion (dreamyZoom, dissolve, linearBlur) no se ven | HTML-in-canvas informa soporte, pero en Chrome headless sin GPU el evento `paint` no dibuja el shader: degrada a un corte sin avisar | `zoomOnirico` reimplementado en CSS; los shaders quedan como `*Shader` experimentales |
+| x264 metía un keyframe cada 4 cuadros | El grano (ruido nuevo cada 2 cuadros) dispara la detección de cortes de escena | Perfil `final` con `-sc_threshold 0 -bf 2` vía `ffmpegOverride`: GOP 30 cerrado, `I B B P…` |
+| Texto 3D: timeout de `delayRender` | `<Text>` suspende al montar; React re-ejecuta el `useState` del padre y el primer handle queda huérfano | `<Suspense>` propio + handle en `useLayoutEffect` (`Texto3D.tsx`) |
 | Onsets un cuadro antes de tiempo | Ventana de STFT centrada (ve 21 ms de futuro) | Ventana causal que termina al final del cuadro |
 | La capa de parallax salía de cuadro | Referencia = cámara inicial; la cámara recorre metros | Referencia = la misma cámara sin la deriva |
 | `@remotion/noise` lento con muchas semillas | Su caché guarda 10 semillas | Una semilla fija y la coordenada desplazada (`fbm`, `deriva3`) |

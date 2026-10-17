@@ -7,6 +7,9 @@
 // Cada caso lanza uno o más procesos render-rango.mjs (cada proceso = un navegador)
 // y mide el tiempo de pared. "fps" = cuadros / tiempo total (incluye arranque);
 // "fps estable" descuenta el arranque (abrir navegador, cargar página, compilar shaders).
+// En una máquina compartida el tiempo de pared varía con la carga: anotar la carga
+// (columna) y comparar casos corridos uno detrás de otro. (Se probó medir tiempo de CPU
+// con cutime/cstime: no sirve, los procesos de Chrome quedan huérfanos y no se suman.)
 import {spawn} from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -48,18 +51,6 @@ const CASOS = {
   'playwright-c1': {props: FINAL, concurrencia: 1, procesos: 1, navegador: SHELL_PLAYWRIGHT},
   'default-gl-c1': {props: FINAL, concurrencia: 1, procesos: 1, gl: 'default'},
   'final-perfil-final-c2': {props: FINAL, concurrencia: 2, procesos: 1, perfil: 'final'},
-};
-
-/**
- * Segundos de CPU consumidos por los procesos hijos ya terminados (y sus descendientes):
- * campos cutime + cstime de /proc/self/stat. En una máquina compartida es una medida de
- * COSTO mucho más estable que el tiempo de pared. Solo Linux (en otros SO devuelve null).
- */
-const TICKS = 100;
-const cpuHijos = () => {
-  if (process.platform !== 'linux') return null;
-  const campos = fs.readFileSync('/proc/self/stat', 'utf8').split(') ')[1].split(' ');
-  return (Number(campos[13]) + Number(campos[14])) / TICKS;
 };
 
 const args = leerArgs();
@@ -120,13 +111,11 @@ for (const nombre of elegidos) {
     return [a, b];
   });
   const carga = os.loadavg()[0];
-  const cpu0 = cpuHijos();
   const t0 = Date.now();
   try {
     const fins = await Promise.all(partes.map(([a, b], k) => correrWorker(caso, a, b, `${nombre}-${k}`)));
     const ms = Date.now() - t0;
     const arranque = Math.max(...fins.map((f) => f.primerCuadroMs ?? 0));
-    const cpu = cpu0 === null ? null : cpuHijos() - cpu0;
     const r = {
       caso: nombre,
       cuadros: n,
@@ -135,13 +124,11 @@ for (const nombre of elegidos) {
       fpsEstable: +((n - caso.procesos) / ((ms - arranque) / 1000)).toFixed(2),
       arranqueS: +(arranque / 1000).toFixed(1),
       cargaAntes: +carga.toFixed(2),
-      cpuS: cpu === null ? null : +cpu.toFixed(1),
-      cpuPorCuadroS: cpu === null ? null : +(cpu / n).toFixed(2),
     };
     resultados.push(r);
     console.log(
       `${nombre.padEnd(22)} ${String(r.fps).padStart(6)} fps  estable ${String(r.fpsEstable).padStart(6)}  ` +
-        `CPU ${r.cpuPorCuadroS ?? '-'} s/cuadro  (${r.segundos}s, arranque ${r.arranqueS}s, carga ${r.cargaAntes})`,
+        `(${r.segundos}s, arranque ${r.arranqueS}s, carga ${r.cargaAntes})`,
     );
   } catch (e) {
     console.log(`${nombre.padEnd(22)} ERROR ${String(e.message).split('\n').slice(-3).join(' ')}`);

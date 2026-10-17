@@ -21,9 +21,13 @@ Forma (compases):
   81–84  último acorde  G/D → Dsus4 → Dadd9: el Sol baja a Fa# y el acorde queda sonando  [bajo voz]
 
 Lugar para la voz (60 de 84 compases): melodías escasas en la octava 5 o más grave (notas
-largas de cuerdas en legato, ecos de celesta de 2–3 notas), el glock solo en las cumbres,
+largas de cuerdas en legato, ecos de una celesta sin martillo), el glock solo en las cumbres,
 arpegio de fieltro a velocidad baja; el motor suma su hueco de 3 dB en 2,4 kHz. La energía
-sube bajo la voz sin agregar melodía: batería, sub, pads que se abren y cuerdas sostenidas.
+sube bajo la voz sin agregar melodía ni brillo (batería, sub, chelos, contrabajo); los pads se
+abren de verdad en las cumbres y bajo la voz respiran cerrados (≤ 2,3 kHz).
+
+Motor: la mini-notación no acepta acordes con espacios (`[D4 F#4]` se parte en dos tokens),
+por eso la nube del acorde final se arma con `nube_acordes` (abajo).
 """
 from motor import (Cancion, Nota, nota, Piano, Glock, Celesta, Pad, Sub, Violines, Violas,
                    Chelos, Contrabajo, Bateria, Textura, swell, nube, nube_de_banco,
@@ -41,7 +45,7 @@ SECCIONES = [
     ("impulso",         8, 0.60, "impulso luminoso: todo empuja",              True,  (25, 33)),
     ("cumbre",          8, 0.85, "plenitud: la luz se abre",                   False, (33, 41)),
     ("respiro",         8, 0.35, "respiro: gratitud, memoria",                 True,  (41, 49)),
-    ("retorno",         8, 0.62, "vuelve la subida: certeza",                  True,  (49, 57)),
+    ("retorno",         8, 0.58, "vuelve la subida: certeza",                  True,  (49, 57)),
     ("cumbre_2",        8, 1.00, "la cumbre más alta: luz total",              False, (57, 65)),
     ("plenitud",        8, 0.80, "la luz se queda: plenitud serena",           True,  (65, 73)),
     ("resolucion",      8, 0.48, "resolución: todo se acomoda",                True,  (73, 81)),
@@ -80,7 +84,7 @@ TEMA_2 = ("D5/0.5 E5/0.5_ F#5/0.5_ A5/0.5_ B5/2_ | C#6/3_ B5/0.5_ C#6/0.5_ | A5/
           "D6/3_ C#6/1_ | B5/1.5_ A5/0.5_ B5/2_ | D6/2_ C#6/1_ B5/1_ | C#6/2_ D6/2_ | B5/2_ A5/2")
 TEMA_2B = "B5/1.5 A5/0.5 B5/2 | D6/2 C#6/1 B5/1 | C#6/2 D6/2 | B5/2 A5/2"   # celesta, 8va arriba
 # ---- Contracantos de chelos (siempre desde Mi3: el grave queda limpio).
-CONTRA = ("G3/2 A3/2_ | C#4/2_ B3/2_ | A3/2_ E3/2_ | F#3/2_ A3/1_ B3/1_ | B3/2 D4/2_ | E3/4 | "
+CONTRA = ("G3/2 A3/2_ | C#4/2_ B3/2_ | C#4/2_ A3/2_ | F#3/2_ A3/1_ B3/1_ | B3/2 D4/2_ | E3/4 | "
           "D4/2_ C#4/2_ | B3/2_ G3/2")
 CONTRA_2 = ("G3/2 B3/2_ | A3/2_ E4/2_ | C#4/2_ A3/2_ | B3/1_ C#4/1_ D4/2_ | D4/2_ B3/2_ | A3/4 | "
             "A3/2_ F#3/2_ | G3/2_ E3/2")
@@ -90,12 +94,13 @@ ECOS = {12: "r/2 D5/0.5 E5/0.5 F#5/1", 16: "r/1 A4/1 B4/1 A4/1",
         20: "r/2.5 C#5/0.5 E5/1", 24: "r/2 D5/0.5 E5/0.5 F#5/1",
         68: "r/2 C#5/0.5 E5/0.5 A5/1", 72: "r/2.5 C#5/0.5 E5/1"}
 # ---- Destellos (solo fuera de la voz).
-DESTELLOS_ALBA = {2: "r/2 F#6/2", 4: "r/2 A6/2", 6: "r/2 B6/2", 8: "r/2 E7/1 C#7/1"}
-GLOCK_1 = {33: "r/3 A6/0.5 B6/0.5", 35: "r/3 C#7/1", 37: "r/3 B6/0.5 D7/0.5",
-           39: "r/2.5 C#7/0.5 B6/1"}
+# (el glock vive en la octava 6: brilla igual y deja libre la franja de 2–5 kHz)
+DESTELLOS_ALBA = {2: "r/2 F#6/2", 4: "r/2 A6/2", 6: "r/2 B6/2", 8: "r/2 A6/1 E6/1"}
+GLOCK_1 = {33: "r/3 A6/0.5 B6/0.5", 35: "r/3 A6/1", 37: "r/3 F#6/0.5 B6/0.5",
+           39: "r/2.5 F#6/0.5 B6/1"}
 CELESTA_1 = {36: "r/2.5 D6/0.5 E6/0.5 F#6/0.5", 40: "r/2 A5/0.5 B5/0.5 D6/1"}
-GLOCK_2 = {57: "r/3 B6/0.5 D7/0.5", 58: "r/3 E7/0.5 C#7/0.5", 60: "r/3 F#7/0.5 D7/0.5",
-           62: "r/3 E7/0.5 C#7/0.5", 64: "r/2.5 E7/0.5 D7/0.5 A6/0.5"}
+GLOCK_2 = {57: "r/3 F#6/0.5 B6/0.5", 58: "r/3 E6/0.5 A6/0.5", 60: "r/3 F#6/0.5 D6/0.5",
+           62: "r/3 A6/0.5 E6/0.5", 64: "r/2.5 E6/0.5 D6/0.5 A6/0.5"}
 
 # ---- Arpegios del piano (índices en el voicing de 4 voces; ≥ 4 sube una 8va).
 P_LUZ = "0 2 1 3 2 4 3 5"                          # corcheas: zigzag que sube
@@ -125,22 +130,27 @@ GROOVE = {
     "cumbre": {"bombo": "x... ..x. x.x. .... x... ..x. x... ..x.",
                "caja": ".... x... .... x...",
                "esc_f": "..o. ...o ..o. .o.o",
-               "hat": "5253 5253 5253 5254",
+               "hat": "6263 6263 6263 6264",
                "shaker": "3253 3253 3253 3263"},
     "cumbre2": {"bombo": "x... ..x. x.x. ..x. x... ..x. x... x.x.",
                 "caja": ".... X... .... x...",
                 "esc_f": "..o. ..o. ..o. .o.o",
-                "hat": "6364 6364 6364 6365",
+                "hat": "7374 7374 7374 7375",
                 "shaker": "4364 4364 4364 4374"},
     "plenitud": {"bombo": "x... ..x. x... .... x... ..x. x.x. ....",
                  "escobilla": ".... x... .... x...",
                  "esc_f": "..o. ...o ..o. .o..",
                  "hat": "x.x. x.x. x.x. x.x.",
                  "shaker": "3253 3253 3253 3263"},
+    "plenitud_b": {"bombo": "x... ..x. x... ..x. x... ..x. x.x. ....",
+                   "escobilla": ".... x... .... x...",
+                   "esc_f": ".o.. ..o. ...o .o.o",
+                   "hat": "6.3. 6.34 6.3. 6.3.",
+                   "shaker": "3253 3253 3253 3263"},
     "latido": {"bombo": "x... .... .... ....", "shaker": "3.2. 3.2. 3.2. 3.3."},
 }
 VEL_GOLPE = {"bombo": 0.8, "aro": 0.55, "escobilla": 0.6, "esc_f": 0.6, "caja": 0.56,
-             "hat": 0.4, "shaker": 0.6}
+             "hat": 0.46, "shaker": 0.6}
 
 
 # ============================================================ 2. AYUDAS ===
@@ -211,12 +221,13 @@ def sub_largo(p, C, desde, hasta, vel=0.55, figura=None):
             t += paso
 
 
-def groove(bat, nombre, desde, hasta, solo=None, sin=()):
+def groove(bat, nombre, desde, hasta, solo=None, sin=(), escala=1.0):
+    """Patrones de GROOVE[nombre]; `escala` multiplica las velocidades x/X/o (no los dígitos)."""
     for k, patron in GROOVE[nombre].items():
         if (solo and k not in solo) or k in sin:
             continue
         golpe = {"esc_f": "escobilla"}.get(k, k)
-        bat.patron(golpe, patron, desde, hasta, vel=VEL_GOLPE[k])
+        bat.patron(golpe, patron, desde, hasta, vel=VEL_GOLPE[k] * escala)
 
 
 def nube_acordes(instrumento, acordes, dur_s, vel=0.55, **kw):
@@ -259,24 +270,28 @@ def cancion() -> Cancion:
     pad = C.pista("pad", Pad(voces=8, desafinar=17, sub=0.0, ataque=2.6, soltar=4.0, q=0.9,
                              respira=0.3, respira_hz=0.05, chorus=0.4, ancho=1.0, pa=150),
                   "armonia", vol=-5.0, envios={"reverb": 0.16},
-                  efectos=[EQ(("campana", 300, -2.5, 0.9)),
+                  efectos=[EQ(("campana", 300, -2.5, 0.9), ("campana", 2500, -2.0, 0.8)),
                            Ancho(Auto([(1, 0.9), (33, 1.25, "suave"), (41, 0.95, "suave"),
-                                       (57, 1.3, "suave"), (65, 1.15, "suave"), (81, 0.9, "suave")]),
+                                       (57, 1.3, "suave"), (65, 1.15, "suave"), (81, 0.9, "suave"),
+                                       (84, 0.75, "suave")]),
                                  mono_hz=180),
                            Ducking(prof_db=2.5, relaj_ms=200)])
     cielo = C.pista("cielo", Pad(voces=6, desafinar=11, sub=0.0, ataque=3.2, soltar=4.5, corte=3200,
                                  q=0.8, respira=0.4, respira_hz=0.07, chorus=0.55, ancho=1.0, pa=420),
-                    "textura", vol=-11.0, envios={"reverb": 0.3},
-                    efectos=[EQ(("campana", 2800, -2.0, 0.8)), Ducking(prof_db=2.0, relaj_ms=220)])
+                    "textura", vol=-7.0, envios={"reverb": 0.3},
+                    efectos=[EQ(("campana", 2800, -4.0, 0.7)), Ducking(prof_db=2.0, relaj_ms=220)])
     piano = C.pista("piano", Piano(fieltro=0.6, brillo=0.5, mecanica=0.4), "armonia", vol=1.0,
                     envios={"reverb": 0.2, "eco": 0.04},
-                    efectos=[EQ(("pa", 45), ("campana", 320, -2.0, 0.8))])
+                    efectos=[EQ(("pa", 45), ("campana", 320, -2.0, 0.8), ("campana", 2600, -2.0, 0.9))])
     celesta = C.pista("celesta", Celesta(brillo=0.5, golpe=0.4), "melodia", vol=0.0, pan=0.12,
                       envios={"reverb": 0.38, "eco": 0.2})
-    glock = C.pista("glock", Glock(), "melodia", vol=-5.0, pan=0.22,
+    # celesta blanda (martillo casi apagado) para lo que va bajo la voz: transitorios suaves
+    celesta_voz = C.pista("celesta_voz", Celesta(brillo=0.4, golpe=0.08), "melodia", vol=0.0,
+                          pan=-0.1, envios={"reverb": 0.4, "eco": 0.22})
+    glock = C.pista("glock", Glock(), "melodia", vol=-5.5, pan=0.22,
                     envios={"reverb": 0.42, "eco": 0.2}, efectos=[EQ(("agudos", 7000, -3.0))])
     violines = C.pista("violines", Violines(doble=True), "melodia", vol=4.0, envios={"reverb": 0.36},
-                       efectos=[EQ(("pa", 170), ("campana", 3300, -2.0, 1.0))])
+                       efectos=[EQ(("pa", 170), ("campana", 3000, -4.0, 0.8), ("agudos", 7500, -1.0))])
     violas = C.pista("violas", Violas(), "armonia", vol=0.0, envios={"reverb": 0.32},
                      efectos=[EQ(("pa", 130))])
     chelos = C.pista("chelos", Chelos(), "armonia", vol=1.5, envios={"reverb": 0.3},
@@ -285,7 +300,7 @@ def cancion() -> Cancion:
                     efectos=[EQ(("pa", 38), ("pb", 3000))])
     sub = C.pista("sub", Sub(drive_db=8.0, octava=0.16, ataque=0.008, soltar=0.09), "bajo",
                   vol=0.0, efectos=[Ducking(prof_db=3.0, relaj_ms=160)])
-    bat = C.pista("bateria", Bateria(color=0.5), "bateria", vol=0.0,
+    bat = C.pista("bateria", Bateria(color=0.56), "bateria", vol=0.0,
                   envios={"sala": 0.16, "reverb": 0.06},
                   efectos=[Compresor(umbral_db=-24, ratio=2.5, ataque_ms=10, relaj_ms=130, mezcla=0.45),
                            Saturacion(drive_db=3, mezcla=0.3)])
@@ -293,12 +308,14 @@ def cancion() -> Cancion:
     # humanización (determinista)
     piano.humanizar(tiempo_ms=6, vel=0.06)
     celesta.humanizar(tiempo_ms=6, vel=0.06)
+    celesta_voz.humanizar(tiempo_ms=6, vel=0.06)
     glock.humanizar(tiempo_ms=5, vel=0.06)
     bat.humanizar(tiempo_ms=5, vel=0.08, swing=0.52, swing_div=0.25)
     sub.humanizar(tiempo_ms=3, vel=0.04)
     for p in (violines, violas, chelos, cbajo):
         p.humanizar(tiempo_ms=11, vel=0.04)
     celesta.pedal_por_compas(1, 85)
+    celesta_voz.pedal_por_compas(1, 85)
 
     # el pad recorre toda la canción con conducción continua; se abre con el filtro
     pad.acordes_ligados(C.voicings(1, 85, voces=5, rango=("E3", "C#5")), vel=0.6)
@@ -306,29 +323,29 @@ def cancion() -> Cancion:
     # ------------------------------------------------------- 1–8 alba
     tex.clip(nube_de_banco("violines", "F#5", dur_s=21.0, estirar=12, densidad=12,
                            grano=(0.12, 0.35), tonos=(0, 12, -12), pesos=(4, 1, 1),
-                           ataque=7, caida=7, brillo_hz=7000), pos=1, ganancia_db=-14)
-    celesta.melodia(3, MOTIVO, vel=0.42)
-    celesta.melodia(5, RESPUESTA, vel=0.42)
-    celesta.melodia(7, LLEGADA, vel=0.46)
+                           ataque=7, caida=7, brillo_hz=7000), pos=1, ganancia_db=-23)
+    celesta.melodia(3, MOTIVO, vel=0.4)
+    celesta.melodia(5, RESPUESTA, vel=0.4)
+    celesta.melodia(7, LLEGADA, vel=0.44)
     for c, frase in DESTELLOS_ALBA.items():
-        glock.melodia(c, frase, vel=0.38)
+        glock.melodia(c, frase, vel=0.3)
     # primera luz en las cuerdas (pp, crescendo)
-    chelos.nota(5, "B3", 8, vel=0.16, vel_fin=0.3).nota(7, "A3", 8, vel=0.3, vel_fin=0.36, legato=True)
-    violas.nota(5, "G4", 8, vel=0.16, vel_fin=0.3).nota(7, "E4", 8, vel=0.3, vel_fin=0.36, legato=True)
+    chelos.nota(5, "B3", 8, vel=0.12, vel_fin=0.22).nota(7, "A3", 8, vel=0.22, vel_fin=0.28, legato=True)
+    violas.nota(5, "G4", 8, vel=0.12, vel_fin=0.22).nota(7, "E4", 8, vel=0.22, vel_fin=0.28, legato=True)
     # el piano asoma: dos acordes arpegiados en la dominante
     for t0, t1, _s, v in C.voicings(7, 9, voces=4, rango=("E3", "C#5")):
-        piano.acorde(C.c(t0), v, t1 - t0, vel=0.3, rasgueo=0.06)
-    piano.nota(7, "A1", 8, vel=0.34)
+        piano.acorde(C.c(t0), v, t1 - t0, vel=0.2, rasgueo=0.06)
+    piano.nota(7, "A1", 8, vel=0.24)
     pedal_acordes(piano, C, 7, 9)
     tex.clip(swell(Piano(fieltro=0.5), ["D2", "A2", "F#3", "E4", "A4"], largo_tiempos=8,
-                   vel=0.55), fin=9, ganancia_db=-9)
+                   vel=0.55), fin=9, ganancia_db=-12)
 
     # ------------------------------------------------------- 9–16 luz
-    arpegio_piano(piano, C, 9, 17, P_LUZ, paso=0.5, vel=0.34, rango=("F#3", "D5"),
+    arpegio_piano(piano, C, 9, 17, P_LUZ, paso=0.5, vel=0.36, rango=("F#3", "D5"),
                   acentos=A_8, bajo=True)
     sub_largo(sub, C, 13, 17, vel=0.5)
     for c in (12, 16):
-        celesta.melodia(c, ECOS[c], vel=0.38)
+        celesta_voz.melodia(c, ECOS[c], vel=0.4)
 
     # ------------------------------------------------------- 17–24 ascenso
     arpegio_piano(piano, C, 17, 25, P_ASC, paso=0.5, vel=0.32, rango=("F#3", "C#5"), acentos=A_8)
@@ -337,12 +354,12 @@ def cancion() -> Cancion:
     groove(bat, "medio", 21, 25)
     # los chelos suben una 8va entera, de Mi3 a Mi4, con el bajo
     linea_ligada(chelos, 17, ["E3", "F#3", "G3", "A3", "B3", "C#4", "D4", "E4"], vel=0.28, vel_fin=0.48)
-    violas.acordes_ligados(C.voicings(21, 25, voces=2, rango=("D4", "A4")), vel=0.3, legato=True)
+    violas.acordes_ligados(C.voicings(21, 25, voces=2, rango=("D4", "A4")), vel=0.26, legato=True)
     violines.nota(21, "F#5", 4, vel=0.2, vel_fin=0.3)
     violines.nota(22, "E5", 4, vel=0.3, legato=True)
     violines.nota(23, "F#5", 8, vel=0.3, vel_fin=0.42, legato=True)
     for c in (20, 24):
-        celesta.melodia(c, ECOS[c], vel=0.38)
+        celesta_voz.melodia(c, ECOS[c], vel=0.4)
 
     # ------------------------------------------------------- 25–32 impulso
     arpegio_piano(piano, C, 25, 33, P_IMP, paso=0.25, vel=0.27, rango=("E3", "B4"), acentos=A_332)
@@ -355,11 +372,11 @@ def cancion() -> Cancion:
     # chelos: la escala que baja (el bajo a la 8va); violines: un La que no se mueve
     for t0, t1, _s, b in bajos_unidos(C, 25, 33, rango=("E3", "D#4")):
         chelos.nota(C.c(t0), b, t1 - t0, vel=0.42, legato=True)
-    violas.acordes_ligados(C.voicings(25, 33, voces=2, rango=("F#4", "C#5")), vel=0.34, legato=True)
-    violines.nota(25, "A4", 24, vel=0.3, vel_fin=0.42, legato=True)
-    violines.melodia(31, "B4/4 | D5/2 C#5/2", vel=0.44, legato=True)
+    violas.acordes_ligados(C.voicings(25, 33, voces=2, rango=("F#4", "C#5")), vel=0.3, legato=True)
+    violines.nota(25, "A4", 24, vel=0.2, vel_fin=0.3, legato=True)
+    violines.melodia(31, "B4/4 | D5/2 C#5/2", vel=0.38, legato=True)
     tex.clip(swell(Piano(fieltro=0.45), ["G2", "D3", "A3", "B3", "F#4", "A4", "D5"], largo_tiempos=8,
-                   vel=0.62, curva=2.2), fin=33, ganancia_db=-11)
+                   vel=0.62, curva=2.2), fin=33, ganancia_db=-12)
     tex.clip(swell(Violines(), ["B4", "F#5", "A5"], largo_tiempos=6, vel=0.5), fin=33, ganancia_db=-12)
 
     # ------------------------------------------------------- 33–40 cumbre
@@ -370,15 +387,15 @@ def cancion() -> Cancion:
         bat.golpe(f"{c}:4.5", "hat_abierto", 0.42)
     bat.patron("escobilla", ".... .... .... oxxX", 40, 41, vel=0.5)
     cielo.acordes_ligados(C.voicings(33, 41, voces=3, rango=("A4", "E6")), vel=0.5)
-    violines.melodia(33, TEMA, vel=0.72)
-    violas.acordes_ligados(C.voicings(33, 41, voces=2, rango=("D4", "B4")), vel=0.45)
+    violines.melodia(33, TEMA, vel=0.64)
+    violas.acordes_ligados(C.voicings(33, 41, voces=2, rango=("D4", "B4")), vel=0.4)
     chelos.melodia(33, CONTRA, vel=0.62)
     for t0, t1, _s, b in bajos_unidos(C, 33, 41):
         cbajo.nota(C.c(t0), b, t1 - t0, vel=0.5)
     for c, frase in GLOCK_1.items():
         glock.melodia(c, frase, vel=0.46)
     for c, frase in CELESTA_1.items():
-        celesta.melodia(c, frase, vel=0.5)
+        celesta.melodia(c, frase, vel=0.46)
 
     # ------------------------------------------------------- 41–48 respiro
     bat.golpe(41, "bombo", 0.62).golpe(41, "hat_abierto", 0.32)          # aterrizaje
@@ -387,12 +404,12 @@ def cancion() -> Cancion:
     violas.acordes_ligados(C.voicings(41, 49, voces=2, rango=("D4", "A4")), vel=0.24, legato=True)
     for t0, t1, _s, b in bajos_unidos(C, 41, 49, rango=("E3", "D#4")):
         chelos.nota(C.c(t0), b, t1 - t0, vel=0.26, legato=True)
-    celesta.melodia(42, CITA, vel=0.4)
+    celesta_voz.melodia(42, CITA, vel=0.36)
     tex.clip(nube(Piano(fieltro=0.6), MOTIVO, dur_s=16.0, estirar=4.0, densidad=10,
                   grano=(0.1, 0.3), tonos=(0, 12, -12), pesos=(4, 1, 1), ataque=4, caida=6),
              pos=41, ganancia_db=-8)
     sub_largo(sub, C, 45, 49, vel=0.5)
-    groove(bat, "latido", 45, 49)
+    groove(bat, "latido", 45, 49, escala=0.75)
     violines.nota(45, "F#5", 8, vel=0.22, vel_fin=0.3).nota(47, "E5", 8, vel=0.3, legato=True)
 
     # ------------------------------------------------------- 49–56 retorno
@@ -408,13 +425,13 @@ def cancion() -> Cancion:
     bat.golpe("56:4.5", "hat_abierto", 0.5)
     # chelos suben otra vez; violas en décimas encima
     linea_ligada(chelos, 49, ["E3", "F#3", "G3", "A3", "B3", "C#4", "D4", "A3"], vel=0.34, vel_fin=0.52)
-    linea_ligada(violas, 49, ["G4", "A4", "B4", "C#5", "D5", "E5", "F#5", "E5"], vel=0.26, vel_fin=0.46)
+    linea_ligada(violas, 49, ["G4", "A4", "B4", "C#5", "D5", "E5", "F#5", "E5"], vel=0.22, vel_fin=0.4)
     violines.melodia(56, "r/2 A4/0.5 B4/0.5 C#5/1", vel=0.5)            # anacrusa del tema
     for t0, t1, _s, b in bajos_unidos(C, 53, 57):
         cbajo.nota(C.c(t0), b, t1 - t0, vel=0.42)
     cielo.acordes_ligados(C.voicings(53, 73, voces=3, rango=("A4", "E6")), vel=0.55)
     tex.clip(swell(Piano(fieltro=0.45), ["G2", "D3", "B3", "F#4", "A4", "D5"], largo_tiempos=8,
-                   vel=0.62, curva=2.2), fin=57, ganancia_db=-10)
+                   vel=0.62, curva=2.2), fin=57, ganancia_db=-11)
     tex.clip(swell(Violines(), ["D5", "B5", "F#6"], largo_tiempos=8, vel=0.55), fin=57, ganancia_db=-12)
 
     # ------------------------------------------------------- 57–64 cumbre 2
@@ -424,7 +441,7 @@ def cancion() -> Cancion:
     for c in (58, 60, 62):
         bat.golpe(f"{c}:4.5", "hat_abierto", 0.45)
     bat.patron("caja", ".... .... .... oxxX", 64, 65, vel=0.45)
-    violines.melodia(57, TEMA_2, vel=0.76)
+    violines.melodia(57, TEMA_2, vel=0.68)
     violas.melodia(57, TEMA_2, vel=0.62, transponer=-12)
     chelos.melodia(57, CONTRA_2, vel=0.66)
     for t0, t1, _s, b in bajos_unidos(C, 57, 65):
@@ -432,7 +449,7 @@ def cancion() -> Cancion:
     for c, frase in GLOCK_2.items():
         glock.melodia(c, frase, vel=0.46)
     celesta.melodia(59, "r/2 E6/0.5 F#6/0.5 A6/1", vel=0.46)
-    celesta.melodia(61, TEMA_2B, vel=0.4, transponer=12)
+    celesta.melodia(61, TEMA_2B, vel=0.32, transponer=12)
     tex.clip(nube_de_banco("glock", "A6", dur_s=19.0, estirar=10, densidad=14, grano=(0.08, 0.22),
                            tonos=(0, 7, 12, -5), pesos=(4, 3, 1, 2), ataque=3, caida=5,
                            brillo_hz=8000), pos=57, ganancia_db=-20)
@@ -440,21 +457,22 @@ def cancion() -> Cancion:
     # ------------------------------------------------------- 65–72 plenitud
     tex.clip(swell(Piano(fieltro=0.5), ["D2", "A2", "F#3", "C#4", "E4", "A4"], largo_tiempos=4,
                    vel=0.55), fin=65, ganancia_db=-13)
-    arpegio_piano(piano, C, 65, 73, P_PLE, paso=0.25, vel=0.27, rango=("E3", "B4"), acentos=A_332)
+    arpegio_piano(piano, C, 65, 73, P_PLE, paso=0.25, vel=0.3, rango=("E3", "B4"), acentos=A_332)
     sub_corcheas(sub, C, 65, 73, vel=0.72)
-    groove(bat, "plenitud", 65, 72)
+    groove(bat, "plenitud", 65, 69, escala=1.08)
+    groove(bat, "plenitud_b", 69, 72, escala=1.08)
     groove(bat, "plenitud", 72, 73, solo=("bombo", "shaker"))
     bat.patron("escobilla", ".... x... o.o. oxx.", 72, 73, vel=0.48)
     bat.golpe("72:4.5", "hat_abierto", 0.4)
     # violines y chelos en décimas paralelas que bajan (melodía escasa: una nota por compás)
     linea_ligada(violines, 65, ["F#5", "E5", "D5", "C#5", "B4", "A4", "G4", "A4"], vel=0.4, vel_fin=0.34)
     for t0, t1, _s, b in bajos_unidos(C, 65, 73, rango=("E3", "D#4")):
-        chelos.nota(C.c(t0), b, t1 - t0, vel=0.46, legato=True)
+        chelos.nota(C.c(t0), b, t1 - t0, vel=0.56, legato=True)
     violas.acordes_ligados(C.voicings(65, 73, voces=2, rango=("C#4", "G#4")), vel=0.38, legato=True)
     for t0, t1, _s, b in bajos_unidos(C, 65, 73):
-        cbajo.nota(C.c(t0), b, t1 - t0, vel=0.48)
+        cbajo.nota(C.c(t0), b, t1 - t0, vel=0.58)
     for c in (68, 72):
-        celesta.melodia(c, ECOS[c], vel=0.38)
+        celesta_voz.melodia(c, ECOS[c], vel=0.4)
 
     # ------------------------------------------------------- 73–80 resolución
     arpegio_piano(piano, C, 73, 77, P_LUZ, paso=0.5, vel=0.3, rango=("F#3", "D5"), acentos=A_8)
@@ -473,37 +491,41 @@ def cancion() -> Cancion:
 
     # ------------------------------------------------------- 81–84 último acorde
     bat.golpe(81, "bombo", 0.42)
-    piano.nota(81, "D2", 8, vel=0.36)
+    piano.nota(81, "D2", 8, vel=0.3)
     piano.arpegio(81, 83, Cancion.voicing_en(C.voicings(81, 83, voces=4, rango=("F#3", "D5"))),
-                  patron="0 2 4 3", paso=1.0, vel=0.28)
+                  patron="0 2 4 3", paso=1.0, vel=0.25)
     pedal_acordes(piano, C, 81, 83)
-    piano.acorde(83, ["D2", "A2", "F#3", "D4", "E4", "A4", "F#5"], 8, vel=0.34, rasgueo=0.08)
-    piano.pedal(83, 88)                               # deja sonar el último acorde
+    piano.acorde(83, ["D2", "A2", "F#3", "D4", "E4", "A4", "F#5"], 8, vel=0.3, rasgueo=0.08)
+    piano.pedal(83, 96)       # deja sonar el último acorde: el pedal sube después del final
     sub.nota(81, "D2", 16, vel=0.5)
     cbajo.nota(81, "D2", 16, vel=0.38, vel_fin=0.05)
     chelos.nota(81, "D4", 16, vel=0.3, vel_fin=0.04, legato=True)
     violas.nota(81, "B4", 4, vel=0.26).nota(82, "A4", 12, vel=0.26, vel_fin=0.04, legato=True)
-    violines.melodia(81, "F#5/4_ | G5/4_ | F#5/8", vel=0.32, legato=True)   # 4–3 arriba de todo
-    celesta.melodia(82, CITA_FINAL, vel=0.4)
+    violines.melodia(81, "F#5/4_ | G5/4_ | F#5/8", vel=0.28, legato=True)   # 4–3 arriba de todo
+    celesta_voz.melodia(82, CITA_FINAL, vel=0.36)
     glock.nota("83:3", "A5", 2, vel=0.3)
     cielo.acordes_ligados(C.voicings(81, 85, voces=3, rango=("A4", "D6")), vel=0.4)
     tex.clip(nube_acordes(Piano(fieltro=0.55), [(0, 2, ["D3", "A3", "E4", "F#4", "A4"]),
                                                  (2, 2, ["D4", "F#4", "A4", "E5"])],
                           dur_s=18.0, estirar=6.0, densidad=12, grano=(0.1, 0.3),
-                          tonos=(0, 12, -12), pesos=(5, 2, 1), ataque=4, caida=9),
-             pos=81, ganancia_db=-7)
+                          tonos=(0, 12, -12), pesos=(5, 2, 1), ataque=4, caida=9, pan=0.5),
+             pos=81, ganancia_db=-10)
 
     # ------------------------------------------------------- automatizaciones
-    pad.auto("corte", [(1, 260), (5, 520, "exp"), (9, 950, "exp"), (17, 1300, "exp"),
-                       (25, 2000, "exp"), (33, 4200, "exp"), (40, 4800), (42, 1400, "exp"),
-                       (49, 1600), (57, 5200, "exp"), (64, 6000), (66, 4500, "exp"),
-                       (73, 3000, "exp"), (81, 1500, "exp"), (86, 450, "exp")])
-    pad.auto("vol", [(1, -26), (3, -6, "suave"), (5, -3), (9, 0, "suave"), (41, 0), (42, -3, "suave"),
-                     (49, -2), (57, 0, "suave"), (81, 0), (87, -8, "suave")])
-    cielo.auto("corte", [(33, 2400), (37, 3800, "exp"), (41, 2000, "exp"), (53, 1800),
-                         (57, 4200, "exp"), (65, 3000, "exp"), (73, 2200), (81, 1800), (86, 600, "exp")])
+    # el pad se abre de verdad en las cumbres (sin voz); bajo la voz respira cerrado
+    pad.auto("corte", [(1, 260), (5, 520, "exp"), (9, 1100, "exp"), (17, 1250, "exp"),
+                       (25, 1500, "exp"), (32, 2100, "exp"), (33.5, 4500, "exp"), (40, 4800),
+                       (42, 1100, "exp"), (49, 1300), (56, 2100, "exp"), (57.5, 5200, "exp"),
+                       (64, 6000), (66, 2300, "exp"), (73, 1800, "exp"), (81, 1200, "exp"),
+                       (86, 450, "exp")])
+    pad.auto("vol", [(1, -30), (3, -10, "suave"), (5, -7), (9, 0, "suave"), (41, 0), (42, -3, "suave"),
+                     (49, -2), (57, 0, "suave"), (80, 0), (82, -3, "suave"), (87, -10, "suave")])
+    cielo.auto("corte", [(33, 2400), (37, 3800, "exp"), (41, 2000, "exp"), (53, 1600),
+                         (56.5, 1800), (57.5, 4200, "exp"), (64, 4200), (66, 2000, "exp"), (73, 1800),
+                         (81, 1600), (86, 600, "exp")])
     cielo.auto("vol", [(33, -12), (37, 0, "suave"), (40, 0), (42, -30, "suave"), (53, -16),
-                       (57, 0, "suave"), (65, -3, "suave"), (73, -8), (81, -6), (87, -14, "suave")])
+                       (57, 0, "suave"), (64, 0), (66, -4, "suave"), (73, -8, "suave"), (81, -7),
+                       (87, -14, "suave")])
     violines.auto("expresion", [(1, 1.0), (33, 0.86), (34.9, 1.0, "suave"), (35, 0.92),
                                 (36.9, 1.0, "suave"), (37, 0.9), (38.9, 1.0, "suave"), (39, 0.94),
                                 (40.9, 1.0, "suave"), (57, 0.9), (58.9, 1.0, "suave"), (59, 0.94),
@@ -512,4 +534,24 @@ def cancion() -> Cancion:
     for p in (violas, chelos):
         p.auto("expresion", [(1, 1.0), (83, 1.0), (85.5, 0.3, "suave")])
     bat.auto("vol", [(17, -2.0), (25, 0.0), (73, 0.0), (77, -2.0), (81, -5.0)])
+    # el sub satura (tanh): la velocidad casi no cambia su nivel; se dosifica por sección
+    # con rampas cortas de 0,1 compás (sin escalones)
+    niveles_sub = [(13, -3.0), (17, -2.0), (25, -1.0), (33, 0.0), (41, -3.0), (49, -1.5), (53, -0.5),
+                   (57, 0.5), (65, 0.5), (73, -2.0), (81, -3.5)]
+    pts = [(1, niveles_sub[0][1])]
+    for (c, v), (_, v_prev) in zip(niveles_sub[1:], niveles_sub[:-1]):
+        pts += [(c - 0.1, v_prev), (c, v)]
+    sub.auto("vol", pts)
+    # bajo la voz, violines −3 dB y violas −2 dB; en las cumbres, a pleno (rampas cortas)
+    def bajo_voz(db_voz, alba=None):
+        pts = [(1, alba if alba is not None else db_voz)]
+        if alba is not None:
+            pts += [(8, alba), (10, db_voz, "suave")]
+        pts += [(32.75, db_voz), (33, 0.0), (40.9, 0.0), (41.15, db_voz),
+                (56.5, db_voz), (57, 0.0), (64.85, 0.0), (65.1, db_voz)]
+        return pts
+    violines.auto("vol", bajo_voz(-3.0))
+    violas.auto("vol", bajo_voz(-2.0, alba=-6.0))
+    chelos.auto("vol", [(1, -4.0), (8, -4.0), (10, 0.0, "suave")])   # alba: lejos
+    celesta.auto("vol", [(1, -3.0), (8.5, -3.0), (9.5, 0.0, "suave")])
     return C

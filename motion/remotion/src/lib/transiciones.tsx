@@ -27,7 +27,9 @@ const Difuso: React.FC<TransitionPresentationComponentProps<PropsDifuso>> = ({
 }) => {
   const entrando = presentationDirection === 'entering';
   const blur = (entrando ? 1 - p : p) * passedProps.desenfoque;
-  const escala = entrando ? 1 + (1 - p) * passedProps.escala : 1 + p * passedProps.escala * 0.5;
+  const escala = entrando
+    ? 1 + (1 - p) * passedProps.escala
+    : 1 + p * passedProps.escala * 0.5;
   return (
     <AbsoluteFill
       style={{
@@ -41,9 +43,54 @@ const Difuso: React.FC<TransitionPresentationComponentProps<PropsDifuso>> = ({
   );
 };
 
-export const difuso = (props: Partial<PropsDifuso> = {}): TransitionPresentation<PropsDifuso> => ({
+export const difuso = (
+  props: Partial<PropsDifuso> = {},
+): TransitionPresentation<PropsDifuso> => ({
   component: Difuso,
   props: {desenfoque: 18, escala: 0.035, ...props},
+});
+
+/**
+ * "zoomOnirico" en CSS (misma idea que DreamyZoom de gl-transitions): la escena vieja
+ * se acerca, gira y se aclara hasta un destello en la mitad; la nueva sale del destello
+ * acercada y girada al revés y se asienta. Funciona en cualquier navegador, con o sin GPU
+ * (la versión con shader de Remotion no se aplica en Chrome headless sin GPU).
+ */
+type PropsZoom = {escala: number; giro: number; brillo: number};
+
+const ZoomOnirico: React.FC<
+  TransitionPresentationComponentProps<PropsZoom>
+> = ({
+  children,
+  presentationDirection,
+  presentationProgress: p,
+  passedProps,
+}) => {
+  const entrando = presentationDirection === 'entering';
+  const e = 1 - Math.abs(2 * p - 1); // 0 en los bordes, 1 en la mitad
+  const opacidad = entrando ? Math.min(1, Math.max(0, (p - 0.45) * 10)) : 1;
+  const escala = 1 + e * (passedProps.escala - 1);
+  const giro = (entrando ? -1 : 1) * passedProps.giro * e;
+  const brillo = 1 + e * (passedProps.brillo - 1);
+  return (
+    <AbsoluteFill
+      style={{
+        opacity: opacidad,
+        scale: escala,
+        rotate: `${giro.toFixed(3)}deg`,
+        filter: brillo > 1.01 ? `brightness(${brillo.toFixed(3)})` : undefined,
+      }}
+    >
+      {children}
+    </AbsoluteFill>
+  );
+};
+
+export const zoomOnirico = (
+  props: Partial<PropsZoom> = {},
+): TransitionPresentation<PropsZoom> => ({
+  component: ZoomOnirico,
+  props: {escala: 1.2, giro: 6, brillo: 2.2, ...props},
 });
 
 const DIRECCION = {
@@ -54,9 +101,11 @@ const DIRECCION = {
 } as const;
 
 /**
- * Tipo de la hoja de cues → presentación de @remotion/transitions.
- * zoomOnirico / disolucion / desenfoque usan shaders "HTML-in-canvas" de Remotion
- * (capturan las dos escenas como texturas). Ver README: probados en el contenedor.
+ * Tipo de la hoja de cues → presentación.
+ * - fundido, difuso, barrido, deslizar, zoomOnirico: CSS, verificados en el contenedor.
+ * - zoomShader, disolucionShader, desenfoqueShader: shaders "HTML-in-canvas" de Remotion.
+ *   EXPERIMENTALES: en Chrome headless sin GPU no se aplican (la escena nueva tapa a la
+ *   vieja, como un corte, sin error). Verificar en la máquina de render antes de usarlos.
  */
 export const presentacion = (
   t: Pick<SegmentoTransicion, 'tipo' | 'direccion'>,
@@ -72,10 +121,12 @@ export const presentacion = (
       case 'deslizar':
         return slide({direction: DIRECCION[t.direccion ?? 'izquierda']});
       case 'zoomOnirico':
+        return zoomOnirico();
+      case 'zoomShader':
         return dreamyZoom({rotation: 4, scale: 1.15});
-      case 'disolucion':
+      case 'disolucionShader':
         return dissolve({});
-      case 'desenfoque':
+      case 'desenfoqueShader':
         return linearBlur({intensity: 0.08});
       default:
         return fade();

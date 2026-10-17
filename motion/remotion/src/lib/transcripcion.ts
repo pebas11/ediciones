@@ -53,10 +53,10 @@ export type OpcionesFrases = {
 export const normalizar = (s: string): string =>
   s
     .toLowerCase()
-    .replace(/ñ/g, '\u0000')
+    .replace(/ñ/g, '\uE000')
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
-    .replace(/\u0000/g, 'ñ')
+    .replace(/\uE000/g, 'ñ')
     .replace(/[^\p{L}\p{N}\s'-]/gu, '')
     .trim();
 

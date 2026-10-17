@@ -35,8 +35,10 @@ export const TIPOS_TRANSICION = [
   'barrido',
   'deslizar',
   'zoomOnirico',
-  'disolucion',
-  'desenfoque',
+  // Experimentales (shaders HTML-in-canvas de Remotion; no funcionan sin GPU):
+  'zoomShader',
+  'disolucionShader',
+  'desenfoqueShader',
 ] as const;
 
 export const esquemaTransicion = z.object({
@@ -55,7 +57,9 @@ export const esquemaEscena = z
     transicion: esquemaTransicion.optional(),
     nota: z.string().optional(),
   })
-  .refine((e) => e.fin > e.inicio, {message: '"fin" tiene que ser mayor que "inicio"'});
+  .refine((e) => e.fin > e.inicio, {
+    message: '"fin" tiene que ser mayor que "inicio"',
+  });
 
 export const esquemaPista = z.object({
   id: z.string().min(1),
@@ -166,14 +170,39 @@ export const resolverLinea = (hoja: HojaDeCues, fps: number): LineaResuelta => {
       );
     }
     if (b > cursor) {
-      segs.push({id: `hueco-${segs.length}`, tipo: 'hueco', params: {}, hueco: true, b: cursor, e: b});
+      segs.push({
+        id: `hueco-${segs.length}`,
+        tipo: 'hueco',
+        params: {},
+        hueco: true,
+        b: cursor,
+        e: b,
+      });
     }
-    segs.push({id: s.id, tipo: s.tipo, params: s.params, hueco: false, b, e, trans: s.transicion});
+    segs.push({
+      id: s.id,
+      tipo: s.tipo,
+      params: s.params,
+      hueco: false,
+      b,
+      e,
+      trans: s.transicion,
+    });
     cursor = e;
   });
-  const total = Math.max(cursor, hoja.duracion ? segundosACuadro(hoja.duracion, fps) : 0);
+  const total = Math.max(
+    cursor,
+    hoja.duracion ? segundosACuadro(hoja.duracion, fps) : 0,
+  );
   if (total > cursor) {
-    segs.push({id: `hueco-${segs.length}`, tipo: 'hueco', params: {}, hueco: true, b: cursor, e: total});
+    segs.push({
+      id: `hueco-${segs.length}`,
+      tipo: 'hueco',
+      params: {},
+      hueco: true,
+      b: cursor,
+      e: total,
+    });
   }
 
   // 2) Duraciones de transición (en cuadros), recortadas si no entran.
@@ -190,7 +219,9 @@ export const resolverLinea = (hoja: HojaDeCues, fps: number): LineaResuelta => {
     const maxSig = (largo - Math.floor((trans[k + 1] ?? 0) / 2)) * 2;
     const max = Math.max(0, Math.min(maxAnt, maxSig));
     if (trans[k] > max) {
-      avisos.push(`Transición hacia "${segs[k].id}" recortada de ${trans[k]} a ${max} cuadros.`);
+      avisos.push(
+        `Transición hacia "${segs[k].id}" recortada de ${trans[k]} a ${max} cuadros.`,
+      );
       trans[k] = max;
     }
   }
@@ -229,5 +260,9 @@ export const resolverLinea = (hoja: HojaDeCues, fps: number): LineaResuelta => {
 };
 
 /** Escena activa (nominal) en un cuadro absoluto. */
-export const escenaEn = (linea: LineaResuelta, cuadro: number): SegmentoEscena | null =>
-  linea.escenas.find((s) => cuadro >= s.inicioCuadro && cuadro < s.finCuadro) ?? null;
+export const escenaEn = (
+  linea: LineaResuelta,
+  cuadro: number,
+): SegmentoEscena | null =>
+  linea.escenas.find((s) => cuadro >= s.inicioCuadro && cuadro < s.finCuadro) ??
+  null;

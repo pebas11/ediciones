@@ -6,6 +6,7 @@ import {
   getRemotionEnvironment,
   interpolate,
   staticFile,
+  useCurrentFrame,
   useVideoConfig,
   type CalculateMetadataFunction,
 } from 'remotion';
@@ -54,13 +55,24 @@ const CtxEscena = createContext<SegmentoEscena | null>(null);
 /**
  * Datos de la escena actual. `t` = segundos desde el inicio nominal de la escena
  * (negativo durante la mitad previa de la transición de entrada); `progreso` = 0..1
- * a lo largo de su duración nominal.
+ * a lo largo de su duración nominal. Fuera de una línea de tiempo (escena suelta en el
+ * Studio) usa el cuadro local y la duración de la composición; `segmento` es null.
  */
 export const useEscena = () => {
   const seg = useContext(CtxEscena);
-  const {fps} = useVideoConfig();
+  const {fps, durationInFrames} = useVideoConfig();
   const abs = useCuadroAbsoluto();
-  if (!seg) return null;
+  const propio = useCurrentFrame();
+  if (!seg) {
+    // Escena suelta (composición propia en el Studio): su cuadro local y su duración.
+    return {
+      segmento: null,
+      cuadro: propio,
+      t: propio / fps,
+      duracion: durationInFrames / fps,
+      progreso: Math.min(1, Math.max(0, propio / durationInFrames)),
+    };
+  }
   const local = abs - seg.inicioCuadro;
   return {
     segmento: seg,
@@ -247,7 +259,6 @@ export const metadatosLinea = async <P extends PropsLinea>({
   const hoja = validarHoja(await cargarJSON(staticFile(props.hojaSrc)));
   const linea = resolverLinea(hoja, hoja.fps);
   for (const a of linea.avisos) {
-    // eslint-disable-next-line no-console
     console.warn(a);
   }
   return {
