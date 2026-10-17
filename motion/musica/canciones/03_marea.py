@@ -464,7 +464,7 @@ def cancion() -> Cancion:
                 fin=35, ganancia_db=-9)
 
     # ---------------------------------------------------------------- 35–42 claridad
-    chelo.melodia(35, TEMA_B, vel=0.44)
+    chelo.melodia(35, TEMA_B, vel=0.46)
     figura(piano, C, 35, 43, [0, 1, 2, 4, 3, 2], vel=0.29, rango=("A4", "B5"), melodicas=[chelo])
     bajo_largo(cbajo, C, 35, 43, vel=0.36)
     violas.acordes_ligados(sin_roces(C.voicings(37, 43, voces=2, rango=("E4", "C#5")), [chelo],
@@ -497,7 +497,7 @@ def cancion() -> Cancion:
     bajo_largo(cbajo, C, 51, 59, vel=0.55)
     violas.acordes_ligados(sin_roces(C.voicings(51, 59, voces=3, rango=("D4", "B4")),
                                      [chelo, violines], ("D4", "C#5")), vel=0.57)
-    figura(piano, C, 51, 59, [(0, 1), 2, 3, (4, 5), 3, 2], vel=0.36, voces=4,
+    figura(piano, C, 51, 59, [(0, 1), 2, 3, (4, 5), 3, 2], vel=0.33, voces=4,
            rango=("A4", "D6"), octava=True, prof=0.1, melodicas=[chelo, violines])
     pulso.patron("bombo", PULSO, 51, 59, vel=0.36)
 

@@ -286,6 +286,7 @@ def cancion() -> Cancion:
     # chelos asoman (divisi, registro medio: el grave queda para el piano y el arpa)
     chelos.nota(21, "F#3", 4, vel=0.52, vel_fin=0.64).nota(22, "G#3", 4, vel=0.55, vel_fin=0.66)
     chelos.nota(23, "A3", 8, vel=0.55, vel_fin=0.7).nota(23, "E3", 8, vel=0.48, vel_fin=0.64)
+    chelos.auto("vol", [(17, 3.5), (36.9, 3.5), (37, 0.0, "paso")])   # capa suave, más presente
 
     # ------------------------------------------------------- 25–32 pulso
     tex.clip(swell(Piano(fieltro=0.5), ["B2", "F#3", "A3", "D4", "C#5"], largo_tiempos=4,
@@ -295,7 +296,7 @@ def cancion() -> Cancion:
     groove(bat, "pulso", 29, 33, solo=("aro", "aro_f"))     # el aro entra en el 29
     sub_linea(sub, C, 25, 33)
     rhodes_comp(rhodes, C, 25, 33)
-    arpa_ondas(arpa, C, 29, 33, patron="1 . 3 . 2 4 . 3", vel=0.42, con_bajo=False)  # entra en el 29
+    arpa_ondas(arpa, C, 29, 33, patron="1 . 3 . 2 4 . 3", vel=0.44, con_bajo=False)  # entra en el 29
     pad.acordes_ligados(C.voicings(25, 33, voces=5, rango=("E3", "F5")), vel=0.6)
 
     # ------------------------------------------------------- 33–40 apertura
@@ -349,7 +350,7 @@ def cancion() -> Cancion:
                                 (49, 0.92), (52.9, 1.0, "suave"), (53, 0.94), (56.9, 1.0, "suave")])
     # violas: callan en la cumbre 1 (textura transparente) y en la 2 doblan el tema a la 8va baja
     violas.melodia(49, TEMA_2, vel=0.63, transponer=-12)
-    violas.nota(57, "F#4", 8, vel=0.75, vel_fin=0.1).nota(57, "A4", 8, vel=0.7, vel_fin=0.1)
+    violas.nota(57, "F#4", 8, vel=0.7, vel_fin=0.1).nota(57, "A4", 8, vel=0.65, vel_fin=0.1)
     chelos.melodia(41, CONTRA, vel=0.59)          # el contracanto canta sin tapar el tema
     chelos.melodia(49, CONTRA_2, vel=0.61)
     chelos.nota(57, "A3", 8, vel=0.62, vel_fin=0.06, legato=True)
