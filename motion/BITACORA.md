@@ -1,5 +1,17 @@
 # Bitácora del proyecto de motion graphics
 
+> **Proyecto actual (17/10/2026): `PROYECTO-1016.md`.** Es un video completo con estilo onírico propio. El usuario pidió olvidar el contexto de las series anteriores.
+>
+> **Hecho (rama `ccr-1c1089b6-6o0jmz`):**
+> - Motor musical y 5 canciones originales en `musica/`.
+> - Mezclador con ducking bajito.
+> - Pipeline de voz en `tools/voz/`.
+> - Base de Remotion en `remotion/`.
+>
+> **Bloqueado:** los videos de entrada están en la PC del usuario (`E:\videos yt\1016.mp4` y `C:\Users\pebas\Downloads\1001.mp4`). Una sesión en la nube no los ve, así que hay que seguir con `claude --teleport` desde la PC.
+>
+> El contenedor no tiene GPU: Remotion rinde a ~0,25 fps en calidad final.
+
 Última actualización: 2026-09-27. Rama: `claude/capcut-usage-77m4ya`.
 
 ## Cómo retomar en una sesión nueva
