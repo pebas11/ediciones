@@ -29,14 +29,22 @@ Pedido del 17/10/2026. Este proyecto **no sigue las series anteriores de la bit�
 - `C:\`, `E:\` y el Escritorio existen solo en la PC del usuario. Una sesión en la nube no los ve.
 - **Este repo es público.** No subir el audio crudo, `1001.mp4` (es de terceros) ni ningún archivo de entrada. Para eso está `motion/input/`, que está en `.gitignore`.
 
-## Piezas en preparación (rama `ccr-1c1089b6-6o0jmz`)
-Se suben a la rama a medida que se terminan. Hacé `git pull` antes de cada etapa. Cada carpeta tiene su README con los comandos.
+## Piezas (rama `ccr-1c1089b6-6o0jmz`)
+Hacé `git pull` antes de cada etapa. Cada carpeta tiene su README con los comandos.
 
-| Carpeta | Qué hace |
-|---|---|
-| `motion/musica/` | Motor musical y 5 canciones con stems y cues: Umbral (apertura), Deriva (explicación), Marea (reflexión), Espiral (tensión), Aurora (clímax/cierre). Incluye un mezclador que baja la música cuando habla la voz (ducking). |
-| `motion/tools/voz/` | Extrae, limpia, normaliza a −16 LUFS y transcribe con Whisper palabra por palabra. Propone los cortes (silencios, repeticiones, bloopers) y aplica la EDL. |
-| `motion/remotion/` | Base de Remotion: Three.js, sincronía con la transcripción, hoja de cues en JSON, audio reactivo, render por tramos y codificación para YouTube. |
+| Carpeta | Qué hace | Estado |
+|---|---|---|
+| `motion/musica/` | Motor musical y 5 canciones con stems y cues: Umbral (apertura), Deriva (explicación), Marea (reflexión), Espiral (tensión), Aurora (clímax/cierre). MP3 en `motion/renders/musica/`. Los WAV se regeneran con `python3 motion/musica/render.py todas`, después de `python3 motion/musica/muestras.py`. | Canciones hechas. Falta arreglar la nivelación de las muestras (cuerdas) y rebalancear. |
+| `motion/musica/mezcla_voz.py` | Mezclador: arma la cama musical desde un plan JSON, aplica ducking por stems y masteriza a −14 LUFS. Guía en `MEZCLA.md`. | Hecho: 57/57 controles. |
+| `motion/tools/voz/` | Extrae, limpia, normaliza a −16 LUFS y transcribe con Whisper palabra por palabra. Propone los cortes (silencios, repeticiones, bloopers) y aplica la EDL. | Hecho: 24 pruebas. |
+| `motion/remotion/` | Base de Remotion: Three.js, sincronía con la transcripción, hoja de cues en JSON, audio reactivo, render por tramos y codificación para YouTube. | Hecho. El estilo visual todavía no está definido. |
+
+## Seguir en la PC del usuario (teleport)
+Esta sesión en la nube se puede traer a la PC con todo el historial:
+1. Instalar Git y Claude Code: en PowerShell, `irm https://claude.ai/install.ps1 | iex`.
+2. Bajar el repo: `git clone https://github.com/pebas11/ediciones`, después `cd ediciones`.
+3. Traer la sesión: `claude --teleport session_01VXJ4Q86RsggQ8gd5wmPzDW`.
+4. Para seguir desde el celular: `/remote-control`.
 
 ## Plan de producción
 1. **Voz.** Pasar el audio por `motion/tools/voz`. Revisar cada corte en `cortes.md` con criterio editorial, no a ciegas. Resultado: `voz_final.wav` + `palabras_final.json`.
