@@ -142,6 +142,17 @@ class Renderizador:
             buf[a:b] = x * g[:, None]
         return buf
 
+    def aplicar_guardia(self, cama: np.ndarray, red_sub: np.ndarray) -> np.ndarray:
+        """Multiplica la cama por la guardia de voz (reducción en dB por sub-bloque de 100 ms)."""
+        centros = (np.arange(len(red_sub)) + 0.5) * 0.1
+        self.ctrl.guardia = -np.interp(self.ctrl.t, centros, red_sub)
+        for a in range(0, self.n, TROZO):
+            b = min(self.n, a + TROZO)
+            t = np.arange(a, b) / SR
+            g = (10.0 ** (-np.interp(t, centros, red_sub) / 20.0)).astype(np.float32)
+            cama[a:b] *= g[:, None]
+        return cama
+
     def realzar(self, cama: np.ndarray) -> np.ndarray:
         for a in range(0, self.n, TROZO):
             b = min(self.n, a + TROZO)
@@ -200,5 +211,6 @@ class Renderizador:
                     env = env * (0.5 + 0.5 * np.cos(np.pi * x2))
                 tot[m] += env
         db = 20 * np.log10(np.maximum(tot, 1e-6))
-        db += self.ctrl.en_t(self.ctrl.duck_db(s), t) + self.ctrl.en_t(self.ctrl.realce, t)
+        db += self.ctrl.en_t(self.ctrl.duck_db(s), t) + self.ctrl.en_t(self.ctrl.realce, t) \
+            + self.ctrl.en_t(self.ctrl.guardia, t)
         return np.maximum(db, -60.0)

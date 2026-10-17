@@ -115,6 +115,7 @@ class Control:
         activo = pd["activo"]
         self.d = curva_ducking(frases, self.n, pd) if activo else np.zeros(self.n)
         self.realce = curva_realce(frases, self.n, voz.dur if voz else 0.0, params["niveles"], pd)
+        self.guardia = np.zeros(self.n)      # dB (≤ 0): guardia de voz, se completa después del render
         # profundidad por stem y EQ, por tramo (transición de 1 s centrada en cada entrada)
         base = {s: float(pd["profundidad_db"].get(s, 0.0)) for s in STEMS}
         eq_base = float(pd["eq"]["ganancia_db"]) if pd["eq"]["activo"] else 0.0

@@ -129,6 +129,19 @@ def mezclar(voz_path, plan_path, out_dir, extra=None, dir_canciones=None) -> dic
                 b.medido_lu = float(np.median(v)) if len(v) >= 3 else b.medido_lu
         t0 = marca("render_2_s", t0)
 
+    # ---- guardia de voz: excesos locales de la cama mientras se habla
+    guardia = {"activa": False, "max_db": 0.0, "segundos": 0.0}
+    if P["niveles"]["guardia_voz"] and voz.frases:
+        p_cama = niveles.potencia_k_bloques(cama)
+        red = niveles.guardia_voz(p_cama, p_voz, mask, bloques, P)
+        if red.max() > 0.05:
+            R.aplicar_guardia(cama, red)
+            guardia = {"activa": True, "max_db": round(float(red.max()), 2),
+                       "segundos": round(float((red > 0.25).sum() * 0.1), 1),
+                       "regiones": _regiones(red, 0.25)}
+            log(f"guardia de voz: hasta −{red.max():.1f} dB en {guardia['segundos']:.1f} s")
+    t0 = marca("guardia_s", t0)
+
     # ---- master
     mask_voz = voz.mascara(np.arange(edl.n_total) / SR)
     voz_x = np.zeros((edl.n_total, 2), np.float32)
@@ -169,7 +182,7 @@ def mezclar(voz_path, plan_path, out_dir, extra=None, dir_canciones=None) -> dic
                 "nivel_activo_dbfs": _r(voz.nivel_activo_db, 1), "umbral_habla_dbfs": _r(voz.umbral_db, 1),
                 **voz_mod.resumen_pausas(voz, P["niveles"]["pausa_larga_s"])},
         "niveles": niv,
-        "mezcla": {**info_master, "pasadas_de_nivel": pasadas},
+        "mezcla": {**info_master, "pasadas_de_nivel": pasadas, "guardia_de_voz": guardia},
         "tramos": [_tramo_info(tre, bloques, plan) for tre in edl.tramos],
         "transiciones": [{"de": t.de + 1, "a": None if t.a is None else t.a + 1, "tipo": t.tipo,
                           "t_downbeat": round(t.t, 3), "ventana": [round(t.ventana[0], 3), round(t.ventana[1], 3)],
@@ -207,6 +220,16 @@ def mezclar(voz_path, plan_path, out_dir, extra=None, dir_canciones=None) -> dic
                                       encoding="utf-8")
     log(f"listo en {tiempos['total_s']:.1f} s → {out}")
     return reporte
+
+
+def _regiones(red, umbral):
+    """[(inicio_s, fin_s, max_db)] donde la guardia baja más que `umbral` dB."""
+    out = []
+    act = red > umbral
+    d = np.diff(np.concatenate([[0], act.astype(np.int8), [0]]))
+    for a, b in zip(np.nonzero(d == 1)[0], np.nonzero(d == -1)[0]):
+        out.append([round(a * 0.1, 1), round(b * 0.1, 1), round(float(red[a:b].max()), 2)])
+    return out
 
 
 def _json(o):

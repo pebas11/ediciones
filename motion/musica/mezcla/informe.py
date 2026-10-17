@@ -103,6 +103,13 @@ def niveles(voz, cama, mezcla, mask_sub, P, voz_regiones):
     w = P["niveles"]["ventana_lu"]
     vals = rel[np.isfinite(rel)]
     out["relativo_bajo_voz_lu"] = _st(vals)
+    # con compuerta de habla: solo los sub-bloques con voz (sin la subida de las pausas)
+    from .niveles import relativo_en_habla
+    rh = relativo_en_habla(pc[:n], pv[:n], mask_sub[:n])[::5]
+    vh = rh[np.isfinite(rh)]
+    out["relativo_en_habla_lu"] = _st(vh)
+    if len(vh):
+        out["relativo_en_habla_lu"]["dentro_18_22_pct"] = round(float(np.mean((vh <= -18) & (vh >= -22))) * 100, 1)
     if len(vals):
         out["relativo_bajo_voz_lu"]["dentro_ventana_pct"] = round(float(np.mean(np.abs(vals - obj) <= w)) * 100, 1)
         out["relativo_bajo_voz_lu"]["dentro_18_22_pct"] = round(float(np.mean((vals <= -18) & (vals >= -22))) * 100, 1)
